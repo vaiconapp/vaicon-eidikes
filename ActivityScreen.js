@@ -39,16 +39,13 @@ export default function ActivityScreen({ onClose }) {
     setLoading(false);
   };
 
-  const clearAll = () => {
-    Alert.alert("Διαγραφή", "Διαγραφή όλου του ιστορικού;", [
-      { text: "Όχι" },
-      { text: "Ναι", style: "destructive", onPress: async () => {
-        try {
-          await fetch(`${FB_URL}/activity_log.json`, { method: 'DELETE' });
-          setEntries([]);
-        } catch(e) {}
-      }}
-    ]);
+  const clearAll = async () => {
+    if (window.confirm('Διαγραφή όλου του ιστορικού;')) {
+      try {
+        await fetch(`${FB_URL}/activity_log.json`, { method: 'DELETE' });
+        setEntries([]);
+      } catch(e) {}
+    }
   };
 
   const FILTERS = ['ΟΛΑ', 'ΕΙΔΙΚΗ', 'ΤΥΠΟΠΟΙΗΜΕΝΗ', 'ΣΑΣΙ ΣΤΟΚ', 'ΚΑΣΕΣ ΣΤΟΚ'];
