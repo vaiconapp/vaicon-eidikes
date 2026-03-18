@@ -48,7 +48,7 @@ export default function ActivityScreen({ onClose }) {
     }
   };
 
-  const FILTERS = ['ΟΛΑ', 'ΕΙΔΙΚΗ', 'ΤΥΠΟΠΟΙΗΜΕΝΗ', 'ΣΑΣΙ ΣΤΟΚ', 'ΚΑΣΕΣ ΣΤΟΚ'];
+  const FILTERS = ['ΟΛΑ', 'ΕΙΔΙΚΗ'];
   const filtered = filter === 'ΟΛΑ' ? entries : entries.filter(e => e.section === filter);
 
   const getIcon = (action) => {
