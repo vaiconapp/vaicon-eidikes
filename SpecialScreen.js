@@ -223,7 +223,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     if (!customForm.orderNo) return Alert.alert("Προσοχή","Το Νούμερο Παραγγελίας είναι υποχρεωτικό.");
     if (!customForm.h||!customForm.w) return Alert.alert("Προσοχή","Βάλτε Ύψος και Πλάτος.");
     // Έλεγχος διπλότυπου αριθμού (failsafe κατά αποθήκευση)
-    const isDuplicate = specialOrders.some(o=>o.orderNo===customForm.orderNo && o.id!==editingOrder?.id);
+    const isDuplicate = [...specialOrders, ...soldSpecialOrders].some(o=>o.orderNo===customForm.orderNo && o.id!==editingOrder?.id);
     if (isDuplicate) {
       Alert.alert("⚠️ Διπλότυπο", `Το νούμερο ${customForm.orderNo} υπάρχει ήδη.\nΑλλάξτε τον αριθμό παραγγελίας.`);
       return;
@@ -2235,10 +2235,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             onChangeText={v=>setCustomForm({...customForm,orderNo:v})}
             onSubmitEditing={()=>{
               if (!customForm.orderNo) { hRef.current?.focus(); return; }
-              const exists = specialOrders.some(o=>o.orderNo===customForm.orderNo && o.id!==editingOrder?.id);
+              const exists = [...specialOrders, ...soldSpecialOrders].some(o=>o.orderNo===customForm.orderNo && o.id!==editingOrder?.id);
               if (exists) {
                 const base = customForm.orderNo;
-                const suggested = computeSuggested(base, specialOrders, editingOrder?.id);
+                const suggested = computeSuggested(base, [...specialOrders, ...soldSpecialOrders], editingOrder?.id);
                 Keyboard.dismiss();
                 setDupModal({
                   visible:true, base, suggested,
@@ -2252,10 +2252,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             }}
             onBlur={()=>{
               if (!customForm.orderNo) return;
-              const exists = specialOrders.some(o=>o.orderNo===customForm.orderNo && o.id!==editingOrder?.id);
+              const exists = [...specialOrders, ...soldSpecialOrders].some(o=>o.orderNo===customForm.orderNo && o.id!==editingOrder?.id);
               if (exists) {
                 const base = customForm.orderNo;
-                const suggested = computeSuggested(base, specialOrders, editingOrder?.id);
+                const suggested = computeSuggested(base, [...specialOrders, ...soldSpecialOrders], editingOrder?.id);
                 setDupModal({
                   visible:true, base, suggested,
                   onUse:()=>{ setDupModal(m=>({...m,visible:false})); setCustomForm(f=>({...f,orderNo:suggested})); },
