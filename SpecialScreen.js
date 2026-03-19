@@ -158,7 +158,7 @@ function DuplicateModal({ visible, base, suggested, onUse, onKeep, onCancel }) {
 }
 
 export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[] }) {
-  const [expanded, setExpanded] = useState({ pending:true, prod:true, ready:true, archive:false });
+  const [expanded, setExpanded] = useState({ pending:true, prod:true, ready:true, archive:false, form:true });
   const [pendingSort, setPendingSort] = useState('no');
   const [showHardwarePicker, setShowHardwarePicker] = useState(false);
   const [showLockPicker, setShowLockPicker] = useState(false);
@@ -1365,6 +1365,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {fmtDate(order.prodAt)&&<Text style={styles.dateChip}>🔨 {fmtDate(order.prodAt)}</Text>}
             {fmtDate(order.readyAt)&&<Text style={styles.dateChip}>✅ {fmtDate(order.readyAt)}</Text>}
           </View>
+          {isProd&&order.phases&&(
+            <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:4}}>
+              {Object.entries(order.phases).map(([key,phase])=>{
+                if(!phase.active) return null;
+                const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',montDoor:'ΜΟΝΤ.'};
+                return (
+                  <View key={key} style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
+                    <Text style={{color:'white',fontSize:10,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[key]||key}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
         {(isArchive||order.status==='READY')&&(
           <TextInput
@@ -2095,10 +2108,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       </Modal>
       <ScrollView style={{padding:10}} keyboardShouldPersistTaps="handled">
         <View style={{paddingBottom:120}}>
-          <Text style={styles.sectionTitle}>ΚΑΤΑΧΩΡΗΣΗ ΝΕΑΣ ΠΑΡΑΓΓΕΛΙΑΣ</Text>
+          <TouchableOpacity onPress={()=>toggleSection('form')} style={[styles.listHeader,{backgroundColor:'#8B0000',flexDirection:'row',justifyContent:'space-between',alignItems:'center'}]}>
+            <Text style={styles.listHeaderText}>✏️ ΚΑΤΑΧΩΡΗΣΗ ΝΕΑΣ ΠΑΡΑΓΓΕΛΙΑΣ</Text>
+            <Text style={{color:'white',fontSize:16}}>{expanded.form?'▲':'▼'}</Text>
+          </TouchableOpacity>
 
 
 
+          {expanded.form && (<>
           {/* ═══ CARD: ΠΕΛΑΤΗΣ + ΑΡ. ΠΑΡΑΓΓΕΛΙΑΣ ═══ */}
           <View style={vstyles.card}>
             <View style={vstyles.cardHeader}><Text style={vstyles.cardHeaderTxt}>👤  ΣΤΟΙΧΕΙΑ ΠΑΡΑΓΓΕΛΙΑΣ</Text></View>
@@ -2445,7 +2462,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           }}>
             <Text style={{color:'white',fontWeight:'bold',fontSize:15}}>ΑΠΟΘΗΚΕΥΣΗ ΠΡΟΣ ΠΑΡΑΓΩΓΗ</Text>
           </TouchableOpacity>
-
+          </>)}
 
           {/* ΡΟΗ ΠΑΡΑΓΩΓΗΣ */}
           {/* ΡΟΗ ΠΑΡΑΓΩΓΗΣ — μόνο για ΕΙΔΙΚΗ */}
