@@ -2484,26 +2484,27 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <View>
               <View style={[styles.listHeader,{backgroundColor:'#ff4444', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
                 <Text style={styles.listHeaderText}>● ΚΑΤΑΧΩΡΗΜΕΝΕΣ ({specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)).length})</Text>
-                  <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
+                  <View style={{flexDirection:'row', alignItems:'center', gap:6}}>
                     <TouchableOpacity onPress={()=>setPendingSort('no')}
-                      style={{backgroundColor: pendingSort==='no'?'white':'rgba(255,255,255,0.3)', paddingHorizontal:8, paddingVertical:5, borderRadius:20}}>
-                      <Text style={{color: pendingSort==='no'?'#ff4444':'white', fontSize:11, fontWeight:'bold'}}>🔢 ΑΡ.</Text>
+                      style={{backgroundColor: pendingSort==='no'?'white':'rgba(255,255,255,0.3)', paddingHorizontal:10, paddingVertical:6, borderRadius:20}}>
+                      <Text style={{color: pendingSort==='no'?'#ff4444':'white', fontSize:12, fontWeight:'bold'}}>🔢 ΑΡ.</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={()=>setPendingSort('date')}
-                      style={{backgroundColor: pendingSort==='date'?'white':'rgba(255,255,255,0.3)', paddingHorizontal:8, paddingVertical:5, borderRadius:20}}>
-                      <Text style={{color: pendingSort==='date'?'#ff4444':'white', fontSize:11, fontWeight:'bold'}}>🕐 ΝΕΑ</Text>
+                      style={{backgroundColor: pendingSort==='date'?'white':'rgba(255,255,255,0.3)', paddingHorizontal:10, paddingVertical:6, borderRadius:20}}>
+                      <Text style={{color: pendingSort==='date'?'#ff4444':'white', fontSize:12, fontWeight:'bold'}}>🕐 ΝΕΑ</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:6, paddingVertical:5, borderRadius:20}}
+                    <View style={{width:20}}/>
+                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:6, borderRadius:20}}
                       onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'), 'ΕΚΚΡΕΜΕΙΣ')}>
-                      <Text style={{color:'#ff4444', fontSize:10, fontWeight:'bold'}}>🖨️ ΕΚΚ</Text>
+                      <Text style={{color:'#ff4444', fontSize:12, fontWeight:'bold'}}>🖨️ ΕΚΚΡΕΜΕΙΣ</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:6, paddingVertical:5, borderRadius:20}}
+                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:6, borderRadius:20}}
                       onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PROD'), 'ΠΑΡΑΓΩΓΗ')}>
-                      <Text style={{color:'#2e7d32', fontSize:10, fontWeight:'bold'}}>🖨️ ΠΑΡ</Text>
+                      <Text style={{color:'#2e7d32', fontSize:12, fontWeight:'bold'}}>🖨️ ΠΑΡΑΓΩΓΗ</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:6, paddingVertical:5, borderRadius:20}}
+                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:6, borderRadius:20}}
                       onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)), 'ΟΛΕΣ')}>
-                      <Text style={{color:'#1a1a1a', fontSize:10, fontWeight:'bold'}}>🖨️ ΟΛΕ</Text>
+                      <Text style={{color:'#1a1a1a', fontSize:12, fontWeight:'bold'}}>🖨️ ΟΛΕΣ</Text>
                     </TouchableOpacity>
                   </View>
               </View>
