@@ -158,7 +158,7 @@ function DuplicateModal({ visible, base, suggested, onUse, onKeep, onCancel }) {
 }
 
 export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[] }) {
-  const [expanded, setExpanded] = useState({ pending:true, prod:true, ready:true, archive:false, form:true });
+  const [activeSection, setActiveSection] = useState('pending'); // form | pending | prod | ready | archive
   const [pendingSort, setPendingSort] = useState('no');
   const [showHardwarePicker, setShowHardwarePicker] = useState(false);
   const [showLockPicker, setShowLockPicker] = useState(false);
@@ -1322,7 +1322,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     await fetch(`${FIREBASE_URL}/special_orders/${order.id}.json`, { method:'PATCH', body:JSON.stringify({saleNote:text}) });
   };
 
-  const toggleSection = (s) => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setExpanded({...expanded,[s]:!expanded[s]}); };
+  const toggleSection = (s) => { setActiveSection(s); };
 
   const renderOrderCard = (order, isArchive=false, isInPending=false) => {
     const isProd = order.status==='PROD';
@@ -1622,17 +1622,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     };
     return (
       <View>
-        <TouchableOpacity style={[styles.listHeader,{backgroundColor:'#ffbb33', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]} onPress={()=>toggleSection('prod')}>
+        <View style={[styles.listHeader,{backgroundColor:'#ffbb33', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
           <Text style={styles.listHeaderText}>● ΠΑΡΑΓΓΕΛΙΕΣ ΣΤΗΝ ΠΑΡΑΓΩΓΗ ({maxPhaseCount})</Text>
-          {expanded.prod&&(
-            <TouchableOpacity
-              style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20, marginRight:4}}
-              onPress={()=>handlePrintProdStatus(prodOrders)}>
-              <Text style={{color:'#8B0000', fontSize:11, fontWeight:'bold'}}>📋 ΚΑΤΑΣΤΑΣΗ</Text>
-            </TouchableOpacity>
-          )}
-        </TouchableOpacity>
-        {expanded.prod&&(
+          <TouchableOpacity
+            style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
+            onPress={()=>handlePrintProdStatus(prodOrders)}>
+            <Text style={{color:'#8B0000', fontSize:11, fontWeight:'bold'}}>📋 ΚΑΤΑΣΤΑΣΗ</Text>
+          </TouchableOpacity>
+        </View>
+        {(
           <View style={styles.prodContainer}>
             {/* ΥΠΟΚΑΡΤΕΛΕΣ */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.phaseTabs}>
@@ -2106,16 +2104,32 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </View>
         </View>
       </Modal>
-      <ScrollView style={{padding:10}} keyboardShouldPersistTaps="handled">
-        <View style={{paddingBottom:120}}>
-          <TouchableOpacity onPress={()=>toggleSection('form')} style={[styles.listHeader,{backgroundColor:'#8B0000',flexDirection:'row',justifyContent:'space-between',alignItems:'center'}]}>
-            <Text style={styles.listHeaderText}>✏️ ΚΑΤΑΧΩΡΗΣΗ ΝΕΑΣ ΠΑΡΑΓΓΕΛΙΑΣ</Text>
-            <Text style={{color:'white',fontSize:16}}>{expanded.form?'▲':'▼'}</Text>
-          </TouchableOpacity>
+      <View style={{flex:1, flexDirection:'row'}}>
+        {/* SIDEBAR 20% */}
+        <View style={{width:'20%', backgroundColor:'#1a1a1a', padding:8, gap:8}}>
+          {[
+            {key:'form',    icon:'✏️', label:'ΚΑΤΑΧΩΡΗΣΗ', count:null},
+            {key:'pending', icon:'📋', label:'ΚΑΤΑΧΩΡΗΜΕΝΕΣ', count:specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)).length, badgeColor:'#ff4444'},
+            {key:'prod',    icon:'⚙️', label:'ΠΑΡΑΓΩΓΗ', count:specialOrders.filter(o=>o.status==='PROD').length, badgeColor:'#ff9800'},
+            {key:'ready',   icon:'📦', label:'ΕΤΟΙΜΑ', count:specialOrders.filter(o=>o.status==='READY').length, badgeColor:'#2e7d32'},
+            {key:'archive', icon:'💰', label:'ΑΡΧΕΙΟ', count:soldSpecialOrders.length, badgeColor:'#555'},
+          ].map(item=>(
+            <TouchableOpacity key={item.key}
+              onPress={()=>setActiveSection(item.key)}
+              style={{backgroundColor:activeSection===item.key?'#8B0000':'#2c2c2c', borderRadius:10, padding:12, alignItems:'center', gap:4, borderWidth:2, borderColor:activeSection===item.key?'rgba(255,255,255,0.3)':'transparent', position:'relative'}}>
+              {item.count>0&&<View style={{position:'absolute',top:6,right:6,backgroundColor:item.badgeColor,borderRadius:10,paddingHorizontal:5,paddingVertical:1,minWidth:18,alignItems:'center'}}><Text style={{color:'white',fontSize:9,fontWeight:'bold'}}>{item.count}</Text></View>}
+              <Text style={{fontSize:22}}>{item.icon}</Text>
+              <Text style={{color:'white',fontSize:10,fontWeight:'bold',textAlign:'center',lineHeight:13}}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {/* CONTENT 80% */}
+        <ScrollView style={{flex:1, padding:10}} keyboardShouldPersistTaps="handled">
+        <View style={{paddingBottom:80}}>
+          {activeSection==='form'&&(<>
 
 
 
-          {expanded.form && (<>
           {/* ═══ CARD: ΠΕΛΑΤΗΣ + ΑΡ. ΠΑΡΑΓΓΕΛΙΑΣ ═══ */}
           <View style={vstyles.card}>
             <View style={vstyles.cardHeader}><Text style={vstyles.cardHeaderTxt}>👤  ΣΤΟΙΧΕΙΑ ΠΑΡΑΓΓΕΛΙΑΣ</Text></View>
@@ -2464,73 +2478,66 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </TouchableOpacity>
           </>)}
 
-          {/* ΡΟΗ ΠΑΡΑΓΩΓΗΣ */}
-          {/* ΡΟΗ ΠΑΡΑΓΩΓΗΣ — μόνο για ΕΙΔΙΚΗ */}
-            <Text style={styles.mainTitle}>ΡΟΗ ΠΑΡΑΓΩΓΗΣ</Text>
-
-            {/* ΚΑΤΑΧΩΡΗΜΕΝΕΣ ΠΑΡΑΓΓΕΛΙΕΣ */}
+          {/* ΚΑΤΑΧΩΡΗΜΕΝΕΣ */}
+          {activeSection==='pending'&&(
             <View>
-              <TouchableOpacity style={[styles.listHeader,{backgroundColor:'#ff4444', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]} onPress={()=>toggleSection('pending')}>
+              <View style={[styles.listHeader,{backgroundColor:'#ff4444', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
                 <Text style={styles.listHeaderText}>● ΚΑΤΑΧΩΡΗΜΕΝΕΣ ({specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)).length})</Text>
-                {expanded.pending&&(
                   <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
-                    <TouchableOpacity
-                      onPress={e=>{e.stopPropagation?.(); setPendingSort('no');}}
+                    <TouchableOpacity onPress={()=>setPendingSort('no')}
                       style={{backgroundColor: pendingSort==='no'?'white':'rgba(255,255,255,0.3)', paddingHorizontal:8, paddingVertical:5, borderRadius:20}}>
                       <Text style={{color: pendingSort==='no'?'#ff4444':'white', fontSize:11, fontWeight:'bold'}}>🔢 ΑΡ.</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={e=>{e.stopPropagation?.(); setPendingSort('date');}}
+                    <TouchableOpacity onPress={()=>setPendingSort('date')}
                       style={{backgroundColor: pendingSort==='date'?'white':'rgba(255,255,255,0.3)', paddingHorizontal:8, paddingVertical:5, borderRadius:20}}>
                       <Text style={{color: pendingSort==='date'?'#ff4444':'white', fontSize:11, fontWeight:'bold'}}>🕐 ΝΕΑ</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:8, paddingVertical:5, borderRadius:20, marginLeft:2}}
-                      onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'), 'ΚΑΤΑΧΩΡΗΜΕΝΕΣ ΠΑΡΑΓΓΕΛΙΕΣ')}>
+                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:8, paddingVertical:5, borderRadius:20}}
+                      onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'), 'ΚΑΤΑΧΩΡΗΜΕΝΕΣ')}>
                       <Text style={{color:'#ff4444', fontSize:11, fontWeight:'bold'}}>🖨️</Text>
                     </TouchableOpacity>
                   </View>
-                )}
-              </TouchableOpacity>
-              {expanded.pending&&[...specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone))].sort((a,b)=>
-                pendingSort==='date'
-                  ? (b.createdAt||0)-(a.createdAt||0)
-                  : (parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)
+              </View>
+              {[...specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone))].sort((a,b)=>
+                pendingSort==='date' ? (b.createdAt||0)-(a.createdAt||0) : (parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)
               ).map(o=>renderOrderCard(o, false, true))}
             </View>
+          )}
 
-            {renderProdSection()}
+          {/* ΠΑΡΑΓΩΓΗ */}
+          {activeSection==='prod'&&renderProdSection()}
 
-            {/* ΕΤΟΙΜΑ ΑΠΟΘΗΚΗΣ */}
+          {/* ΕΤΟΙΜΑ */}
+          {activeSection==='ready'&&(
             <View>
-              <TouchableOpacity style={[styles.listHeader,{backgroundColor:'#00C851', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]} onPress={()=>toggleSection('ready')}>
+              <View style={[styles.listHeader,{backgroundColor:'#00C851', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
                 <Text style={styles.listHeaderText}>● ΕΤΟΙΜΑ ΑΠΟΘΗΚΗΣ ({specialOrders.filter(o=>o.status==='READY').length})</Text>
-                {expanded.ready&&(
-                  <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20, marginRight:4}}
-                    onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='READY'), 'ΕΤΟΙΜΑ ΑΠΟΘΗΚΗΣ')}>
-                    <Text style={{color:'#00C851', fontSize:11, fontWeight:'bold'}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-              {expanded.ready&&[...specialOrders.filter(o=>o.status==='READY')].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)).map(o=>renderOrderCard(o))}
+                <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
+                  onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='READY'), 'ΕΤΟΙΜΑ ΑΠΟΘΗΚΗΣ')}>
+                  <Text style={{color:'#00C851', fontSize:11, fontWeight:'bold'}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
+                </TouchableOpacity>
+              </View>
+              {[...specialOrders.filter(o=>o.status==='READY')].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)).map(o=>renderOrderCard(o))}
             </View>
+          )}
 
-            {/* ΑΡΧΕΙΟ */}
+          {/* ΑΡΧΕΙΟ */}
+          {activeSection==='archive'&&(
             <View>
-              <TouchableOpacity style={[styles.listHeader,{backgroundColor:'#333', marginTop:20, flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]} onPress={()=>toggleSection('archive')}>
+              <View style={[styles.listHeader,{backgroundColor:'#333', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
                 <Text style={styles.listHeaderText}>📂 ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ ({soldSpecialOrders.length})</Text>
-                {expanded.archive&&(
-                  <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20, marginRight:4}}
-                    onPress={()=>handleSimplePrint(soldSpecialOrders, 'ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ')}>
-                    <Text style={{color:'#333', fontSize:11, fontWeight:'bold'}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-              {expanded.archive&&soldSpecialOrders.map(o=>renderOrderCard(o,true))}
+                <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
+                  onPress={()=>handleSimplePrint(soldSpecialOrders, 'ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ')}>
+                  <Text style={{color:'#333', fontSize:11, fontWeight:'bold'}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
+                </TouchableOpacity>
+              </View>
+              {soldSpecialOrders.map(o=>renderOrderCard(o,true))}
             </View>
-
+          )}
 
         </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </View>
   );
 }
