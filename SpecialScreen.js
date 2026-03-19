@@ -7,9 +7,9 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 // Helper εκτύπωσης — web: window.print(), mobile: expo-print + sharing
-const printHTML = async (html, title) => {
+const printHTML = async (html, title, existingWin=null) => {
   if (Platform.OS === 'web') {
-    const win = window.open('', '_blank');
+    const win = existingWin || window.open('', '_blank');
     if (!win) { Alert.alert("Σφάλμα", "Ο browser μπλόκαρε το παράθυρο εκτύπωσης. Επιτρέψτε τα pop-ups."); return; }
     // Εξάγω το CSS από το html
     const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
@@ -1474,13 +1474,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   // Απλή εκτύπωση για ΚΑΤΑΧΩΡΗΜΕΝΕΣ / ΕΤΟΙΜΑ / ΑΡΧΕΙΟ — ταξινόμηση κατά αριθμό παραγγελίας
   const handleSimplePrint = async (orders, title) => {
     if (!orders.length) return Alert.alert("Προσοχή","Δεν υπάρχουν παραγγελίες για εκτύπωση.");
+    const win = Platform.OS === 'web' ? window.open('', '_blank') : null;
     const today = new Date();
     const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
     const sorted = [...orders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
     const copies = [{ title:`VAICON — ${dateStr} — ${title}`, orders:sorted }];
     const html = buildPrintHTML(copies);
     try {
-      await printHTML(html, `VAICON — ${title}`);
+      await printHTML(html, `VAICON — ${title}`, win);
     } catch(e) {
       Alert.alert("Σφάλμα","Δεν δημιουργήθηκε το PDF.");
     }
