@@ -3,6 +3,21 @@ import {
   StyleSheet, Text, View, ActivityIndicator, Platform,
   StatusBar, TouchableOpacity, Modal, TextInput, Alert, BackHandler
 } from 'react-native';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDTAyLh1-Jrdpz_TRUFbpQhqZHNhfPg47U",
+  authDomain: "vaicon-eidikes.firebaseapp.com",
+  databaseURL: "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "vaicon-eidikes",
+  storageBucket: "vaicon-eidikes.firebasestorage.app",
+  messagingSenderId: "70272278564",
+  appId: "1:70272278564:web:7b398f815e4361074178b1"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const firebaseAuth = getAuth(firebaseApp);
 import SpecialScreen from './SpecialScreen';
 import CustomersScreen from './CustomersScreen';
 import CoatingsScreen from './CoatingsScreen';
@@ -41,10 +56,17 @@ function LoginScreen({ onSuccess }) {
   const [error, setError] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (pwd === VAICON_PASSWORD) {
-      rememberLogin();
-      onSuccess();
+      try {
+        await signInWithEmailAndPassword(firebaseAuth, 'vaicon@vaicon.gr', 'vaicon2024');
+        rememberLogin();
+        onSuccess();
+      } catch(e) {
+        console.warn('Firebase auth error:', e);
+        rememberLogin();
+        onSuccess();
+      }
     } else {
       setError(true);
       setPwd('');
