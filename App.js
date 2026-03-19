@@ -3,35 +3,14 @@ import {
   StyleSheet, Text, View, ActivityIndicator, Platform,
   StatusBar, TouchableOpacity, Modal, TextInput, Alert, BackHandler
 } from 'react-native';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDTAyLh1-Jrdpz_TRUFbpQhqZHNhfPg47U",
-  authDomain: "vaicon-eidikes.firebaseapp.com",
-  databaseURL: "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "vaicon-eidikes",
-  storageBucket: "vaicon-eidikes.firebasestorage.app",
-  messagingSenderId: "70272278564",
-  appId: "1:70272278564:web:7b398f815e4361074178b1"
-};
-
-const firebaseApp = initializeApp(firebaseConfig);
-const firebaseAuth = getAuth(firebaseApp);
 import SpecialScreen from './SpecialScreen';
 import CustomersScreen from './CustomersScreen';
 import CoatingsScreen from './CoatingsScreen';
 import LocksScreen from './LocksScreen';
 import ActivityScreen from './ActivityScreen';
 
-// ============================================================
-//  🔥 FIREBASE — αλλάξτε με το νέο σας Firebase URL
-// ============================================================
 export const FIREBASE_URL = "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app";
 
-// ============================================================
-//  🔐 ΚΩΔΙΚΟΣ ΠΡΟΣΒΑΣΗΣ
-// ============================================================
 const VAICON_PASSWORD = "vaicon2024";
 const STORAGE_KEY = "vaicon_special_auth_v1";
 
@@ -48,25 +27,15 @@ const forgetLogin = () => {
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
 };
 
-// ============================================================
-//  Οθόνη Login
-// ============================================================
 function LoginScreen({ onSuccess }) {
   const [pwd, setPwd] = useState('');
   const [error, setError] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
-  const handleLogin = async () => {
+  const handleLogin = () => {
     if (pwd === VAICON_PASSWORD) {
-      try {
-        await signInWithEmailAndPassword(firebaseAuth, 'vaicon@vaicon.gr', 'vaicon2024');
-        rememberLogin();
-        onSuccess();
-      } catch(e) {
-        console.warn('Firebase auth error:', e);
-        rememberLogin();
-        onSuccess();
-      }
+      rememberLogin();
+      onSuccess();
     } else {
       setError(true);
       setPwd('');
@@ -125,22 +94,17 @@ const loginStyles = StyleSheet.create({
   hint: { color: '#aaa', fontSize: 11, textAlign: 'center', marginTop: 16 },
 });
 
-// ============================================================
-//  Κύρια Εφαρμογή
-// ============================================================
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(isRemembered());
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Data states
   const [specialOrders, setSpecialOrders] = useState([]);
   const [soldSpecialOrders, setSoldSpecialOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [coatings, setCoatings] = useState([]);
   const [locks, setLocks] = useState([]);
 
-  // Modal states
   const [showCustomers, setShowCustomers] = useState(false);
   const [showCoatings, setShowCoatings] = useState(false);
   const [showLocks, setShowLocks] = useState(false);
@@ -207,7 +171,6 @@ export default function App() {
     <View style={styles.container}>
       <StatusBar backgroundColor="#8B0000" barStyle="light-content" />
 
-      {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>VAICON</Text>
         <Text style={styles.headerSubtitle}>ΕΙΔΙΚΕΣ ΠΑΡΑΓΓΕΛΙΕΣ</Text>
@@ -216,7 +179,6 @@ export default function App() {
         </TouchableOpacity>
       </View>
 
-      {/* MAIN SCREEN */}
       <View style={{ flex: 1 }}>
         <SpecialScreen
           specialOrders={specialOrders}
@@ -234,7 +196,6 @@ export default function App() {
         />
       </View>
 
-      {/* HAMBURGER MENU */}
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         <TouchableOpacity style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
           <View style={styles.menuPanel}>
@@ -266,22 +227,18 @@ export default function App() {
         </TouchableOpacity>
       </Modal>
 
-      {/* ΙΣΤΟΡΙΚΟ */}
       <Modal visible={showActivity} animationType="slide" onRequestClose={() => setShowActivity(false)}>
         <ActivityScreen onClose={() => setShowActivity(false)} />
       </Modal>
 
-      {/* ΕΠΕΝΔΥΣΕΙΣ */}
       <Modal visible={showCoatings} animationType="slide" onRequestClose={() => setShowCoatings(false)}>
         <CoatingsScreen coatings={coatings} setCoatings={setCoatings} onClose={() => setShowCoatings(false)} />
       </Modal>
 
-      {/* ΚΛΕΙΔΑΡΙΕΣ */}
       <Modal visible={showLocks} animationType="slide" onRequestClose={() => setShowLocks(false)}>
         <LocksScreen locks={locks} setLocks={setLocks} onClose={() => setShowLocks(false)} />
       </Modal>
 
-      {/* ΠΕΛΑΤΕΣ */}
       <Modal visible={showCustomers} animationType="slide" onRequestClose={() => setShowCustomers(false)}>
         <CustomersScreen
           customers={customers}
