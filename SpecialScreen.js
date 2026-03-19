@@ -2493,9 +2493,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       style={{backgroundColor: pendingSort==='date'?'white':'rgba(255,255,255,0.3)', paddingHorizontal:8, paddingVertical:5, borderRadius:20}}>
                       <Text style={{color: pendingSort==='date'?'#ff4444':'white', fontSize:11, fontWeight:'bold'}}>🕐 ΝΕΑ</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:8, paddingVertical:5, borderRadius:20}}
-                      onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'), 'ΚΑΤΑΧΩΡΗΜΕΝΕΣ')}>
-                      <Text style={{color:'#ff4444', fontSize:11, fontWeight:'bold'}}>🖨️</Text>
+                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:6, paddingVertical:5, borderRadius:20}}
+                      onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'), 'ΕΚΚΡΕΜΕΙΣ')}>
+                      <Text style={{color:'#ff4444', fontSize:10, fontWeight:'bold'}}>🖨️ ΕΚΚ</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:6, paddingVertical:5, borderRadius:20}}
+                      onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PROD'), 'ΠΑΡΑΓΩΓΗ')}>
+                      <Text style={{color:'#2e7d32', fontSize:10, fontWeight:'bold'}}>🖨️ ΠΑΡ</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:6, paddingVertical:5, borderRadius:20}}
+                      onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)), 'ΟΛΕΣ')}>
+                      <Text style={{color:'#1a1a1a', fontSize:10, fontWeight:'bold'}}>🖨️ ΟΛΕ</Text>
                     </TouchableOpacity>
                   </View>
               </View>
