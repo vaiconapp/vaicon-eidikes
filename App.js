@@ -117,6 +117,13 @@ export default function App() {
     else setLoading(false);
   }, [isLoggedIn]);
 
+  // Αυτόματη ανανέωση κάθε 5 δευτερόλεπτα
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const interval = setInterval(() => { fetchData(true); }, 5000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
+
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -130,8 +137,8 @@ export default function App() {
     return () => handler.remove();
   }, [menuOpen, showActivity, showCoatings, showLocks, showCustomers]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (silent=false) => {
+    if (!silent) setLoading(true);
     try {
       const resS = await fetch(`${FIREBASE_URL}/special_orders.json`);
       const dataS = await resS.json();
