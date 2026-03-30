@@ -395,9 +395,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       .col-tem{width:36px;text-align:center;}
       .col-dim{width:80px;}
       .col-fora{width:28px;}
-      .col-thor{width:70px;}
+      .col-thor{width:36px;}
       .col-ment{width:28px;}
-      .col-type{width:90px;}
+      .col-type{width:36px;}
       .col-lock{width:90px;}
       .col-mat{width:90px;}
       .col-glass{width:150px;}
@@ -421,6 +421,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const hingesNum = parseInt(o.hinges)||2;
         const mentStyle = hingesNum>=3 ? 'font-size:22px;font-weight:900;color:#cc0000;' : 'font-size:16px;';
         const kleidaria = o.lock||'—';
+        const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const datesLine = [createdFmt, deliveryFmt].filter(Boolean).join('    ');
@@ -430,14 +431,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-weight:bold;font-size:17px">${fora}</td>
           <td style="${mentStyle}">${mentesedesVal}</td>
           <td style="font-size:15px">${kleidaria}</td>
-          <td style="font-size:15px">${o.caseType||'—'}</td>
+          <td style="font-size:15px;text-align:center">${caseTypeVal}</td>
           <td style="font-size:15px">${o.caseMaterial||'DKP'}</td>
-          <td style="min-width:140px;font-size:13px">${o.notes||''}</td>
+          <td style="min-width:160px;font-size:13px">${o.notes||''}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
       return `<table><thead><tr>
-        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ.Κάσας</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
+        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
 
@@ -447,7 +448,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
         const hingesNum = parseInt(o.hinges)||2;
         const mentStyle = hingesNum>=3 ? 'font-size:22px;font-weight:900;color:#cc0000;' : 'font-size:16px;';
-        const thorakisi = (o.armor||'ΜΟΝΗ')+' ΘΩΡ.';
+        const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
         const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
@@ -457,16 +458,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-weight:bold;font-size:20px">${o.orderNo||'—'}</td>
           <td style="font-size:20px;font-weight:900">${o.h||'—'} × ${o.w||'—'}</td>
           <td style="font-weight:bold;font-size:17px">${fora}</td>
-          <td style="font-size:16px">${thorakisi}</td>
+          <td style="font-size:16px;text-align:center">${armorVal}</td>
           <td style="${mentStyle}">${mentesedesVal}</td>
           <td style="font-size:15px">${tzami}</td>
           <td style="font-size:15px">${kleidaria}</td>
-          <td style="min-width:140px;font-size:13px">${o.notes||''}</td>
+          <td style="min-width:160px;font-size:13px">${o.notes||''}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
       return `<table><thead><tr>
-        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
+        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
 
@@ -474,7 +475,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const rows = orders.map(o => {
         const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
-        const thorakisi = (o.armor||'ΜΟΝΗ')+' ΘΩΡ.';
+        const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
+        const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
         const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
         const coatings = (o.coatings&&o.coatings.length>0)?o.coatings.join(', '):'';
@@ -485,19 +487,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
           <td style="font-size:17px;font-weight:900">${o.h||'—'} × ${o.w||'—'}</td>
           <td style="font-weight:bold;font-size:17px">${fora}</td>
-          <td style="font-size:13px">${thorakisi}</td>
+          <td style="font-size:13px;text-align:center">${armorVal}</td>
           <td style="font-size:13px">${o.hardware||'—'}</td>
           <td style="font-size:13px">${mentesedesVal}</td>
           <td style="font-size:13px">${tzami}</td>
           <td style="font-size:13px">${kleidaria}</td>
-          <td style="font-size:13px">${o.caseType||'—'}</td>
+          <td style="font-size:13px;text-align:center">${caseTypeVal}</td>
           <td style="font-size:13px">${coatings}</td>
-          <td style="min-width:140px;font-size:13px">${o.notes||''}</td>
+          <td style="min-width:160px;font-size:13px">${o.notes||''}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
       return `<table><thead><tr>
-        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th><th>Χρώμα</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Τ.Κάσας</th><th>Επένδυση</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
+        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Επένδυση</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
 
@@ -506,6 +508,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
         const qtyVal = o.qty&&parseInt(o.qty)>1?`<span style="font-size:15px;font-weight:900;color:#cc0000">${o.qty}</span>`:'';
+        const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const datesLine = [createdFmt, deliveryFmt].filter(Boolean).join('    ');
@@ -515,14 +518,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-size:17px;font-weight:900">${o.h||'—'} × ${o.w||'—'}</td>
           <td style="font-weight:bold;font-size:17px">${fora}</td>
           <td style="font-size:13px">${mentesedesVal}</td>
-          <td style="font-size:13px">${o.caseType||'—'}</td>
+          <td style="font-size:13px;text-align:center">${caseTypeVal}</td>
           <td style="font-size:13px">${o.caseMaterial||'DKP'}</td>
-          <td style="min-width:140px;font-size:13px">${o.notes||''}</td>
+          <td style="min-width:160px;font-size:13px">${o.notes||''}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
       return `<table><thead><tr>
-        <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Τ.Κάσας</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
+        <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
 
@@ -543,13 +546,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           const mentesedesVal = (!o.hinges||o.hinges==='2')?'—':o.hinges;
           const mentStyle = hingesNum>=3 ? 'font-size:14px;font-weight:900;color:#cc0000;' : 'font-size:10px;';
           const kleidaria = o.lock||'—';
-          const thorakisi = (o.armor||'ΜΟΝΗ')+' ΘΩΡ.';
+          const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
           return `<tr>
             <td class="col-no" style="font-weight:bold">${o.orderNo||'—'}</td>
             <td class="col-tem">${qtyDisplay(o)}</td>
             <td class="col-dim" style="font-weight:900">${dimCell(o)}</td>
             <td class="col-fora" style="font-weight:bold">${fora}</td>
-            <td class="col-thor" style="font-size:10px">${thorakisi}</td>
+            <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentesedesVal}</td>
             <td class="col-lock" style="font-size:10px">${kleidaria}</td>
             <td class="notes" style="font-size:10px">${o.notes||''}</td>
@@ -558,7 +561,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000"><td style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="6"></td></tr>`;
         return `<table><thead><tr>
-          <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th><th>Μεντ.</th><th>Κλειδ.</th><th>Παρατηρήσεις</th>
+          <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Κλειδ.</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
       }
 
@@ -573,15 +576,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           const hingesNum = parseInt(o.hinges)||2;
           const mentVal = (!o.hinges||o.hinges==='2')?'—':o.hinges;
           const mentStyle = hingesNum>=3 ? 'font-size:14px;font-weight:900;color:#cc0000;' : 'font-size:10px;';
+          const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
+          const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
           return `<tr style="${borderTop}">
             <td class="col-no" style="font-weight:bold">${o.orderNo||'—'}</td>
             <td class="col-tem">${qtyDisplay(o)}</td>
             <td class="col-dim" style="font-weight:900">${dimCell(o)}</td>
             <td class="col-fora" style="font-weight:bold">${fora}</td>
-            <td class="col-thor" style="font-size:10px">${(o.armor||'ΜΟΝΗ')+' ΘΩΡ.'}</td>
+            <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentVal}</td>
             <td class="col-lock" style="font-size:10px">${o.lock||'—'}</td>
-            <td class="col-type" style="font-size:10px">${o.caseType||'—'}</td>
+            <td class="col-type" style="font-size:10px;text-align:center">${caseTypeVal}</td>
             <td class="col-mat" style="font-size:10px;font-weight:bold">${mat}</td>
             <td class="notes" style="font-size:10px">${o.notes||''}</td>
           </tr>`;
@@ -589,7 +594,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="6"></td></tr>`;
         return `<table><thead><tr>
-          <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th><th>Μεντ.</th><th>Κλειδ.</th><th>Τ.Κάσας</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th>
+          <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Κλειδ.</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
       }
 
@@ -597,19 +602,20 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       if (isSasi) {
         let prevArmor = null;
         const rows = orders.map(o=>{
-          const armor = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ')?'ΔΙΠΛΗ':'ΜΟΝΗ';
+          const isDipli = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ');
           const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
-          const borderTop = (prevArmor!==null && armor!==prevArmor) ? 'border-top:3px solid #000;' : '';
-          prevArmor = armor;
+          const borderTop = (prevArmor!==null && isDipli!==prevArmor) ? 'border-top:3px solid #000;' : '';
+          prevArmor = isDipli;
           const hingesNum = parseInt(o.hinges)||2;
           const mentVal = (!o.hinges||o.hinges==='2')?'—':o.hinges;
           const mentStyle = hingesNum>=3 ? 'font-size:14px;font-weight:900;color:#cc0000;' : 'font-size:10px;';
+          const armorVal = isDipli ? '' : '<b>Μ/Θ</b>';
           return `<tr style="${borderTop}">
             <td class="col-no" style="font-weight:bold">${o.orderNo||'—'}</td>
             <td class="col-tem">${qtyDisplay(o)}</td>
             <td class="col-dim" style="font-weight:900">${dimCell(o)}</td>
             <td class="col-fora" style="font-weight:bold">${fora}</td>
-            <td class="col-thor" style="font-size:10px;font-weight:bold">${armor} ΘΩΡ.</td>
+            <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentVal}</td>
             <td class="col-glass" style="font-size:10px">${((o.glassDim||'')+(o.glassNotes?' '+o.glassNotes:''))||'—'}</td>
             <td class="col-lock" style="font-size:10px">${o.lock||'—'}</td>
@@ -619,7 +625,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="4"></td></tr>`;
         return `<table><thead><tr>
-          <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδ.</th><th>Παρατηρήσεις</th>
+          <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδ.</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
       }
 
@@ -630,18 +636,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
         const mentStyle = hingesNum>=3 ? 'font-size:14px;font-weight:900;color:#cc0000;' : 'font-size:10px;';
         const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
-        const thorakisi = (o.armor||'ΜΟΝΗ')+' ΘΩΡ.';
+        const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
+        const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
         return `<tr>
           <td class="col-no" style="font-weight:bold">${o.orderNo||'—'}</td>
           <td class="col-tem">${qtyDisplay(o)}</td>
           <td class="col-dim" style="font-weight:900">${dimCell(o)}</td>
           <td class="col-fora" style="font-weight:bold">${fora}</td>
-          <td class="col-thor" style="font-size:10px">${thorakisi}</td>
+          <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
           <td class="col-ment" style="${mentStyle}">${mentesedesVal}</td>
           <td class="col-glass" style="font-size:10px">${tzami}</td>
           <td class="col-lock" style="font-size:10px">${kleidaria}</td>
-          <td class="col-type" style="font-size:10px">${o.caseType||'—'}</td>
+          <td class="col-type" style="font-size:10px;text-align:center">${caseTypeVal}</td>
           <td class="col-mat" style="font-size:10px;font-weight:bold">${o.caseMaterial||'DKP'}</td>
           <td class="notes" style="font-size:10px">${o.notes||''}</td>
         </tr>`;
@@ -649,8 +656,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const total = totalQty(orders);
       const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="9"></td></tr>`;
       return `<table><thead><tr>
-        <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th>
-        <th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Τ.Κάσας</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th>
+        <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th>
+        <th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th>
       </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
     };
     const buildTable = (orders) => {
@@ -658,7 +665,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
         const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
-        const thorakisi = (o.armor||'ΜΟΝΗ')+' ΘΩΡ.';
+        const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
+        const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
         const qtyVal = o.qty&&parseInt(o.qty)>1?`&nbsp;<span style="font-size:15px;font-weight:900;color:#cc0000">${o.qty}</span>`:'';
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
@@ -668,22 +676,22 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-weight:bold;font-size:13px">${o.orderNo||'—'}</td>
           <td style="font-weight:bold;font-size:13px">${o.h||'—'}x${o.w||'—'}${qtyVal}</td>
           <td style="font-weight:bold;font-size:13px">${fora}</td>
-          <td>${thorakisi}</td>
+          <td style="text-align:center">${armorVal}</td>
           <td style="font-weight:bold">${o.hardware||'—'}</td>
           <td style="font-weight:bold;font-size:13px">${mentesedesVal}</td>
           <td style="font-weight:bold;font-size:13px">${tzami}</td>
           <td>${kleidaria}</td>
-          <td>${o.caseType||'—'}</td>
+          <td style="text-align:center">${caseTypeVal}</td>
           <td>${o.caseMaterial||'DKP'}</td>
           <td>${o.installation==='ΝΑΙ'?'✓':''}</td>
           ${showCoatings?`<td>${(o.coatings&&o.coatings.length>0)?o.coatings.join(', '):''}</td>`:''}
-          <td style="min-width:120px">${o.notes||''}</td>
+          <td style="min-width:140px">${o.notes||''}</td>
           <td style="font-size:10px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
       return `<table><thead><tr>
-        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th><th>Χρώμα</th>
-        <th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Τ.Κάσας</th><th>Υλ.Κάσας</th><th>Μον.</th>${showCoatings?'<th>Επένδυση</th>':''}<th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
+        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th>
+        <th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Μον.</th>${showCoatings?'<th>Επένδυση</th>':''}<th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
 
@@ -970,17 +978,23 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         );
       }
       if (phaseKey==='cases') {
+        const COLS_CASES2 = [
+          {label:'Νο',w:50},{label:'Διάσταση',w:95},{label:'Φορά',w:40},
+          {label:'Μεντ.',w:35},{label:'Κλειδαριά',w:80},{label:'Τ/Κ',w:36},
+          {label:'Υλ.Κάσας',w:65},{label:'Παρατηρήσεις',w:220},{label:'Ημερομηνίες',w:120},
+        ];
         return (
           <ScrollView horizontal>
             <View>
               <View style={styles.previewThead}>
-                {COLS_CASES.map(h=>(
+                {COLS_CASES2.map(h=>(
                   <Text key={h.label} style={[styles.previewTh,{width:h.w}]}>{h.label}</Text>
                 ))}
               </View>
               {sortedOrders.map((o,i)=>{
                 const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
                 const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
+                const caseTypeTxt = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? 'Α/Τ' : '';
                 const bold = {fontWeight:'bold',fontSize:13,color:'#000'};
                 const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
                 const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
@@ -991,9 +1005,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:40},...[bold]]}>{fora}</Text>
                     <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
                     <Text style={[styles.previewTd,{width:80}]}>{o.lock||'—'}</Text>
-                    <Text style={[styles.previewTd,{width:90}]}>{o.caseType||'—'}</Text>
+                    <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{caseTypeTxt}</Text>
                     <Text style={[styles.previewTd,{width:65}]}>{o.caseMaterial||'DKP'}</Text>
-                    <Text style={[styles.previewTd,{width:200}]}>{o.notes||''}</Text>
+                    <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
                     <Text style={[styles.previewTd,{width:120,fontSize:11,color:'#555'}]}>{[createdFmt,deliveryFmt].filter(Boolean).join('  ')}</Text>
                   </View>
                 );
@@ -1003,18 +1017,23 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         );
       }
       if (phaseKey==='montSasi') {
+        const COLS_SASI2 = [
+          {label:'Νο',w:50},{label:'Διάσταση',w:95},{label:'Φορά',w:40},
+          {label:'Θ/Σ',w:36},{label:'Μεντ.',w:35},{label:'Τζάμι',w:55},
+          {label:'Κλειδαριά',w:70},{label:'Παρατηρήσεις',w:220},{label:'Ημερομηνίες',w:120},
+        ];
         return (
           <ScrollView horizontal>
             <View>
               <View style={styles.previewThead}>
-                {COLS_SASI.map(h=>(
+                {COLS_SASI2.map(h=>(
                   <Text key={h.label} style={[styles.previewTh,{width:h.w}]}>{h.label}</Text>
                 ))}
               </View>
               {sortedOrders.map((o,i)=>{
                 const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
                 const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
-                const thorakisi = (o.armor||'ΜΟΝΗ')+' ΘΩΡ.';
+                const armorTxt = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : 'Μ/Θ';
                 const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
                 const bold = {fontWeight:'bold',fontSize:13,color:'#000'};
                 const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
@@ -1024,11 +1043,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:50},...[bold]]}>{o.orderNo||'—'}</Text>
                     <Text style={[styles.previewTd,{width:95},...[bold]]}>{o.h||'—'} × {o.w||'—'}</Text>
                     <Text style={[styles.previewTd,{width:40},...[bold]]}>{fora}</Text>
-                    <Text style={[styles.previewTd,{width:70}]}>{thorakisi}</Text>
+                    <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{armorTxt}</Text>
                     <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
                     <Text style={[styles.previewTd,{width:55},...[bold]]}>{tzami}</Text>
                     <Text style={[styles.previewTd,{width:70}]}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text>
-                    <Text style={[styles.previewTd,{width:200}]}>{o.notes||''}</Text>
+                    <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
                     <Text style={[styles.previewTd,{width:120,fontSize:11,color:'#555'}]}>{[createdFmt,deliveryFmt].filter(Boolean).join('  ')}</Text>
                   </View>
                 );
@@ -1038,18 +1057,25 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         );
       }
       if (phaseKey==='montDoor') {
+        const COLS_MONTDOOR2 = [
+          {label:'Νο',w:50},{label:'Διάσταση',w:95},{label:'Φορά',w:40},
+          {label:'Θ/Σ',w:36},{label:'Χρώμα',w:50},{label:'Μεντ.',w:35},
+          {label:'Τζάμι',w:55},{label:'Κλειδαριά',w:70},{label:'Τ/Κ',w:36},
+          {label:'Επένδυση',w:120},{label:'Παρατηρήσεις',w:220},{label:'Ημερομηνίες',w:120},
+        ];
         return (
           <ScrollView horizontal>
             <View>
               <View style={styles.previewThead}>
-                {COLS_MONTDOOR.map(h=>(
+                {COLS_MONTDOOR2.map(h=>(
                   <Text key={h.label} style={[styles.previewTh,{width:h.w}]}>{h.label}</Text>
                 ))}
               </View>
               {sortedOrders.map((o,i)=>{
                 const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
                 const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
-                const thorakisi = (o.armor||'ΜΟΝΗ')+' ΘΩΡ.';
+                const armorTxt = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : 'Μ/Θ';
+                const caseTypeTxt = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? 'Α/Τ' : '';
                 const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
                 const bold = {fontWeight:'bold',fontSize:13,color:'#000'};
                 const createdFmt2 = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
@@ -1059,14 +1085,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:50},...[bold]]}>{o.orderNo||'—'}</Text>
                     <Text style={[styles.previewTd,{width:95},...[bold]]}>{o.h||'—'} × {o.w||'—'}</Text>
                     <Text style={[styles.previewTd,{width:40},...[bold]]}>{fora}</Text>
-                    <Text style={[styles.previewTd,{width:70}]}>{thorakisi}</Text>
+                    <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{armorTxt}</Text>
                     <Text style={[styles.previewTd,{width:50}]}>{o.hardware||'—'}</Text>
                     <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
                     <Text style={[styles.previewTd,{width:55},...[bold]]}>{tzami}</Text>
                     <Text style={[styles.previewTd,{width:70}]}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text>
-                    <Text style={[styles.previewTd,{width:65}]}>{o.caseType||'—'}</Text>
+                    <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{caseTypeTxt}</Text>
                     <Text style={[styles.previewTd,{width:120}]}>{(o.coatings&&o.coatings.length>0)?o.coatings.join(', '):''}</Text>
-                    <Text style={[styles.previewTd,{width:200}]}>{o.notes||''}</Text>
+                    <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
                     <Text style={[styles.previewTd,{width:120,fontSize:11,color:'#555'}]}>{[createdFmt2,deliveryFmt2].filter(Boolean).join('  ')}</Text>
                   </View>
                 );
@@ -1076,17 +1102,23 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         );
       }
       if (phaseKey==='vafio') {
+        const COLS_VAFIO2 = [
+          {label:'Νο',w:50},{label:'Τεμ.',w:35},{label:'Διάσταση',w:95},{label:'Φορά',w:40},
+          {label:'Μεντ.',w:35},{label:'Τ/Κ',w:36},{label:'Υλ.Κάσας',w:65},
+          {label:'Παρατηρήσεις',w:220},{label:'Ημερομηνίες',w:120},
+        ];
         return (
           <ScrollView horizontal>
             <View>
               <View style={styles.previewThead}>
-                {COLS_VAFIO.map(h=>(
+                {COLS_VAFIO2.map(h=>(
                   <Text key={h.label} style={[styles.previewTh,{width:h.w}]}>{h.label}</Text>
                 ))}
               </View>
               {sortedOrders.map((o,i)=>{
                 const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
                 const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
+                const caseTypeTxt = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? 'Α/Τ' : '';
                 const bold = {fontWeight:'bold',fontSize:13,color:'#000'};
                 const createdFmt3 = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
                 const deliveryFmt3 = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
@@ -1097,9 +1129,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:95},...[bold]]}>{o.h||'—'} × {o.w||'—'}</Text>
                     <Text style={[styles.previewTd,{width:40},...[bold]]}>{fora}</Text>
                     <Text style={[styles.previewTd,{width:35}]}>{mentesedesVal}</Text>
-                    <Text style={[styles.previewTd,{width:90}]}>{o.caseType||'—'}</Text>
+                    <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{caseTypeTxt}</Text>
                     <Text style={[styles.previewTd,{width:65}]}>{o.caseMaterial||'DKP'}</Text>
-                    <Text style={[styles.previewTd,{width:200}]}>{o.notes||''}</Text>
+                    <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
                     <Text style={[styles.previewTd,{width:120,fontSize:11,color:'#555'}]}>{[createdFmt3,deliveryFmt3].filter(Boolean).join('  ')}</Text>
                   </View>
                 );
@@ -1108,11 +1140,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </ScrollView>
         );
       }
+      const COLS_DEFAULT = [
+        {label:'Νο',w:50},{label:'Τεμ.',w:35},{label:'Διάσταση',w:80},{label:'Φορά',w:40},
+        {label:'Θ/Σ',w:36},{label:'Μεντ.',w:35},{label:'Τζάμι',w:55},{label:'Κλειδαριά',w:70},
+        {label:'Χρώμα',w:50},{label:'Τ/Κ',w:36},{label:'Υλ.Κάσας',w:65},{label:'Μον.',w:40},{label:'Επένδυση',w:120},{label:'Παρατηρήσεις',w:240},
+      ];
       return (
       <ScrollView horizontal>
         <View>
           <View style={styles.previewThead}>
-            {COLS.map(h=>(
+            {COLS_DEFAULT.map(h=>(
               <Text key={h.label} style={[styles.previewTh,{width:h.w}]}>{h.label}</Text>
             ))}
           </View>
@@ -1120,6 +1157,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
             const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
             const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
+            const armorTxt = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : 'Μ/Θ';
+            const caseTypeTxt = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? 'Α/Τ' : '';
             const bold = {fontWeight:'bold',fontSize:13,color:'#000'};
             return (
               <View key={o.id+i} style={[styles.previewTr,i%2===0?styles.previewTrEven:styles.previewTrOdd]}>
@@ -1127,16 +1166,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <Text style={[styles.previewTd,{width:35},...[bold]]}>{o.qty||'1'}</Text>
                 <Text style={[styles.previewTd,{width:80},...[bold]]}>{o.h||'—'}x{o.w||'—'}</Text>
                 <Text style={[styles.previewTd,{width:40},...[bold]]}>{fora}</Text>
-                <Text style={[styles.previewTd,{width:70}]}>{(o.armor||'ΜΟΝΗ')+' ΘΩΡ.'}</Text>
+                <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{armorTxt}</Text>
                 <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
                 <Text style={[styles.previewTd,{width:55},...[bold]]}>{tzami}</Text>
                 <Text style={[styles.previewTd,{width:70}]}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text>
                 <Text style={[styles.previewTd,{width:50}]}>{o.hardware||'—'}</Text>
-                <Text style={[styles.previewTd,{width:65}]}>{o.caseType||'—'}</Text>
+                <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{caseTypeTxt}</Text>
                 <Text style={[styles.previewTd,{width:65}]}>{o.caseMaterial||'DKP'}</Text>
                 <Text style={[styles.previewTd,{width:40}]}>{o.installation==='ΝΑΙ'?'✓':''}</Text>
                 <Text style={[styles.previewTd,{width:120}]}>{(o.coatings&&o.coatings.length>0)?o.coatings.join(', '):''}</Text>
-                <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
+                <Text style={[styles.previewTd,{width:240}]}>{o.notes||''}</Text>
               </View>
             );
           })}
@@ -1490,10 +1529,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           {isStd&&<Text style={styles.cardSubDetails}>{order.hardware||''}</Text>}
           {isStd&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:13}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
           {order.qty&&parseInt(order.qty)>1?<Text style={[styles.cardSubDetails,{color:'#007AFF',fontWeight:'bold'}]}>Τεμ: {order.qty}</Text>:null}
+          {order.coatings&&order.coatings.length>0&&<Text style={[styles.cardSubDetails,{color:'#007AFF'}]}>🎨 {order.coatings.join(', ')}</Text>}
+          {order.notes?<Text style={[styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold'}]}>📝 {order.notes}</Text>:null}
           {phase.done&&<Text style={styles.doneTxt}>✅ Ολοκληρώθηκε</Text>}
-          {/* ΗΜΕΡΟΜΗΝΙΑ ΕΙΣΟΔΟΥ ΜΟΝΟ */}
+          {/* ΗΜΕΡΟΜΗΝΙΑ ΕΙΣΟΔΟΥ + ΠΑΡΑΔΟΣΗ */}
           <View style={{marginTop:4}}>
             {order.prodAt&&<Text style={{fontSize:10,color:'#666'}}>📥 Είσοδος: {fmtDateTime(order.prodAt)}</Text>}
+            {order.deliveryDate?<Text style={{fontSize:10,color:'#e65100',fontWeight:'bold'}}>🚚 Παράδοση: {order.deliveryDate}</Text>:null}
           </View>
         </View>
 
