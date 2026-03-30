@@ -1,4 +1,4 @@
-ι import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, LayoutAnimation, Modal, Share, Dimensions, Platform, Keyboard } from 'react-native';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 import { FIREBASE_URL } from './App';

@@ -143,7 +143,20 @@ export default function App() {
       const resS = await fetch(`${FIREBASE_URL}/special_orders.json`);
       const dataS = await resS.json();
       if (dataS) {
-        const loadedS = Object.keys(dataS).map(key => ({ id: key, ...dataS[key] }));
+        const fixOrder = (o) => ({
+          ...o,
+          stavera: o.stavera
+            ? (Array.isArray(o.stavera)
+                ? o.stavera
+                : Object.values(o.stavera))
+            : [],
+          coatings: o.coatings
+            ? (Array.isArray(o.coatings)
+                ? o.coatings
+                : Object.values(o.coatings))
+            : [],
+        });
+        const loadedS = Object.keys(dataS).map(key => fixOrder({ id: key, ...dataS[key] }));
         setSpecialOrders(loadedS.filter(o => o.status !== 'SOLD'));
         setSoldSpecialOrders(loadedS.filter(o => o.status === 'SOLD'));
       }
