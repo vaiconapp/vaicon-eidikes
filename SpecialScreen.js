@@ -449,7 +449,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </tr>`;
       }).join('');
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:28px"><col style="width:145px"><col style="width:28px"><col style="width:100px"><col><col style="width:65px">
+        <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:28px"><col style="width:160px"><col style="width:28px"><col style="width:100px"><col><col style="width:65px">
       </colgroup><thead><tr>
         <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις
       </tr></thead><tbody>${rows}</tbody></table>`;
