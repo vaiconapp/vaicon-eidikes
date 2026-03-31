@@ -688,8 +688,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${mesa.join(', ')}</span>`);
         if (staveraStr) notesLines.push(`<span style="color:#6a0dad;font-weight:bold">📐 ${staveraStr}</span>`);
         const notesCell = notesLines.join('<br>');
+        // Όνομα πελάτη με αναδίπλωση σε κάθε κενό
+        const customerWrapped = o.customer ? o.customer.split(' ').join('<br>') : '';
+        const noCell = `<span style="font-weight:bold;font-size:13px">${o.orderNo||'—'}</span>${customerWrapped ? `<br><span style="font-size:9px;color:#555;font-weight:normal;line-height:1.2">${customerWrapped}</span>` : ''}`;
         return `<tr>
-          <td class="col-no" style="font-weight:bold">${o.orderNo||'—'}</td>
+          <td class="col-no" style="white-space:normal;word-break:break-word;vertical-align:top">${noCell}</td>
           <td class="col-tem">${qtyDisplay(o)}</td>
           <td class="col-dim" style="font-weight:900">${dimCell(o)}</td>
           <td class="col-fora" style="font-weight:bold">${fora}</td>
@@ -705,10 +708,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const total = totalQty(orders);
       const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="9"></td></tr>`;
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:30px"><col style="width:32px">
+        <col style="width:80px"><col style="width:30px"><col style="width:100px"><col style="width:30px"><col style="width:32px">
         <col style="width:28px"><col style="width:110px"><col style="width:140px"><col style="width:32px"><col style="width:80px"><col>
       </colgroup><thead><tr>
-        <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th>
+        <th>Νο / Πελάτης</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th>
         <th>Μεντ.</th><th>Τζάμι</th><th>Κλειδ.</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th>
       </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
     };
