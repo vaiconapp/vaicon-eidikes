@@ -1843,8 +1843,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
     const rows = prodOrders.map(o => {
       const phaseCells = PHASES.map(ph => {
-        const phase = o.phases?.[ph.key];
-        if (!phase?.active) return `<td style="background:#f0f0f0;text-align:center;color:#999">—</td>`;
+        // Backward compat: αν το phase δεν υπάρχει
+        let phase = o.phases?.[ph.key];
+        if (phase === undefined) {
+          const defaultActive = ph.key === 'epend'
+            ? !!(o.coatings && o.coatings.length > 0)
+            : true;
+          phase = { active: defaultActive, printed: false, done: false };
+        }
+        if (!phase.active) return `<td style="background:#f0f0f0;text-align:center;color:#999">—</td>`;
         if (phase.done) return `<td style="background:#d4edda;text-align:center;font-weight:bold;color:#155724">✓</td>`;
         if (phase.printed) return `<td style="background:#fff3cd;text-align:center;color:#856404">🖨</td>`;
         return `<td style="background:#f8d7da;text-align:center;color:#721c24">●</td>`;
