@@ -1690,10 +1690,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const renderProdPhaseCard = (order, phaseKey) => {
     // Backward compatibility: αν το phase δεν υπάρχει (παλιές παραγγελίες)
     // Για 'epend': active μόνο αν η παραγγελία έχει coatings
-    const defaultActive = phaseKey === 'epend'
-      ? (order.coatings && order.coatings.length > 0)
-      : true;
-    const phase = order.phases?.[phaseKey] ?? { active: defaultActive, printed: false, done: false };
+    const hasCoatings = !!(order.coatings && order.coatings.length > 0);
+    const defaultActive = phaseKey === 'epend' ? hasCoatings : true;
+    let phase = order.phases?.[phaseKey] ?? { active: defaultActive, printed: false, done: false };
+    // Fix: αν epend υπάρχει αλλά active=false ενώ έχει coatings → διόρθωση
+    if (phaseKey === 'epend' && hasCoatings && phase && !phase.active) {
+      phase = { ...phase, active: true };
+    }
     if (!phase.active) return null;
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
     const isSelected = !!printSelected[order.id];
