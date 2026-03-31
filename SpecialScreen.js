@@ -71,13 +71,13 @@ const PHASES = [
   { key:'cases',    label:'🟡 ΚΑΣΕΣ' },
   { key:'montSasi', label:'🔵 ΚΑΤΑΣΚΕΥΗ ΣΑΣΙ' },
   { key:'vafio',    label:'⚫ ΒΑΦΕΙΟ' },
-  { key:'montDoor', label:'🟢 ΜΟΝΤΑΡΙΣΜΑ / ΕΠΕΝΔΥΣΗ ΠΟΡΤΑΣ' },
-];
+  { key:'montDoor', label:'🟢 ΜΟΝΤΑΡΙΣΜΑ' },
+};
 
 const DIPLI_PHASES = [
   { key:'laser',    label:'🔴 LASER ΚΟΠΕΣ' },
   { key:'montSasi', label:'🔵 ΚΑΤΑΣΚΕΥΗ ΣΑΣΙ' },
-  { key:'montDoor', label:'🟢 ΜΟΝΤΑΡΙΣΜΑ / ΕΠΕΝΔΥΣΗ ΠΟΡΤΑΣ' },
+  { key:'montDoor', label:'🟢 ΜΟΝΤΑΡΙΣΜΑ' },
 ];
 
 const initPhases = () => {
@@ -447,7 +447,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
-      return `<table><thead><tr>
+      return `<table style="table-layout:fixed;width:100%"><colgroup>
+        <col style="width:55px"><col style="width:100px"><col style="width:35px"><col style="width:28px"><col style="width:130px"><col style="width:28px"><col style="width:70px"><col style="width:160px"><col>
+      </colgroup><thead><tr>
         <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
@@ -489,12 +491,24 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
         const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
         const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
-        const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
         const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
-        const coatings = (o.coatings&&o.coatings.length>0)?o.coatings.join(', '):'';
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const datesLine = [createdFmt, deliveryFmt].filter(Boolean).join('    ');
+        // Παρατηρήσεις — ίδια μορφοποίηση με LASER 1 αντίγραφο
+        const allCoatings = o.coatings||[];
+        const exo = allCoatings.filter(c=>c.toUpperCase().includes('ΕΞΩ'));
+        const mesa = allCoatings.filter(c=>c.toUpperCase().includes('ΜΕΣΑ')||c.toUpperCase().includes('ΕΣΩΤ'));
+        const staveraEntries = (o.stavera||[]).filter(s=>s&&s.dim);
+        const staveraStr = staveraEntries.map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ');
+        const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"";
+        const notesLines = [];
+        if (o.notes) notesLines.push(`<span style="color:#000">${o.notes}</span>`);
+        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${exo.join(', ')}</span>`);
+        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${mesa.join(', ')}</span>`);
+        if (staveraStr) notesLines.push(`<span style="color:#6a0dad;font-weight:bold">📐 ${staveraStr}</span>`);
+        if (tzami) notesLines.push(`<span style="color:#555">🪟 ${tzami}</span>`);
+        const notesCell = notesLines.join('<br>');
         return `<tr>
           <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
           <td style="font-size:17px;font-weight:900">${o.h||'—'} × ${o.w||'—'}</td>
@@ -502,16 +516,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-size:13px;text-align:center">${armorVal}</td>
           <td style="font-size:13px">${o.hardware||'—'}</td>
           <td style="font-size:13px">${mentesedesVal}</td>
-          <td style="font-size:13px;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;max-width:150px">${tzami}</td>
-          <td style="font-size:13px;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;max-width:150px">${kleidaria}</td>
+          <td style="font-size:13px;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word">${kleidaria}</td>
           <td style="font-size:13px;text-align:center">${caseTypeVal}</td>
-          <td style="font-size:13px">${coatings}</td>
-          <td style="min-width:160px;font-size:13px;white-space:pre-wrap">${(o.notes||'').replace(/\n/g,'<br>')}</td>
+          <td style="font-size:13px;white-space:normal;word-wrap:break-word">${notesCell}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
-      return `<table><thead><tr>
-        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Επένδυση</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
+      return `<table style="table-layout:fixed;width:100%"><colgroup>
+        <col style="width:55px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:70px"><col style="width:28px"><col style="width:130px"><col style="width:28px"><col><col style="width:70px">
+      </colgroup><thead><tr>
+        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
 
@@ -536,7 +550,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
-      return `<table><thead><tr>
+      return `<table style="table-layout:fixed;width:100%"><colgroup>
+        <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:28px"><col style="width:28px"><col style="width:70px"><col style="width:200px"><col style="width:80px">
+      </colgroup><thead><tr>
         <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
@@ -572,7 +588,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         }).join('');
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000"><td style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="6"></td></tr>`;
-        return `<table><thead><tr>
+        return `<table style="table-layout:fixed;width:100%"><colgroup>
+          <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:130px"><col>
+        </colgroup><thead><tr>
           <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Κλειδ.</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
       }
@@ -605,7 +623,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         }).join('');
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="6"></td></tr>`;
-        return `<table><thead><tr>
+        return `<table style="table-layout:fixed;width:100%"><colgroup>
+          <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:130px"><col style="width:28px"><col style="width:70px"><col>
+        </colgroup><thead><tr>
           <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Κλειδ.</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
       }
@@ -636,7 +656,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         }).join('');
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="4"></td></tr>`;
-        return `<table><thead><tr>
+        return `<table style="table-layout:fixed;width:100%"><colgroup>
+          <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:110px"><col style="width:130px"><col>
+        </colgroup><thead><tr>
           <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδ.</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
       }
@@ -682,8 +704,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const total = totalQty(orders);
       const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="9"></td></tr>`;
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:55px"><col style="width:30px"><col style="width:90px"><col style="width:30px"><col style="width:32px">
-        <col style="width:28px"><col style="width:120px"><col style="width:140px"><col style="width:32px"><col style="width:80px"><col>
+        <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:30px"><col style="width:32px">
+        <col style="width:28px"><col style="width:110px"><col style="width:140px"><col style="width:32px"><col style="width:80px"><col>
       </colgroup><thead><tr>
         <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th>
         <th>Μεντ.</th><th>Τζάμι</th><th>Κλειδ.</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th>
@@ -787,7 +809,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   };
 
   // Άνοιγμα preview εκτύπωσης
-  const handlePrint = (phaseKey) => {
+  const handlePrint = async (phaseKey) => {
     const selected = Object.keys(printSelected).filter(id => printSelected[id]);
     if (selected.length===0) {
       if(Platform.OS==='web') window.alert('Επίλεξε τουλάχιστον μία παραγγελία.');
@@ -803,11 +825,46 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const orders = phaseKey==='stavera'
       ? staveraOrders.filter(o => selected.includes(o.id))
       : specialOrders.filter(o => selected.includes(o.id) && o.phases?.[phaseKey]?.active);
-    // Για LASER ΚΟΠΕΣ → popup επιλογής αντιγράφων
+    // Για LASER ΚΟΠΕΣ → επιλογή αντιγράφων πριν την εκτύπωση
     if (phaseKey==='laser') {
       if(Platform.OS==='web'){
-        // Open preview modal directly - user selects copies there
-        setPrintPreview({ visible:true, phaseKey, orders, copies:1 });
+        const choice = await new Promise(resolve => {
+          const modal = document.createElement('div');
+          modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:99999;';
+          modal.innerHTML = `
+            <div style="background:white;border-radius:12px;padding:24px;width:300px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+              <div style="font-size:18px;font-weight:bold;margin-bottom:8px;">🖨️ LASER ΚΟΠΕΣ</div>
+              <div style="color:#555;margin-bottom:20px;">${orders.length} παραγγελίες — Πόσα αντίγραφα;</div>
+              <div style="display:flex;gap:10px;">
+                <button id="btn1" style="flex:1;padding:12px;border:none;border-radius:8px;background:#1a1a1a;color:white;font-weight:bold;font-size:14px;cursor:pointer;">1 ΑΝΤΙΓΡΑΦΟ</button>
+                <button id="btn4" style="flex:1;padding:12px;border:none;border-radius:8px;background:#8B0000;color:white;font-weight:bold;font-size:14px;cursor:pointer;">4 ΑΝΤΙΓΡΑΦΑ</button>
+              </div>
+              <button id="btnCancel" style="margin-top:10px;width:100%;padding:10px;border:none;border-radius:8px;background:#eee;color:#555;font-weight:bold;cursor:pointer;">ΑΚΥΡΟ</button>
+            </div>`;
+          document.body.appendChild(modal);
+          modal.querySelector('#btn1').onclick = () => { document.body.removeChild(modal); resolve(1); };
+          modal.querySelector('#btn4').onclick = () => { document.body.removeChild(modal); resolve(4); };
+          modal.querySelector('#btnCancel').onclick = () => { document.body.removeChild(modal); resolve(null); };
+        });
+        if (!choice) return;
+        // Εκτύπωση απευθείας
+        const today = new Date();
+        const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+        const phaseLabel = PHASES.find(p=>p.key===phaseKey)?.label || phaseKey;
+        const allCopies = getCopies(orders, phaseLabel, dateStr);
+        const selectedCopies = choice===4 ? allCopies : [allCopies[0]];
+        const html = buildPrintHTML(selectedCopies, phaseKey);
+        await printHTML(html, `VAICON — ${phaseLabel}`);
+        // Μαρκάρει ως printed
+        const selectedIds = orders.map(o=>o.id);
+        const updated = specialOrders.map(o => {
+          if (selectedIds.includes(o.id) && o.phases?.[phaseKey]?.active) {
+            return {...o, phases:{...o.phases, [phaseKey]:{...o.phases[phaseKey], printed:true, printHistory:[...(o.phases[phaseKey].printHistory||[]), {ts:Date.now(), copies:choice}]}}};
+          }
+          return o;
+        });
+        setSpecialOrders(updated);
+        for (const o of updated.filter(o=>selectedIds.includes(o.id))) await syncToCloud(o);
       } else {
         Alert.alert(
           "Εκτύπωση LASER ΚΟΠΕΣ",
@@ -820,7 +877,87 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         );
       }
     } else {
-      setPrintPreview({ visible:true, phaseKey, orders, copies:1 });
+      // Όλες οι άλλες φάσεις → απευθείας εκτύπωση χωρίς React Modal
+      try {
+        const today = new Date();
+        const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+        const phaseLabel = PHASES.find(p=>p.key===phaseKey)?.label || phaseKey;
+        if (phaseKey==='stavera') {
+          const rows = orders.flatMap(o=>{
+            const staveraEntries = (o.stavera||[]).filter(s=>s&&(s.dim||s.note));
+            if (staveraEntries.length===0) {
+              return [`<tr>
+                <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
+                <td style="font-size:13px">${o.caseType||'—'}</td>
+                <td style="font-size:20px;font-weight:900">—</td>
+                <td style="font-size:13px;min-width:180px"></td>
+                <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
+              </tr>`];
+            }
+            return staveraEntries.map(s=>`<tr>
+              <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
+              <td style="font-size:13px">${o.caseType||'—'}</td>
+              <td style="font-size:20px;font-weight:900">${s.dim||'—'}</td>
+              <td style="font-size:13px;min-width:180px">${s.note||''}</td>
+              <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
+            </tr>`);
+          }).join('');
+          const html = `<html><head><meta charset="utf-8"><style>
+            body{font-family:Arial,sans-serif;margin:8mm;}
+            h1{font-size:22px;font-weight:bold;margin-bottom:2px;}
+            h2{font-size:13px;color:#555;margin-bottom:10px;}
+            table{width:100%;border-collapse:collapse;}
+            th{padding:6px 4px;text-align:left;border-top:2px solid #000;border-bottom:1px solid #000;font-weight:bold;}
+            td{padding:6px 4px;border-bottom:1px solid #ddd;vertical-align:top;}
+            tr:last-child td{border-bottom:2px solid #000;}
+            @media print{@page{size:A4 landscape;margin:8mm;}}
+          </style></head><body>
+            <h1>📏 ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ</h1>
+            <h2>📅 ${dateStr} | ${orders.length} παραγγελίες</h2>
+            <table><thead><tr><th>Νο</th><th>Τ.Κάσας</th><th>Διάσταση Σταθερού</th><th>Παρατήρηση</th><th>Ημερομηνία</th></tr></thead>
+            <tbody>${rows}</tbody></table>
+          </body></html>`;
+          await printHTML(html, 'ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ');
+          const selectedIds = orders.map(o=>o.id);
+          const updated = specialOrders.map(o=>selectedIds.includes(o.id)?{...o,staveraPrinted:true}:o);
+          setSpecialOrders(updated);
+          updated.filter(o=>selectedIds.includes(o.id)).forEach(o=>syncToCloud(o));
+        } else if (phaseKey==='cases') {
+          const sorted = [...orders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+          const kleistou = sorted.filter(o=>(o.caseType||'').includes('ΚΛΕΙΣΤΟΥ'));
+          const anoixtou = sorted.filter(o=>(o.caseType||'').includes('ΑΝΟΙΧΤΟΥ'));
+          const caseCopies = [];
+          if (kleistou.length>0) caseCopies.push({ title:`VAICON — ${dateStr} — ΚΑΣΕΣ ΚΛΕΙΣΤΟΥ ΤΥΠΟΥ`, orders:kleistou });
+          if (anoixtou.length>0) caseCopies.push({ title:`VAICON — ${dateStr} — ΚΑΣΕΣ ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ`, orders:anoixtou });
+          if (caseCopies.length===0) return;
+          const html = buildPrintHTML(caseCopies, phaseKey);
+          await printHTML(html, `VAICON — ΚΑΣΕΣ`);
+          const selectedIds = orders.map(o=>o.id);
+          const updated = specialOrders.map(o => {
+            if (selectedIds.includes(o.id) && o.phases?.[phaseKey]?.active) {
+              return {...o, phases:{...o.phases, [phaseKey]:{...o.phases[phaseKey], printed:true, printHistory:[...(o.phases[phaseKey].printHistory||[]), {ts:Date.now(), copies:1}]}}};
+            }
+            return o;
+          });
+          setSpecialOrders(updated);
+          for (const o of updated.filter(o=>selectedIds.includes(o.id))) await syncToCloud(o);
+        } else {
+          const allCopies = getCopies(orders, phaseLabel, dateStr);
+          const html = buildPrintHTML([allCopies[0]], phaseKey);
+          await printHTML(html, `VAICON — ${phaseLabel}`);
+          const selectedIds = orders.map(o=>o.id);
+          const updated = specialOrders.map(o => {
+            if (selectedIds.includes(o.id) && o.phases?.[phaseKey]?.active) {
+              return {...o, phases:{...o.phases, [phaseKey]:{...o.phases[phaseKey], printed:true, printHistory:[...(o.phases[phaseKey].printHistory||[]), {ts:Date.now(), copies:1}]}}};
+            }
+            return o;
+          });
+          setSpecialOrders(updated);
+          for (const o of updated.filter(o=>selectedIds.includes(o.id))) await syncToCloud(o);
+        }
+      } catch(e) {
+        Alert.alert("Σφάλμα", "Δεν δημιουργήθηκε το PDF. Δοκιμάστε ξανά.");
+      }
     }
   };
 
@@ -1074,8 +1211,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:40},...[bold]]}>{fora}</Text>
                     <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{armorTxt}</Text>
                     <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
-                    <Text style={[styles.previewTd,{width:55},...[bold]]}>{tzami}</Text>
-                    <Text style={[styles.previewTd,{width:70}]}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text>
+                    <View style={{width:55,paddingHorizontal:6,justifyContent:'center'}}><Text style={{fontSize:11,color:'#000',fontWeight:'bold',flexWrap:'wrap'}}>{tzami}</Text></View>
+                    <View style={{width:70,paddingHorizontal:6,justifyContent:'center'}}><Text style={{fontSize:11,color:'#000',flexWrap:'wrap'}}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text></View>
                     <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
                     <Text style={[styles.previewTd,{width:120,fontSize:11,color:'#555'}]}>{[createdFmt,deliveryFmt].filter(Boolean).join('  ')}</Text>
                   </View>
@@ -1117,8 +1254,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{armorTxt}</Text>
                     <Text style={[styles.previewTd,{width:50}]}>{o.hardware||'—'}</Text>
                     <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
-                    <Text style={[styles.previewTd,{width:55},...[bold]]}>{tzami}</Text>
-                    <Text style={[styles.previewTd,{width:70}]}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text>
+                    <View style={{width:55,paddingHorizontal:6,justifyContent:'center'}}><Text style={{fontSize:11,color:'#000',fontWeight:'bold',flexWrap:'wrap'}}>{tzami}</Text></View>
+                    <View style={{width:70,paddingHorizontal:6,justifyContent:'center'}}><Text style={{fontSize:11,color:'#000',flexWrap:'wrap'}}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text></View>
                     <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{caseTypeTxt}</Text>
                     <Text style={[styles.previewTd,{width:120}]}>{(o.coatings&&o.coatings.length>0)?o.coatings.join(', '):''}</Text>
                     <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
