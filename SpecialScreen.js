@@ -1490,7 +1490,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   // Αναίρεση ολοκλήρωσης φάσης
   const handlePhaseUndone = async (orderId, phaseKey) => {
     const order = specialOrders.find(o=>o.id===orderId); if(!order||!order.phases) return;
-    const upd = {...order, phases:{...order.phases, [phaseKey]:{...order.phases[phaseKey], done:false}}};
+    // Backward compat: για epend, αν η παραγγελία έχει coatings → active πάντα true
+    const existingPhase = order.phases[phaseKey] || { active: true, printed: false, done: false };
+    const forceActive = phaseKey === 'epend' && !!(order.coatings && order.coatings.length > 0);
+    const updatedPhase = { ...existingPhase, done: false, active: forceActive ? true : existingPhase.active };
+    const upd = {...order, phases:{...order.phases, [phaseKey]: updatedPhase}};
     setSpecialOrders(specialOrders.map(o=>o.id===orderId?upd:o));
     await syncToCloud(upd);
   };
