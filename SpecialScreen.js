@@ -830,7 +830,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     ];
     const orders = phaseKey==='stavera'
       ? staveraOrders.filter(o => selected.includes(o.id))
-      : specialOrders.filter(o => selected.includes(o.id) && o.phases?.[phaseKey]?.active);
+      : specialOrders.filter(o => {
+          if (!selected.includes(o.id)) return false;
+          // Backward compat: για epend, active αν έχει coatings (override)
+          if (phaseKey === 'epend') return !!(o.coatings && o.coatings.length > 0);
+          return o.phases?.[phaseKey]?.active;
+        });
     // Για LASER ΚΟΠΕΣ → επιλογή αντιγράφων πριν την εκτύπωση
     if (phaseKey==='laser') {
       if(Platform.OS==='web'){
