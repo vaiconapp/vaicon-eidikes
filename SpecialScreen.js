@@ -71,8 +71,9 @@ const PHASES = [
   { key:'cases',    label:'🟡 ΚΑΣΕΣ' },
   { key:'montSasi', label:'🔵 ΚΑΤΑΣΚΕΥΗ ΣΑΣΙ' },
   { key:'vafio',    label:'⚫ ΒΑΦΕΙΟ' },
+  { key:'epend',    label:'🟠 ΕΠΕΝΔΥΣΕΙΣ' },
   { key:'montDoor', label:'🟢 ΜΟΝΤΑΡΙΣΜΑ' },
-};
+];
 
 const DIPLI_PHASES = [
   { key:'laser',    label:'🔴 LASER ΚΟΠΕΣ' },
@@ -384,9 +385,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const isMounting = phaseKey==='montDoor';
     const isProductionPhase = phaseKey !== null;
     const showCoatings = !isProductionPhase || isMounting;
-    const isCases = phaseKey==='cases';
+    const isCases    = phaseKey==='cases';
     const isSasi     = phaseKey==='montSasi';
-    const isMontDoor = phaseKey==='montDoor';
+    const isMontDoor = phaseKey==='montDoor' || phaseKey==='epend';
     const isVafio    = phaseKey==='vafio';
     const isLaser = copies.some(c => c.title && c.title.includes('LASER') || c.title.includes('ΚΑΣΣΕΣ') || c.title.includes('ΣΑΣΙ') || c.title.includes('ΠΡΟΦΙΛ') || c.title.includes('ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ'));
     const tableCSS = `
@@ -1404,7 +1405,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
   // Τσεκάρισμα ολοκλήρωσης φάσης — αν όλες done → ΕΤΟΙΜΑ
   const handlePhaseDone = async (orderId, phaseKey) => {
-    const order = specialOrders.find(o=>o.id===orderId); if(!order||!order.phases) return;
+    let order = specialOrders.find(o=>o.id===orderId); if(!order||!order.phases) return;
+    // Backward compat: αν το phase δεν υπάρχει, το δημιουργούμε πριν το done
+    if (!order.phases[phaseKey]) {
+      const defaultActive = phaseKey === 'epend'
+        ? !!(order.coatings && order.coatings.length > 0)
+        : true;
+      if (!defaultActive) return; // δεν αφορά αυτή την παραγγελία
+      order = {...order, phases: {...order.phases, [phaseKey]: { active: defaultActive, printed: false, done: false }}};
+    }
     if (phaseKey==='montDoor') {
       const prevPhases = ['laser','cases','montSasi','vafio'];
       const notDone = prevPhases.filter(k => order.phases?.[k]?.active && !order.phases?.[k]?.done);
@@ -1419,6 +1428,21 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           onConfirm: null
         });
         return;
+      }
+      // ΑΛΛΑΓΗ 3: αν η παραγγελία έχει coatings, το 'epend' πρέπει να είναι done
+      if (order.coatings && order.coatings.length > 0) {
+        const ependPhase = order.phases?.['epend'];
+        const ependDone = ependPhase ? ependPhase.done : false;
+        if (!ependDone) {
+          setConfirmModal({
+            visible: true,
+            title: '⚠️ Δεν μπορεί να γίνει DONE',
+            message: 'Η παραγγελία έχει επενδύσεις.\nΟλοκλήρωσε πρώτα τη φάση ΕΠΕΝΔΥΣΕΙΣ.',
+            confirmText: 'ΟΚ',
+            onConfirm: null
+          });
+          return;
+        }
       }
     }
     const newPhases = {...order.phases, [phaseKey]:{...order.phases[phaseKey], done:true}};
@@ -1617,7 +1641,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:4}}>
               {Object.entries(order.phases).map(([key,phase])=>{
                 if(!phase.active) return null;
-                const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',montDoor:'ΜΟΝΤ.'};
+                const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',epend:'ΕΠΕΝ.',montDoor:'ΜΟΝΤ.'};
                 return (
                   <View key={key} style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
                     <Text style={{color:'white',fontSize:10,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[key]||key}</Text>
@@ -1664,8 +1688,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
   // Κάρτα πόρτας μέσα σε υποκαρτέλα παραγωγής
   const renderProdPhaseCard = (order, phaseKey) => {
-    const phase = order.phases?.[phaseKey];
-    if (!phase || !phase.active) return null;
+    // Backward compatibility: αν το phase δεν υπάρχει (παλιές παραγγελίες)
+    // Για 'epend': active μόνο αν η παραγγελία έχει coatings
+    const defaultActive = phaseKey === 'epend'
+      ? (order.coatings && order.coatings.length > 0)
+      : true;
+    const phase = order.phases?.[phaseKey] ?? { active: defaultActive, printed: false, done: false };
+    if (!phase.active) return null;
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
     const isSelected = !!printSelected[order.id];
     return (
@@ -1899,7 +1928,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   prodScrollRef.current?.scrollTo({x: idx * pageWidth, animated:true});
                 }}>
                   <Text style={[styles.phaseTabTxt, activeProdPhase===ph.key&&styles.phaseTabTxtActive]}>{ph.label}</Text>
-                  <Text style={styles.phaseTabCount}>{prodOrders.filter(o=>o.phases?.[ph.key]?.active).length}</Text>
+                  <Text style={styles.phaseTabCount}>{prodOrders.filter(o => {
+                    if (o.phases?.[ph.key] !== undefined) return o.phases[ph.key].active;
+                    // backward compat: epend active μόνο αν έχει coatings
+                    if (ph.key === 'epend') return !!(o.coatings && o.coatings.length > 0);
+                    return true;
+                  }).length}</Text>
                 </TouchableOpacity>
               ))}
               {/* ΣΤΑΘΕΡΑ tab */}
