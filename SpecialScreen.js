@@ -1850,13 +1850,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
     const rows = prodOrders.map(o => {
       const phaseCells = PHASES.map(ph => {
-        // Backward compat: αν το phase δεν υπάρχει
+        // Backward compat: αν το phase δεν υπάρχει ή epend.active=false ενώ έχει coatings
         let phase = o.phases?.[ph.key];
+        const hasCoatings = !!(o.coatings && o.coatings.length > 0);
         if (phase === undefined) {
-          const defaultActive = ph.key === 'epend'
-            ? !!(o.coatings && o.coatings.length > 0)
-            : true;
+          const defaultActive = ph.key === 'epend' ? hasCoatings : true;
           phase = { active: defaultActive, printed: false, done: false };
+        }
+        // Fix: αν epend υπάρχει αλλά active=false ενώ έχει coatings → override
+        if (ph.key === 'epend' && hasCoatings && phase && !phase.active) {
+          phase = { ...phase, active: true };
         }
         if (!phase.active) return `<td style="background:#f0f0f0;text-align:center;color:#999">—</td>`;
         if (phase.done) return `<td style="background:#d4edda;text-align:center;font-weight:bold;color:#155724">✓</td>`;
@@ -1943,9 +1946,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 }}>
                   <Text style={[styles.phaseTabTxt, activeProdPhase===ph.key&&styles.phaseTabTxtActive]}>{ph.label}</Text>
                   <Text style={styles.phaseTabCount}>{prodOrders.filter(o => {
+                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                    // epend: active αν έχει coatings (override και για παλιές παραγγελίες με active=false)
+                    if (ph.key === 'epend') return hasCoatings;
                     if (o.phases?.[ph.key] !== undefined) return o.phases[ph.key].active;
-                    // backward compat: epend active μόνο αν έχει coatings
-                    if (ph.key === 'epend') return !!(o.coatings && o.coatings.length > 0);
                     return true;
                   }).length}</Text>
                 </TouchableOpacity>
