@@ -1945,13 +1945,25 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   prodScrollRef.current?.scrollTo({x: idx * pageWidth, animated:true});
                 }}>
                   <Text style={[styles.phaseTabTxt, activeProdPhase===ph.key&&styles.phaseTabTxtActive]}>{ph.label}</Text>
-                  <Text style={styles.phaseTabCount}>{prodOrders.filter(o => {
-                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
-                    // epend: active αν έχει coatings (override και για παλιές παραγγελίες με active=false)
-                    if (ph.key === 'epend') return hasCoatings;
-                    if (o.phases?.[ph.key] !== undefined) return o.phases[ph.key].active;
-                    return true;
-                  }).length}</Text>
+                  <Text style={styles.phaseTabCount}>{(()=>{
+                    const activeOrders = prodOrders.filter(o => {
+                      const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                      if (ph.key === 'epend') return hasCoatings;
+                      if (o.phases?.[ph.key] !== undefined) return o.phases[ph.key].active;
+                      return true;
+                    });
+                    const total = activeOrders.length;
+                    const pending = activeOrders.filter(o => {
+                      const phase = o.phases?.[ph.key];
+                      if (ph.key === 'epend') {
+                        const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                        if (!phase || (!phase.active && hasCoatings)) return true;
+                        return !phase.done;
+                      }
+                      return !phase?.done;
+                    }).length;
+                    return `${pending} / ${total}`;
+                  })()}</Text>
                 </TouchableOpacity>
               ))}
               {/* ΣΤΑΘΕΡΑ tab */}
