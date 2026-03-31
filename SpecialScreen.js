@@ -524,7 +524,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </tr>`;
       }).join('');
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:55px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:70px"><col style="width:28px"><col style="width:130px"><col style="width:28px"><col><col style="width:70px">
+        <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:30px"><col style="width:70px"><col style="width:28px"><col style="width:130px"><col style="width:28px"><col><col style="width:70px">
       </colgroup><thead><tr>
         <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
