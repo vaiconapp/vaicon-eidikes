@@ -1985,24 +1985,44 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               </TouchableOpacity>
             </ScrollView>
 
-            {/* ΚΟΥΜΠΙΑ ΕΠΙΛΟΓΗΣ + ΕΚΤΥΠΩΣΗΣ */}
+              {/* ΚΟΥΜΠΙΑ ΕΠΙΛΟΓΗΣ + ΕΚΤΥΠΩΣΗΣ */}
             {activeProdPhase!=='stavera'&&<View style={{flexDirection:'row', alignItems:'center', gap:6, marginBottom:4, flexWrap:'wrap'}}>
               {/* ΕΠΙΛΟΓΗ ΟΛΩΝ */}
               <TouchableOpacity
                 style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:8, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
                 onPress={()=>{
-                  const phaseOrders = prodOrders.filter(o=>o.phases?.[activeProdPhase]?.active);
+                  const phaseOrders = prodOrders.filter(o => {
+                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                    if (activeProdPhase === 'epend') return hasCoatings;
+                    return o.phases?.[activeProdPhase]?.active;
+                  });
                   const allSelected = phaseOrders.every(o=>printSelected[o.id]);
                   const newSelected = {...printSelected};
                   phaseOrders.forEach(o=>{ newSelected[o.id] = !allSelected; });
                   setPrintSelected(newSelected);
                 }}>
                 <View style={{width:18,height:18,borderRadius:4,borderWidth:2,borderColor:'#555',backgroundColor:
-                  prodOrders.filter(o=>o.phases?.[activeProdPhase]?.active).every(o=>printSelected[o.id])&&
-                  prodOrders.filter(o=>o.phases?.[activeProdPhase]?.active).length>0
+                  prodOrders.filter(o => {
+                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                    if (activeProdPhase === 'epend') return hasCoatings;
+                    return o.phases?.[activeProdPhase]?.active;
+                  }).every(o=>printSelected[o.id])&&
+                  prodOrders.filter(o => {
+                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                    if (activeProdPhase === 'epend') return hasCoatings;
+                    return o.phases?.[activeProdPhase]?.active;
+                  }).length>0
                   ?'#555':'white', alignItems:'center',justifyContent:'center'}}>
-                  {prodOrders.filter(o=>o.phases?.[activeProdPhase]?.active).every(o=>printSelected[o.id])&&
-                   prodOrders.filter(o=>o.phases?.[activeProdPhase]?.active).length>0
+                  {prodOrders.filter(o => {
+                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                    if (activeProdPhase === 'epend') return hasCoatings;
+                    return o.phases?.[activeProdPhase]?.active;
+                  }).every(o=>printSelected[o.id])&&
+                  prodOrders.filter(o => {
+                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                    if (activeProdPhase === 'epend') return hasCoatings;
+                    return o.phases?.[activeProdPhase]?.active;
+                  }).length>0
                    ?<Text style={{color:'white',fontSize:11,fontWeight:'bold'}}>✓</Text>:null}
                 </View>
                 <Text style={{fontSize:11,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
@@ -2012,7 +2032,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <TouchableOpacity
                 style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:8, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
                 onPress={()=>{
-                  const phaseOrders = prodOrders.filter(o=>o.phases?.[activeProdPhase]?.active);
+                  const phaseOrders = prodOrders.filter(o => {
+                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                    if (activeProdPhase === 'epend') return hasCoatings;
+                    return o.phases?.[activeProdPhase]?.active;
+                  });
                   const newSelected = {...printSelected};
                   phaseOrders.forEach(o=>{ newSelected[o.id] = !o.phases?.[activeProdPhase]?.printed; });
                   setPrintSelected(newSelected);
