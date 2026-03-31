@@ -684,13 +684,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         // Παρατηρήσεις — σύνθεση
         const notesLines = [];
         if (o.notes) notesLines.push(`<span style="color:#000">${o.notes}</span>`);
+        if (o.hardware) notesLines.push(`<span style="color:#333;font-weight:bold">🔩 ${o.hardware}</span>`);
         if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${exo.join(', ')}</span>`);
         if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${mesa.join(', ')}</span>`);
         if (staveraStr) notesLines.push(`<span style="color:#6a0dad;font-weight:bold">📐 ${staveraStr}</span>`);
         const notesCell = notesLines.join('<br>');
         // Όνομα πελάτη με αναδίπλωση σε κάθε κενό
         const customerWrapped = o.customer ? o.customer.split(' ').join('<br>') : '';
-        const noCell = `<span style="font-weight:bold;font-size:13px">${o.orderNo||'—'}</span>${customerWrapped ? `<br><span style="font-size:9px;color:#555;font-weight:normal;line-height:1.2">${customerWrapped}</span>` : ''}`;
+        const montBadge = o.installation === 'ΝΑΙ' ? ` <span style="color:#cc0000;font-weight:900;font-size:15px">Μ</span>` : '';
+        const noCell = `<span style="font-weight:bold;font-size:13px">${o.orderNo||'—'}${montBadge}</span>${customerWrapped ? `<br><span style="font-size:9px;color:#555;font-weight:normal;line-height:1.2">${customerWrapped}</span>` : ''}`;
         return `<tr>
           <td class="col-no" style="white-space:normal;word-break:break-word;vertical-align:top">${noCell}</td>
           <td class="col-tem">${qtyDisplay(o)}</td>
