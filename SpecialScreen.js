@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, LayoutAnimation, Modal, Share, Dimensions, Platform, Keyboard } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, LayoutAnimation, Modal, Share, Dimensions, Platform, Keyboard, PanResponder } from 'react-native';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 import { FIREBASE_URL } from './App';
 import { logActivity } from './activityLog';
@@ -187,6 +187,42 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
   const [printSelected, setPrintSelected] = useState({});
   const [printPreview, setPrintPreview] = useState({ visible:false, phaseKey:null, orders:[], copies:1 });
+  const [pendingChanges, setPendingChanges] = useState([]); // καλάθι αλλαγών done/undone
+  const [lastChangedIds, setLastChangedIds] = useState([]); // τελευταία παρτίδα αλλαγών
+  const panPosition = useRef({ x: 0, y: 0 });
+  const [panPos, setPanPos] = useState({ x: 0, y: 0 });
+  const isDragging = useRef(false);
+  const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  const handleDragStart = (e) => {
+    isDragging.current = true;
+    dragStart.current = {
+      mx: e.clientX || e.touches?.[0]?.clientX || 0,
+      my: e.clientY || e.touches?.[0]?.clientY || 0,
+      px: panPos.x,
+      py: panPos.y,
+    };
+    const onMove = (ev) => {
+      if (!isDragging.current) return;
+      const cx = ev.clientX || ev.touches?.[0]?.clientX || 0;
+      const cy = ev.clientY || ev.touches?.[0]?.clientY || 0;
+      setPanPos({
+        x: dragStart.current.px + (cx - dragStart.current.mx),
+        y: dragStart.current.py + (cy - dragStart.current.my),
+      });
+    };
+    const onUp = () => {
+      isDragging.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove);
+    window.addEventListener('touchend', onUp);
+  };
 
   const customerRef=useRef(); const orderNoRef=useRef(); const hRef=useRef(); const wRef=useRef(); const qtyEidikiRef=useRef();
   const hingeRef=useRef(); const glassRef=useRef(); const glassNotesRef=useRef(); const lockRef=useRef(); const notesRef=useRef();
@@ -805,7 +841,6 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const copy4 = sortByDimension(orders);
 
       return [
-        { title:`VAICON — ${dateStr} — ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ`, orders:copy1 },
         { title:`VAICON — ${dateStr} — ΚΑΣΣΕΣ`, orders:copy2 },
         { title:`VAICON — ${dateStr} — ΣΑΣΙ`, orders:copy3 },
         { title:`VAICON — ${dateStr} — ΠΡΟΦΙΛ`, orders:copy4 },
@@ -839,31 +874,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     // Για LASER ΚΟΠΕΣ → επιλογή αντιγράφων πριν την εκτύπωση
     if (phaseKey==='laser') {
       if(Platform.OS==='web'){
-        const choice = await new Promise(resolve => {
-          const modal = document.createElement('div');
-          modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:99999;';
-          modal.innerHTML = `
-            <div style="background:white;border-radius:12px;padding:24px;width:300px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-              <div style="font-size:18px;font-weight:bold;margin-bottom:8px;">🖨️ LASER ΚΟΠΕΣ</div>
-              <div style="color:#555;margin-bottom:20px;">${orders.length} παραγγελίες — Πόσα αντίγραφα;</div>
-              <div style="display:flex;gap:10px;">
-                <button id="btn1" style="flex:1;padding:12px;border:none;border-radius:8px;background:#1a1a1a;color:white;font-weight:bold;font-size:14px;cursor:pointer;">1 ΑΝΤΙΓΡΑΦΟ</button>
-                <button id="btn4" style="flex:1;padding:12px;border:none;border-radius:8px;background:#8B0000;color:white;font-weight:bold;font-size:14px;cursor:pointer;">4 ΑΝΤΙΓΡΑΦΑ</button>
-              </div>
-              <button id="btnCancel" style="margin-top:10px;width:100%;padding:10px;border:none;border-radius:8px;background:#eee;color:#555;font-weight:bold;cursor:pointer;">ΑΚΥΡΟ</button>
-            </div>`;
-          document.body.appendChild(modal);
-          modal.querySelector('#btn1').onclick = () => { document.body.removeChild(modal); resolve(1); };
-          modal.querySelector('#btn4').onclick = () => { document.body.removeChild(modal); resolve(4); };
-          modal.querySelector('#btnCancel').onclick = () => { document.body.removeChild(modal); resolve(null); };
-        });
-        if (!choice) return;
+        // Laser → πάντα 4 αντίγραφα χωρίς επιλογή
+        const choice = 4;
         // Εκτύπωση απευθείας
         const today = new Date();
         const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
         const phaseLabel = PHASES.find(p=>p.key===phaseKey)?.label || phaseKey;
         const allCopies = getCopies(orders, phaseLabel, dateStr);
-        const selectedCopies = choice===4 ? allCopies : [allCopies[0]];
+        const selectedCopies = allCopies;
         const html = buildPrintHTML(selectedCopies, phaseKey);
         await printHTML(html, `VAICON — ${phaseLabel}`);
         // Μαρκάρει ως printed
@@ -1680,7 +1698,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           />
         )}
         <View style={styles.sideBtnContainer}>
-          {!isArchive&&(order.status==='PENDING'||order.status==='PROD')&&<TouchableOpacity style={[styles.upperBtn,{backgroundColor:'#007AFF'}]} onPress={()=>{ setEditForm({ deliveryDate:order.deliveryDate||'', lock:order.lock||'', glassDim:order.glassDim||'', glassNotes:order.glassNotes||'', hardware:order.hardware||'', coatings:order.coatings||[], stavera:order.stavera||[], notes:order.notes||'' }); setEditModal({visible:true,order}); }}><Text style={[styles.upperBtnText,{color:'white'}]}>✏️</Text></TouchableOpacity>}
+          {!isArchive&&(order.status==='PENDING'||order.status==='PROD')&&<TouchableOpacity style={[styles.upperBtn,{backgroundColor:'#007AFF'}]} delayLongPress={2000} onLongPress={()=>{ setEditForm({ deliveryDate:order.deliveryDate||'', lock:order.lock||'', glassDim:order.glassDim||'', glassNotes:order.glassNotes||'', hardware:order.hardware||'', coatings:order.coatings||[], stavera:order.stavera||[], notes:order.notes||'' }); setEditModal({visible:true,order}); }} onPress={()=>{ if(Platform.OS==='web') window.alert('Κράτα πατημένο 2 δευτερόλεπτα για επεξεργασία'); }}><Text style={[styles.upperBtnText,{color:'white'}]}>✏️</Text></TouchableOpacity>}
           {!isArchive&&!(isInPending&&order.status==='READY'&&order.staveraPendingAtReady&&!order.staveraDone)&&<TouchableOpacity style={[styles.upperBtn,{backgroundColor:order.status==='PENDING'?'#000':'#666'}]} onPress={()=>order.status==='PENDING'?cancelOrder(order.id):moveBack(order.id,order.status)}><Text style={[styles.upperBtnText,{color:order.status==='PENDING'?'#ff4444':'white'}]}>{order.status==='PENDING'?'ΑΚΥΡΩΣΗ':'⟲'}</Text></TouchableOpacity>}
           {isArchive&&(
             <TouchableOpacity
@@ -1760,12 +1778,31 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         <View style={{justifyContent:'space-between', paddingVertical:4, gap:4}}>
           <TouchableOpacity
             style={{backgroundColor:'#007AFF', borderRadius:6, padding:8, alignItems:'center', minWidth:50}}
-            onPress={()=>{ setEditForm({ deliveryDate:order.deliveryDate||'', lock:order.lock||'', glassDim:order.glassDim||'', glassNotes:order.glassNotes||'', hardware:order.hardware||'', coatings:order.coatings||[], stavera:order.stavera||[], notes:order.notes||'' }); setEditModal({visible:true,order}); }}>
+            delayLongPress={2000}
+            onLongPress={()=>{ setEditForm({ deliveryDate:order.deliveryDate||'', lock:order.lock||'', glassDim:order.glassDim||'', glassNotes:order.glassNotes||'', hardware:order.hardware||'', coatings:order.coatings||[], stavera:order.stavera||[], notes:order.notes||'' }); setEditModal({visible:true,order}); }}
+            onPress={()=>{ if(Platform.OS==='web') window.alert('Κράτα πατημένο 2 δευτερόλεπτα για επεξεργασία'); }}>
             <Text style={{color:'white',fontWeight:'bold',fontSize:12}}>✏️</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.doneBtn, phase.done && styles.doneBtnActive]}
-            onPress={()=> phase.done ? handlePhaseUndone(order.id, phaseKey) : handlePhaseDone(order.id, phaseKey)}>
+            style={[styles.doneBtn, phase.done && styles.doneBtnActive,
+              pendingChanges.some(c=>c.orderId===order.id&&c.phaseKey===phaseKey) && {opacity:0.5, borderWidth:2, borderColor:'#FFD600'},
+              lastChangedIds.some(c=>c.orderId===order.id&&c.phaseKey===phaseKey) && {borderWidth:3, borderColor:'#E53935'}
+            ]}
+            onPress={()=>{
+              const exists = pendingChanges.find(c=>c.orderId===order.id&&c.phaseKey===phaseKey);
+              if (exists) {
+                // Αν υπάρχει ήδη στο καλάθι → αφαίρεσέ το (toggle)
+                setPendingChanges(prev=>prev.filter(c=>!(c.orderId===order.id&&c.phaseKey===phaseKey)));
+              } else {
+                // Πρόσθεσε στο καλάθι
+                setPendingChanges(prev=>[...prev, {
+                  orderId: order.id,
+                  orderNo: order.orderNo,
+                  phaseKey,
+                  action: phase.done ? 'undone' : 'done'
+                }]);
+              }
+            }}>
             <Text style={styles.doneBtnTxt}>{phase.done ? '↩️\nUNDO' : '✓\nDONE'}</Text>
           </TouchableOpacity>
           {!phase.done && (
@@ -1943,11 +1980,25 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       <View>
         <View style={[styles.listHeader,{backgroundColor:'#ffbb33', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
           <Text style={styles.listHeaderText}>● ΠΑΡΑΓΓΕΛΙΕΣ ΣΤΗΝ ΠΑΡΑΓΩΓΗ ({maxPhaseCount})</Text>
-          <TouchableOpacity
-            style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
-            onPress={()=>handlePrintProdStatus(prodOrders)}>
-            <Text style={{color:'#8B0000', fontSize:11, fontWeight:'bold'}}>📋 ΚΑΤΑΣΤΑΣΗ</Text>
-          </TouchableOpacity>
+          <View style={{flexDirection:'row', gap:6}}>
+            <TouchableOpacity
+              style={{backgroundColor:'#1a1a2e', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
+              onPress={async()=>{
+                const today = new Date();
+                const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+                const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
+                const allCopies = getCopies(prodOrders, phaseLabel, dateStr);
+                const html = buildPrintHTML([allCopies[0]], 'laser');
+                await printHTML(html, `VAICON — ${phaseLabel}`);
+              }}>
+              <Text style={{color:'#FFD600', fontSize:11, fontWeight:'bold'}}>🖨️ ΠΡΟΓΡΑΜΜΑ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
+              onPress={()=>handlePrintProdStatus(prodOrders)}>
+              <Text style={{color:'#8B0000', fontSize:11, fontWeight:'bold'}}>📋 ΚΑΤΑΣΤΑΣΗ</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         {(
           <View style={styles.prodContainer}>
@@ -2230,6 +2281,74 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </View>
         </View>
       </Modal>
+
+      {/* ΚΑΛΑΘΙ ΑΛΛΑΓΩΝ — floating draggable panel */}
+      {pendingChanges.length > 0 && (
+        <View style={{
+          position:'absolute', top: 80 + panPos.y, right: 'auto', left: `calc(100% - 276px + ${panPos.x}px)`,
+          width:260, backgroundColor:'#1a1a2e', borderRadius:12, elevation:20, zIndex:999,
+          shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.4, shadowRadius:8,
+        }}>
+          {/* Header — drag handle */}
+          <View
+            onStartShouldSetResponder={()=>false}
+            style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:10, borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.15)', cursor:'grab'}}
+            {...(Platform.OS==='web' ? {
+              onMouseDown: handleDragStart,
+              onTouchStart: handleDragStart,
+            } : {})}>
+            <Text style={{color:'#FFD600', fontWeight:'bold', fontSize:13}}>
+              ☰ 📋 ΕΚΚΡΕΜΕΙΣ ({pendingChanges.length})
+            </Text>
+          </View>
+          {/* Λίστα αλλαγών */}
+          <ScrollView style={{maxHeight:180}} showsVerticalScrollIndicator={false} contentContainerStyle={{padding:8}}>
+            {pendingChanges.map((c,i)=>(
+              <View key={i} style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingVertical:5, borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.08)'}}>
+                <Text style={{color:'white', fontSize:12}}>
+                  <Text style={{fontWeight:'bold', fontSize:16}}>#{c.orderNo}</Text>
+                  {'  '}
+                  <Text style={{color: c.action==='done'?'#4caf50':'#ff9800', fontWeight:'bold'}}>
+                    {c.action==='done' ? '✓ DONE' : '↩ UNDO'}
+                  </Text>
+                </Text>
+                <TouchableOpacity onPress={()=>setPendingChanges(prev=>prev.filter((_,j)=>j!==i))}>
+                  <Text style={{color:'#ff4444', fontSize:15, paddingHorizontal:6}}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ScrollView>
+          {/* Κουμπιά */}
+          <View style={{flexDirection:'row', gap:8, padding:10, borderTopWidth:1, borderTopColor:'rgba(255,255,255,0.15)'}}>
+            <TouchableOpacity
+              style={{flex:1, padding:8, borderRadius:8, alignItems:'center', backgroundColor:'#555'}}
+              onPress={()=>setPendingChanges([])}>
+              <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>ΑΚΥΡΟ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{flex:2, padding:8, borderRadius:8, alignItems:'center', backgroundColor:'#2e7d32'}}
+              onPress={()=>{
+                setConfirmModal({
+                  visible: true,
+                  title: '✅ Επιβεβαίωση αλλαγών',
+                  message: `Πρόκειται να εκτελεστούν ${pendingChanges.length} αλλαγές.\n\nΕίσαι σίγουρος;`,
+                  confirmText: 'ΕΠΙΒΕΒΑΙΩΣΗ',
+                  onConfirm: async () => {
+                    const batch = [...pendingChanges];
+                    for (const c of batch) {
+                      if (c.action==='done') await handlePhaseDone(c.orderId, c.phaseKey);
+                      else await handlePhaseUndone(c.orderId, c.phaseKey);
+                    }
+                    setLastChangedIds(batch.map(c=>({orderId:c.orderId, phaseKey:c.phaseKey})));
+                    setPendingChanges([]);
+                  }
+                });
+              }}>
+              <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>✅ ΕΠΙΒΕΒΑΙΩΣΗ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* MODAL ΚΛΕΙΔΑΡΙΕΣ */}
       <Modal visible={showLockPicker} transparent animationType="slide" onRequestClose={()=>setShowLockPicker(false)}>
