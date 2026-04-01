@@ -451,7 +451,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       return `<table style="table-layout:fixed;width:100%"><colgroup>
         <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:28px"><col style="width:160px"><col style="width:28px"><col style="width:100px"><col><col style="width:65px">
       </colgroup><thead><tr>
-        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις
+        <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
 
