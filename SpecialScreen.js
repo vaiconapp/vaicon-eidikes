@@ -524,7 +524,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </tr>`;
       }).join('');
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:30px"><col style="width:70px"><col style="width:28px"><col style="width:130px"><col style="width:28px"><col><col style="width:70px">
+        <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:39px"><col style="width:105px"><col style="width:28px"><col style="width:169px"><col style="width:28px"><col><col style="width:70px">
       </colgroup><thead><tr>
         <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
@@ -958,10 +958,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           await printHTML(html, `VAICON — ${phaseLabel}`);
           const selectedIds = orders.map(o=>o.id);
           const updated = specialOrders.map(o => {
-            if (selectedIds.includes(o.id) && o.phases?.[phaseKey]?.active) {
-              return {...o, phases:{...o.phases, [phaseKey]:{...o.phases[phaseKey], printed:true, printHistory:[...(o.phases[phaseKey].printHistory||[]), {ts:Date.now(), copies:1}]}}};
-            }
-            return o;
+            if (!selectedIds.includes(o.id)) return o;
+            const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+            const isActive = phaseKey === 'epend'
+              ? hasCoatings
+              : !!(o.phases?.[phaseKey]?.active);
+            if (!isActive) return o;
+            const existPhase = o.phases?.[phaseKey] || { active: true, done: false, printed: false, printHistory: [] };
+            return {...o, phases:{...o.phases, [phaseKey]:{...existPhase, printed:true, printHistory:[...(existPhase.printHistory||[]), {ts:Date.now(), copies:1}]}}};
           });
           setSpecialOrders(updated);
           for (const o of updated.filter(o=>selectedIds.includes(o.id))) await syncToCloud(o);
@@ -1781,8 +1785,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const today = new Date();
     const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
     const sorted = [...orders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
-    const copies = [{ title:`VAICON — ${dateStr} — ${title}`, orders:sorted }];
-    const html = buildPrintHTML(copies);
+    const copyTitle = `VAICON — ${dateStr} — ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ`;
+    const copies = [{ title: copyTitle, orders: sorted }];
+    const html = buildPrintHTML(copies, 'laser');
     try {
       await printHTML(html, `VAICON — ${title}`, win);
     } catch(e) {
