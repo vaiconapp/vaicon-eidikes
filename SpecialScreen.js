@@ -1987,7 +1987,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 const today = new Date();
                 const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
                 const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
-                const allCopies = getCopies(prodOrders, phaseLabel, dateStr);
+                const sorted = [...prodOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+                const allCopies = getCopies(sorted, phaseLabel, dateStr);
                 const html = buildPrintHTML([allCopies[0]], 'laser');
                 await printHTML(html, `VAICON — ${phaseLabel}`);
               }}>
@@ -1995,7 +1996,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             </TouchableOpacity>
             <TouchableOpacity
               style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
-              onPress={()=>handlePrintProdStatus(prodOrders)}>
+              onPress={()=>handlePrintProdStatus([...prodOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)))}>
               <Text style={{color:'#8B0000', fontSize:11, fontWeight:'bold'}}>📋 ΚΑΤΑΣΤΑΣΗ</Text>
             </TouchableOpacity>
           </View>
