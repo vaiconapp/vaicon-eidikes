@@ -1,6 +1,58 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Platform } from 'react-native';
 import { FIREBASE_URL } from './App';
+
+// Helper εκτύπωσης — web: window.print(), mobile: expo-print + sharing
+const printHTML = async (html, title, existingWin=null) => {
+  if (Platform.OS === 'web') {
+    const win = existingWin || window.open('', '_blank', 'width=900,height=700,left=100,top=100,resizable=yes,scrollbars=yes');
+    if (!win) { Alert.alert("Σφάλμα", "Ο browser μπλόκαρε το παράθυρο εκτύπωσης. Επιτρέψτε τα pop-ups."); return; }
+    const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    const innerCSS = styleMatch ? styleMatch[1] : '';
+    const inner = html.replace(/<html[\s\S]*?<body[^>]*>/i,'').replace(/<\/body[\s\S]*?<\/html>/i,'');
+    const previewHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${title || 'VAICON'}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: Arial, sans-serif; background: #f5f5f5; }
+          #toolbar {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: #1a1a1a; padding: 10px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            z-index: 999;
+          }
+          #toolbar h2 { color: white; font-size: 14px; }
+          #printBtn { background: #007AFF; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
+          #closeBtn { background: #555; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; margin-left: 8px; }
+          #content { margin-top: 56px; padding: 16px; background: white; }
+          @media print { #toolbar { display: none; } #content { margin-top: 0; padding: 0; } }
+          ${innerCSS}
+        </style>
+      </head>
+      <body>
+        <div id="toolbar">
+          <h2>🖨️ ${title || 'VAICON'}</h2>
+          <div>
+            <button id="printBtn" onclick="window.print()">🖨️ ΕΚΤΥΠΩΣΗ</button>
+            <button id="closeBtn" onclick="window.close()">✕ ΚΛΕΙΣΙΜΟ</button>
+          </div>
+        </div>
+        <div id="content">${inner}</div>
+      </body>
+      </html>
+    `;
+    win.document.write(previewHTML);
+    win.document.close();
+    win.focus();
+  } else {
+    const { uri } = await Print.printToFileAsync({ html, base64: false });
+    await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: title || 'VAICON', UTI: 'com.adobe.pdf' });
+  }
+};
 
 const fmtDate = (ts) => {
   if (!ts) return '';
@@ -101,6 +153,45 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
     await deleteFromCloud(id);
   };
 
+  const printCustomers = async () => {
+    const sorted = [...customers].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'el'));
+    const rows = sorted.map(c => {
+      const orderCount = allOrders.filter(o => o.customer === c.name).length;
+      return `<tr>
+        <td>${c.name || ''}</td>
+        <td>${c.identifier || ''}</td>
+        <td class="col-phone">${c.phone || ''}</td>
+        <td class="col-orders">${orderCount > 0 ? orderCount : ''}</td>
+      </tr>`;
+    }).join('');
+    const html = `<html><head><meta charset="utf-8"><style>
+      body { font-family: Arial, sans-serif; margin: 10mm; color: #000; }
+      h1 { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+      h2 { font-size: 12px; color: #555; margin-bottom: 10px; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+      th { padding: 6px 8px; text-align: left; border: 1px solid #000; font-weight: bold; background: #ddd; font-size: 11px; }
+      td { padding: 6px 8px; border: 1px solid #ccc; vertical-align: top; word-wrap: break-word; }
+      tr:nth-child(even) td { background: #f9f9f9; }
+      .col-phone { width: 110px; }
+      .col-orders { width: 70px; text-align: center; }
+      .col-ident { width: 28%; }
+      @media print { @page { size: A4 portrait; margin: 10mm; } }
+    </style></head><body>
+      <h1>👥 ΠΕΛΑΤΕΣ</h1>
+      <h2>Σύνολο: ${sorted.length} πελάτες</h2>
+      <table>
+        <colgroup>
+          <col><col class="col-ident"><col style="width:110px"><col style="width:70px">
+        </colgroup>
+        <thead><tr>
+          <th>Όνομα</th><th>Αναγνωριστικό</th><th>Τηλέφωνο</th><th>Παρ.</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </body></html>`;
+    await printHTML(html, 'ΠΕΛΑΤΕΣ');
+  };
+
   const filtered = customers
     .filter(c => {
       if (!search) return true;
@@ -126,6 +217,10 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
           <Text style={styles.backTxt}>✕</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>👥 ΠΕΛΑΤΕΣ</Text>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity onPress={printCustomers} style={styles.printBtn}>
+          <Text style={styles.printTxt}>🖨️</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={{ padding: 12 }}>
@@ -324,4 +419,6 @@ const styles = StyleSheet.create({
   customerDate: { fontSize:11, color:'#999', marginTop:4 },
   deleteBtn: { padding:10, backgroundColor:'#ff4444', borderRadius:6, borderWidth:2, borderColor:'#cc0000' },
   deleteTxt: { color:'white', fontWeight:'bold', fontSize:16 },
+  printBtn: { padding:6, marginLeft:12 },
+  printTxt: { fontSize:22 },
 });
