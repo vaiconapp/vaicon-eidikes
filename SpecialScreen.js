@@ -485,7 +485,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </tr>`;
       }).join('');
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:28px"><col style="width:160px"><col style="width:28px"><col style="width:100px"><col><col style="width:65px">
+        <col style="width:74px"><col style="width:125px"><col style="width:35px"><col style="width:28px"><col style="width:160px"><col style="width:28px"><col style="width:100px"><col style="width:261px"><col style="width:65px">
       </colgroup><thead><tr>
         <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
@@ -522,7 +522,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       </tr></thead><tbody>${rows}</tbody></table>`;
     };
 
-    const buildMontDoorTable = (orders) => {
+    const buildMontDoorTable = (orders, pKey) => {
+      const isEpend = pKey === 'epend';
       const rows = orders.map(o => {
         const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
@@ -532,7 +533,6 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const datesLine = [createdFmt, deliveryFmt].filter(Boolean).join('    ');
-        // Παρατηρήσεις — ίδια μορφοποίηση με LASER 1 αντίγραφο
         const allCoatings = o.coatings||[];
         const exo = allCoatings.filter(c=>c.toUpperCase().includes('ΕΞΩ'));
         const mesa = allCoatings.filter(c=>c.toUpperCase().includes('ΜΕΣΑ')||c.toUpperCase().includes('ΕΣΩΤ'));
@@ -552,13 +552,20 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-weight:bold;font-size:17px">${fora}</td>
           <td style="font-size:13px;text-align:center">${armorVal}</td>
           <td style="font-size:13px">${o.hardware||'—'}</td>
-          <td style="font-size:13px">${mentesedesVal}</td>
-          <td style="font-size:13px;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word">${kleidaria}</td>
-          <td style="font-size:13px;text-align:center">${caseTypeVal}</td>
+          ${!isEpend ? `<td style="font-size:13px">${mentesedesVal}</td>` : ''}
+          ${!isEpend ? `<td style="font-size:13px;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word">${kleidaria}</td>` : ''}
+          ${!isEpend ? `<td style="font-size:13px;text-align:center">${caseTypeVal}</td>` : ''}
           <td style="font-size:13px;white-space:normal;word-wrap:break-word">${notesCell}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
+      if (isEpend) {
+        return `<table style="table-layout:fixed;width:100%"><colgroup>
+          <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:39px"><col style="width:105px"><col><col style="width:70px">
+        </colgroup><thead><tr>
+          <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
+        </tr></thead><tbody>${rows}</tbody></table>`;
+      }
       return `<table style="table-layout:fixed;width:100%"><colgroup>
         <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:39px"><col style="width:105px"><col style="width:28px"><col style="width:169px"><col style="width:28px"><col><col style="width:70px">
       </colgroup><thead><tr>
@@ -792,7 +799,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       <div class="${idx < copies.length-1 ? 'page-break' : ''}">
         <h1>${copy.title}</h1>
         <h2>Σύνολο: ${copy.orders.length} παραγγελίες</h2>
-        ${isLaser ? buildLaserTable(copy.orders, copy.title) : isCases ? buildCasesTable(copy.orders) : isSasi ? buildSasiTable(copy.orders) : isMontDoor ? buildMontDoorTable(copy.orders) : isVafio ? buildVafioTable(copy.orders) : buildTable(copy.orders)}
+        ${isLaser ? buildLaserTable(copy.orders, copy.title) : isCases ? buildCasesTable(copy.orders) : isSasi ? buildSasiTable(copy.orders) : isMontDoor ? buildMontDoorTable(copy.orders, phaseKey) : isVafio ? buildVafioTable(copy.orders) : buildTable(copy.orders)}
       </div>
     `).join('');
 
@@ -1255,7 +1262,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </ScrollView>
         );
       }
-      if (phaseKey==='montDoor') {
+      if (phaseKey==='montDoor' || phaseKey==='epend') {
         const COLS_MONTDOOR2 = [
           {label:'Νο',w:50},{label:'Διάσταση',w:95},{label:'Φορά',w:40},
           {label:'Θ/Σ',w:36},{label:'Χρώμα',w:50},{label:'Μεντ.',w:35},
@@ -1641,51 +1648,60 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
     return (
       <TouchableOpacity key={order.id} onLongPress={()=>!isArchive&&order.status==='PENDING'&&editOrder(order)} delayLongPress={1000} activeOpacity={0.7} style={[styles.orderCard,{borderLeftColor:bc, backgroundColor: isProd?'#e8f5e9':'white'}]}>
-        <View style={styles.cardContent}>
-          {isProd&&<View style={{backgroundColor:'#2e7d32', borderRadius:6, paddingHorizontal:10, paddingVertical:3, alignSelf:'flex-start', marginBottom:5}}>
-            <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>⚙️ ΣΤΗΝ ΠΑΡΑΓΩΓΗ</Text>
-          </View>}
-          {order.staveraPendingAtReady&&!order.staveraDone&&<View style={{backgroundColor:'#e65100', borderRadius:6, paddingHorizontal:10, paddingVertical:3, alignSelf:'flex-start', marginBottom:5}}>
-            <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>⏳ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ</Text>
-          </View>}
-          <Text style={{fontSize:20,fontWeight:'900',color:'#1a1a1a',letterSpacing:1,marginBottom:2}}>#{order.orderNo}</Text>
-          {order.customer?<Text style={{fontSize:14,fontWeight:'bold',color:'#333',marginBottom:3}}>👤 {order.customer}</Text>:null}
-          <View style={{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:4,marginBottom:3}}>
-            <Text style={styles.cardDetails}>{order.h}x{order.w}</Text>
-            {order.qty&&parseInt(order.qty)>1?<Text style={{fontWeight:'900',fontSize:15,color:'#cc0000'}}>{order.qty}τεμ</Text>:null}
-            <Text style={styles.cardDetails}>{order.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ'}</Text>
-            {!isStd?<Text style={styles.cardDetails}>{(order.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ')?'Δ/Θ':'Μ/Θ'}</Text>:null}
-            {order.hardware?<Text style={[styles.cardDetails,{color:'#555'}]}>{order.hardware}</Text>:null}
-          </View>
-          {!isStd&&<Text style={styles.cardSubDetails}>Μεντ: {order.hinges}{(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''}</Text>}
-          {!isStd&&<Text style={styles.cardSubDetails}>Κλειδ: {order.lock||'—'}</Text>}
-          {!isStd&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:13}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
-          {!isStd&&<Text style={styles.cardSubDetails}>Κάσα: {order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | {order.caseMaterial||'DKP'}</Text>}
-          {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&<Text style={styles.cardSubDetails}>📐 Σταθ: {order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}</Text>}
-          {isStd&&<Text style={styles.cardSubDetails}>{order.lock?`Κλειδ: ${order.lock} | `:''}  {order.hardware}</Text>}
-          {isStd&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:13}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
-          {isStd&&order.heightReduction?<Text style={[styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold'}]}>📏 ΜΕΙΩΣΗ ΥΨΟΥΣ: {order.heightReduction} cm</Text>:null}
-          {order.coatings&&order.coatings.length>0&&<Text style={[styles.cardSubDetails,{color:'#007AFF'}]}>🎨 {order.coatings.join(', ')}</Text>}
-          {order.notes?<Text style={styles.cardSubDetails}>Σημ: {order.notes}</Text>:null}
-          <View style={styles.datesRow}>
-            {fmtDate(order.createdAt)&&<Text style={styles.dateChip}>📅 {fmtDate(order.createdAt)}</Text>}
-            {order.deliveryDate?<Text style={[styles.dateChip,{backgroundColor:'#fff3e0',color:'#e65100'}]}>🚚 {order.deliveryDate}</Text>:null}
-            {fmtDate(order.prodAt)&&<Text style={styles.dateChip}>🔨 {fmtDate(order.prodAt)}</Text>}
-            {fmtDate(order.readyAt)&&<Text style={styles.dateChip}>✅ {fmtDate(order.readyAt)}</Text>}
-          </View>
-          {isProd&&order.phases&&(
-            <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:4}}>
-              {Object.entries(order.phases).map(([key,phase])=>{
-                if(!phase.active) return null;
-                const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',epend:'ΕΠΕΝ.',montDoor:'ΜΟΝΤ.'};
-                return (
-                  <View key={key} style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
-                    <Text style={{color:'white',fontSize:10,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[key]||key}</Text>
-                  </View>
-                );
-              })}
+        <View style={[styles.cardContent, {flexDirection:'row'}]}>
+          {/* ΣΤΗΛΗ 1 */}
+          <View style={{flexShrink:1}}>
+            {isProd&&<View style={{backgroundColor:'#2e7d32', borderRadius:6, paddingHorizontal:10, paddingVertical:3, alignSelf:'flex-start', marginBottom:5}}>
+              <Text style={{color:'white', fontWeight:'bold', fontSize:14}}>⚙️ ΣΤΗΝ ΠΑΡΑΓΩΓΗ</Text>
+            </View>}
+            {order.staveraPendingAtReady&&!order.staveraDone&&<View style={{backgroundColor:'#e65100', borderRadius:6, paddingHorizontal:10, paddingVertical:3, alignSelf:'flex-start', marginBottom:5}}>
+              <Text style={{color:'white', fontWeight:'bold', fontSize:14}}>⏳ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ</Text>
+            </View>}
+            <Text style={{fontSize:24,fontWeight:'900',color:'#1a1a1a',letterSpacing:1,marginBottom:2}}>#{order.orderNo}</Text>
+            {order.customer?<Text style={{fontSize:17,fontWeight:'bold',color:'#333',marginBottom:3}}>👤 {order.customer}</Text>:null}
+            <View style={{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:4,marginBottom:3}}>
+              <Text style={[styles.cardDetails,{fontSize:14}]}>{order.h}x{order.w}</Text>
+              {order.qty&&parseInt(order.qty)>1?<Text style={{fontWeight:'900',fontSize:17,color:'#cc0000'}}>{order.qty}τεμ</Text>:null}
+              <Text style={[styles.cardDetails,{fontSize:14}]}>{order.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ'}</Text>
+              {!isStd?<Text style={[styles.cardDetails,{fontSize:14}]}>{(order.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ')?'Δ/Θ':'Μ/Θ'}</Text>:null}
+              {order.hardware?<Text style={[styles.cardDetails,{fontSize:14,color:'#555'}]}>{order.hardware}</Text>:null}
             </View>
-          )}
+            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Μεντ: {order.hinges}{(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''}</Text>}
+            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Κλειδ: {order.lock||'—'}</Text>}
+            {isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>{order.lock?`Κλειδ: ${order.lock} | `:''}  {order.hardware}</Text>}
+            {(isStd||!isStd)&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:16}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
+          </View>
+
+          {/* ΚΕΝΟ ΔΙΑΧΩΡΙΣΤΙΚΟ */}
+          <View style={{width:24}}/>
+
+          {/* ΣΤΗΛΗ 2 */}
+          <View style={{flex:1}}>
+            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Κάσα: {order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | {order.caseMaterial||'DKP'}</Text>}
+            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>📐 Σταθ: {order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}</Text>}
+            {isStd&&order.heightReduction?<Text style={[styles.cardSubDetails,{fontSize:13,color:'#b71c1c',fontWeight:'bold'}]}>📏 ΜΕΙΩΣΗ ΥΨΟΥΣ: {order.heightReduction} cm</Text>:null}
+            {order.coatings&&order.coatings.length>0&&<Text style={[styles.cardSubDetails,{fontSize:13,color:'#007AFF'}]}>🎨 {order.coatings.join(', ')}</Text>}
+            {order.notes?<Text style={[styles.cardSubDetails,{fontSize:13}]}>Σημ: {order.notes}</Text>:null}
+            <View style={styles.datesRow}>
+              {fmtDate(order.createdAt)&&<Text style={[styles.dateChip,{fontSize:12}]}>📅 {fmtDate(order.createdAt)}</Text>}
+              {order.deliveryDate?<Text style={[styles.dateChip,{fontSize:12,backgroundColor:'#fff3e0',color:'#e65100'}]}>🚚 {order.deliveryDate}</Text>:null}
+              {fmtDate(order.prodAt)&&<Text style={[styles.dateChip,{fontSize:12}]}>🔨 {fmtDate(order.prodAt)}</Text>}
+              {fmtDate(order.readyAt)&&<Text style={[styles.dateChip,{fontSize:12}]}>✅ {fmtDate(order.readyAt)}</Text>}
+            </View>
+            {isProd&&order.phases&&(
+              <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:4}}>
+                {Object.entries(order.phases).map(([key,phase])=>{
+                  if(!phase.active) return null;
+                  const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',epend:'ΕΠΕΝ.',montDoor:'ΜΟΝΤ.'};
+                  return (
+                    <View key={key} style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
+                      <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[key]||key}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
         </View>
         {(isArchive||order.status==='READY')&&(
           <TextInput
@@ -1741,7 +1757,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         {/* CHECKBOX ΕΠΙΛΟΓΗΣ — πάντα ορατό */}
         <TouchableOpacity style={styles.printCheck} onPress={()=>setPrintSelected(p=>({...p,[order.id]:!p[order.id]}))}>
           <View style={[styles.checkbox, isSelected&&styles.checkboxSelected]}>
-            {isSelected&&<Text style={{color:'white',fontWeight:'bold',fontSize:12}}>✓</Text>}
+            {isSelected&&<Text style={{color:'white',fontWeight:'bold',fontSize:14}}>✓</Text>}
           </View>
         </TouchableOpacity>
         {phase.printed && (
@@ -1750,27 +1766,31 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </View>
         )}
 
-        {/* ΣΤΟΙΧΕΙΑ ΠΑΡΑΓΓΕΛΙΑΣ */}
-        <View style={{flex:1, paddingHorizontal:8}}>
-          <View style={{flexDirection:'row', alignItems:'center', flexWrap:'nowrap'}}>
-            <Text style={[styles.cardDetails,{fontWeight:'bold'}]}>#{order.orderNo}</Text>
+        {/* ΣΤΟΙΧΕΙΑ ΠΑΡΑΓΓΕΛΙΑΣ — 2 στήλες */}
+        <View style={{flex:1, paddingHorizontal:8, flexDirection:'row'}}>
+          {/* ΣΤΗΛΗ 1: αριθμός, πελάτης, διαστάσεις, μεντ/τζάμι/κλειδ, κάσα, μονταρισμα */}
+          <View style={{flexShrink:1}}>
+            <Text style={[styles.cardDetails,{fontWeight:'bold',fontSize:14}]}>#{order.orderNo}</Text>
+            {order.customer?<Text style={[styles.cardSubDetails,{marginTop:2,fontSize:13}]}>👤 {order.customer}</Text>:null}
+            <Text style={[styles.cardDetails,{fontSize:14}]}>{order.h}x{order.w} | {order.side}{!isStd?` | ${order.armor} ΘΩΡ.`:''}</Text>
+            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Μεντ: {order.hinges}{(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''} | Κλειδ: {order.lock||'—'}</Text>}
+            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Κάσα: {order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | {order.caseMaterial||'DKP'} | {order.hardware||'—'}</Text>}
+            {isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>{order.hardware||''}</Text>}
+            {(isStd||!isStd)&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:16}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
           </View>
-          {order.customer?<Text style={[styles.cardSubDetails,{marginTop:2}]}>👤 {order.customer}</Text>:null}
-          <Text style={styles.cardDetails}>{order.h}x{order.w} | {order.side}{!isStd?` | ${order.armor} ΘΩΡ.`:''}</Text>
-          {!isStd&&<Text style={styles.cardSubDetails}>Μεντ: {order.hinges}{(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''} | Κλειδ: {order.lock||'—'}</Text>}
-          {!isStd&&<Text style={styles.cardSubDetails}>Κάσα: {order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | {order.caseMaterial||'DKP'} | {order.hardware||'—'}</Text>}
-          {!isStd&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:13}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
-          {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&<Text style={styles.cardSubDetails}>📐 Σταθ: {order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}</Text>}
-          {isStd&&<Text style={styles.cardSubDetails}>{order.hardware||''}</Text>}
-          {isStd&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:13}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
-          {order.qty&&parseInt(order.qty)>1?<Text style={[styles.cardSubDetails,{color:'#007AFF',fontWeight:'bold'}]}>Τεμ: {order.qty}</Text>:null}
-          {order.coatings&&order.coatings.length>0&&<Text style={[styles.cardSubDetails,{color:'#007AFF'}]}>🎨 {order.coatings.join(', ')}</Text>}
-          {order.notes?<Text style={[styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold'}]}>📝 {order.notes}</Text>:null}
-          {phase.done&&<Text style={styles.doneTxt}>✅ Ολοκληρώθηκε</Text>}
-          {/* ΗΜΕΡΟΜΗΝΙΑ ΕΙΣΟΔΟΥ + ΠΑΡΑΔΟΣΗ */}
-          <View style={{marginTop:4}}>
-            {order.prodAt&&<Text style={{fontSize:10,color:'#666'}}>📥 Είσοδος: {fmtDateTime(order.prodAt)}</Text>}
-            {order.deliveryDate?<Text style={{fontSize:10,color:'#e65100',fontWeight:'bold'}}>🚚 Παράδοση: {order.deliveryDate}</Text>:null}
+
+          {/* ΚΕΝΟ ΔΙΑΧΩΡΙΣΤΙΚΟ */}
+          <View style={{width:24}}/>
+
+          {/* ΣΤΗΛΗ 2: σταθερό, τεμάχια, επενδύσεις, παρατηρήσεις, done, ημερομηνίες */}
+          <View style={{flex:1}}>
+            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>📐 Σταθ: {order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}</Text>}
+            {order.qty&&parseInt(order.qty)>1?<Text style={[styles.cardSubDetails,{color:'#007AFF',fontWeight:'bold',fontSize:13}]}>Τεμ: {order.qty}</Text>:null}
+            {order.coatings&&order.coatings.length>0&&<Text style={[styles.cardSubDetails,{color:'#007AFF',fontSize:13}]}>🎨 {order.coatings.join(', ')}</Text>}
+            {order.notes?<Text style={[styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold',fontSize:13}]}>📝 {order.notes}</Text>:null}
+            {phase.done&&<Text style={[styles.doneTxt,{fontSize:12}]}>✅ Ολοκληρώθηκε</Text>}
+            {order.prodAt&&<Text style={{fontSize:12,color:'#666',marginTop:4}}>📥 Είσοδος: {fmtDateTime(order.prodAt)}</Text>}
+            {order.deliveryDate?<Text style={{fontSize:12,color:'#e65100',fontWeight:'bold'}}>🚚 Παράδοση: {order.deliveryDate}</Text>:null}
           </View>
         </View>
 
@@ -1781,7 +1801,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             delayLongPress={2000}
             onLongPress={()=>{ setEditForm({ deliveryDate:order.deliveryDate||'', lock:order.lock||'', glassDim:order.glassDim||'', glassNotes:order.glassNotes||'', hardware:order.hardware||'', coatings:order.coatings||[], stavera:order.stavera||[], notes:order.notes||'' }); setEditModal({visible:true,order}); }}
             onPress={()=>{ if(Platform.OS==='web') window.alert('Κράτα πατημένο 2 δευτερόλεπτα για επεξεργασία'); }}>
-            <Text style={{color:'white',fontWeight:'bold',fontSize:12}}>✏️</Text>
+            <Text style={{color:'white',fontWeight:'bold',fontSize:14}}>✏️</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.doneBtn, phase.done && styles.doneBtnActive,
@@ -1803,7 +1823,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 }]);
               }
             }}>
-            <Text style={styles.doneBtnTxt}>{phase.done ? '↩️\nUNDO' : '✓\nDONE'}</Text>
+            <Text style={[styles.doneBtnTxt,{fontSize:12}]}>{phase.done ? '↩️\nUNDO' : '✓\nDONE'}</Text>
           </TouchableOpacity>
           {!phase.done && (
             <TouchableOpacity style={styles.removeBtn} onPress={()=>removeFromPhase(order.id,phaseKey)}>
@@ -1961,7 +1981,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     }
   };
 
-  // Ενότητα ΣΤΗΝ ΠΑΡΑΓΩΓΗ με υποκαρτέλες
+  // Ενότητα ΣΤΗΝ ΠΑΡΑΓΩΓΗ με υποκαρτέλες — 3-column layout
   const renderProdSection = () => {
     const prodOrders = specialOrders.filter(o=>o.status==='PROD').sort((a,b)=>(b.prodAt||0)-(a.prodAt||0));
     const maxPhaseCount = prodOrders.length === 0 ? 0 : Math.max(...PHASES.map(ph =>
@@ -1970,257 +1990,261 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
     const phaseKeys = [...PHASES.map(p=>p.key), 'stavera'];
 
-    const handlePageScroll = (e) => {
-      const page = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-      if (page >= 0 && page < phaseKeys.length) {
-        setActiveProdPhase(phaseKeys[page]);
+    // Υπολογισμός staveraOrders για το ΣΤΑΘΕΡΑ tab
+    const staveraOrders = [
+      ...prodOrders.filter(o=>o.stavera&&o.stavera.some(s=>s&&s.dim)),
+      ...specialOrders.filter(o=>o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)
+    ];
+
+    const handleStaveraPrint = () => {
+      const selected = Object.keys(printSelected).filter(id=>printSelected[id]);
+      const staveraIds = staveraOrders.map(o=>String(o.id));
+      const staveraSelected = selected.filter(id=>staveraIds.includes(String(id)));
+      if (staveraSelected.length===0) {
+        if (staveraOrders.length===0) return Alert.alert("Προσοχή","Δεν υπάρχουν παραγγελίες με σταθερά.");
+        setPrintPreview({ visible:true, phaseKey:'stavera', orders:staveraOrders, copies:1 });
+        return;
       }
+      const matchedOrders = staveraOrders.filter(o=>staveraSelected.includes(String(o.id)));
+      setPrintPreview({ visible:true, phaseKey:'stavera', orders:matchedOrders, copies:1 });
     };
-    return (
-      <View>
-        <View style={[styles.listHeader,{backgroundColor:'#ffbb33', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
-          <Text style={styles.listHeaderText}>● ΠΑΡΑΓΓΕΛΙΕΣ ΣΤΗΝ ΠΑΡΑΓΩΓΗ ({maxPhaseCount})</Text>
-          <View style={{flexDirection:'row', gap:6}}>
-            <TouchableOpacity
-              style={{backgroundColor:'#1a1a2e', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
-              onPress={async()=>{
-                const today = new Date();
-                const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
-                const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
-                const sorted = [...prodOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
-                const allCopies = getCopies(sorted, phaseLabel, dateStr);
-                const html = buildPrintHTML([allCopies[0]], 'laser');
-                await printHTML(html, `VAICON — ${phaseLabel}`);
-              }}>
-              <Text style={{color:'#FFD600', fontSize:11, fontWeight:'bold'}}>🖨️ ΠΡΟΓΡΑΜΜΑ</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
-              onPress={()=>handlePrintProdStatus([...prodOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)))}>
-              <Text style={{color:'#8B0000', fontSize:11, fontWeight:'bold'}}>📋 ΚΑΤΑΣΤΑΣΗ</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        {(
-          <View style={styles.prodContainer}>
-            {/* ΥΠΟΚΑΡΤΕΛΕΣ */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.phaseTabs}>
-              {PHASES.map(ph=>(
-                <TouchableOpacity key={ph.key} style={[styles.phaseTab, activeProdPhase===ph.key&&styles.phaseTabActive]} onPress={()=>{
-                  setActiveProdPhase(ph.key);
-                  const idx = phaseKeys.indexOf(ph.key);
-                  prodScrollRef.current?.scrollTo({x: idx * pageWidth, animated:true});
-                }}>
-                  <Text style={[styles.phaseTabTxt, activeProdPhase===ph.key&&styles.phaseTabTxtActive]}>{ph.label}</Text>
-                  <Text style={styles.phaseTabCount}>{(()=>{
-                    const activeOrders = prodOrders.filter(o => {
-                      const hasCoatings = !!(o.coatings && o.coatings.length > 0);
-                      if (ph.key === 'epend') return hasCoatings;
-                      if (o.phases?.[ph.key] !== undefined) return o.phases[ph.key].active;
-                      return true;
-                    });
-                    const total = activeOrders.length;
-                    const pending = activeOrders.filter(o => {
-                      const phase = o.phases?.[ph.key];
-                      if (ph.key === 'epend') {
-                        const hasCoatings = !!(o.coatings && o.coatings.length > 0);
-                        if (!phase || (!phase.active && hasCoatings)) return true;
-                        return !phase.done;
-                      }
-                      return !phase?.done;
-                    }).length;
-                    return `${pending} / ${total}`;
-                  })()}</Text>
-                </TouchableOpacity>
-              ))}
-              {/* ΣΤΑΘΕΡΑ tab */}
-              <TouchableOpacity
-                style={[styles.phaseTab, activeProdPhase==='stavera'&&styles.phaseTabActive, {backgroundColor: activeProdPhase==='stavera'?'#7b1fa2':'#f3e5f5', minWidth:0, paddingHorizontal:14}]}
-                onPress={()=>{ setActiveProdPhase('stavera'); prodScrollRef.current?.scrollTo({x: phaseKeys.indexOf('stavera') * pageWidth, animated:true}); }}>
-                <Text style={[styles.phaseTabTxt, activeProdPhase==='stavera'&&styles.phaseTabTxtActive]}>ΣΤΑΘΕΡΑ</Text>
-                <Text style={styles.phaseTabCount}>{prodOrders.filter(o=>o.stavera&&o.stavera.some(s=>s&&s.dim)).length + specialOrders.filter(o=>o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone).length}</Text>
-              </TouchableOpacity>
-            </ScrollView>
 
-              {/* ΚΟΥΜΠΙΑ ΕΠΙΛΟΓΗΣ + ΕΚΤΥΠΩΣΗΣ */}
-            {activeProdPhase!=='stavera'&&<View style={{flexDirection:'row', alignItems:'center', gap:6, marginBottom:4, flexWrap:'wrap'}}>
-              {/* Helper: φιλτράρει παραγγελίες για την τρέχουσα φάση */}
-              {(()=>{
-                const getPhaseOrders = () => prodOrders.filter(o => {
-                  const hasCoatings = !!(o.coatings && o.coatings.length > 0);
-                  if (activeProdPhase === 'epend') return hasCoatings;
-                  return o.phases?.[activeProdPhase]?.active;
-                });
-                const phaseOrders = getPhaseOrders();
-                const allSelected = phaseOrders.length > 0 && phaseOrders.every(o => printSelected[o.id]);
-                return (<>
-              {/* ΕΠΙΛΟΓΗ ΟΛΩΝ */}
-              <TouchableOpacity
-                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:8, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
-                onPress={()=>{
-                  const newSelected = {...printSelected};
-                  phaseOrders.forEach(o=>{ newSelected[o.id] = !allSelected; });
-                  setPrintSelected(newSelected);
-                }}>
-                <View style={{width:18,height:18,borderRadius:4,borderWidth:2,borderColor:'#555',backgroundColor: allSelected?'#555':'white', alignItems:'center',justifyContent:'center'}}>
-                  {allSelected?<Text style={{color:'white',fontSize:11,fontWeight:'bold'}}>✓</Text>:null}
-                </View>
-                <Text style={{fontSize:11,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
-              </TouchableOpacity>
-
-              {/* ΕΠΙΛΟΓΗ ΜΗ ΕΚΤΥΠΩΜΕΝΩΝ */}
-              <TouchableOpacity
-                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:8, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
-                onPress={()=>{
-                  const newSelected = {...printSelected};
-                  phaseOrders.forEach(o=>{
-                    // Για epend: printed αν υπάρχει phases.epend.printed=true
-                    const isPrinted = !!(o.phases?.[activeProdPhase]?.printed);
-                    newSelected[o.id] = !isPrinted;
-                  });
-                  setPrintSelected(newSelected);
-                }}>
-                <Text style={{fontSize:11,fontWeight:'bold',color:'#856404'}}>🖨️ ΜΗ ΕΚΤΥΠ.</Text>
-              </TouchableOpacity>
-              </>);
-              })()}
-
-              {/* ΕΚΤΥΠΩΣΗ */}
-              <TouchableOpacity style={[styles.printBtn,{flex:1,marginBottom:0}]} onPress={()=>handlePrint(activeProdPhase)}>
+    // Δεξιά μπάρα: controls για την τρέχουσα φάση
+    const renderRightBar = () => {
+      // Κουμπιά ΟΛΩΝ / ΜΗ ΕΚΤΥΠ. + ΕΚΤΥΠΩΣΗ για κανονικές φάσεις
+      const renderPrintControls = () => {
+        if (activeProdPhase === 'stavera') {
+          return (
+            <View style={{gap:6}}>
+              <TouchableOpacity style={[styles.printBtn,{marginBottom:0, paddingVertical:15}]} onPress={handleStaveraPrint}>
                 <Text style={styles.printBtnTxt}>🖨️ ΕΚΤΥΠΩΣΗ ΕΠΙΛΕΓΜΕΝΩΝ</Text>
               </TouchableOpacity>
-            </View>}
-
-            {/* PAGED SCROLL — ένα page ανά φάση + ΣΤΑΘΕΡΑ */}
-            <ScrollView
-              ref={prodScrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onLayout={e=>{ setPageWidth(e.nativeEvent.layout.width); }}
-              onMomentumScrollEnd={e=>{
-                const page = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
-                if (page >= 0 && page < phaseKeys.length) setActiveProdPhase(phaseKeys[page]);
-              }}
-              scrollEventThrottle={16}>
-              {PHASES.map(ph=>(
-                <View key={ph.key} style={{width:pageWidth}}>
-                  {prodOrders.length===0?(
-                    <Text style={{textAlign:'center',color:'#999',padding:20}}>Καμία παραγγελία στην παραγωγή</Text>
-                  ):(
-                    prodOrders.map(o=>renderProdPhaseCard(o, ph.key))
-                  )}
+              <TouchableOpacity
+                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:15, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
+                onPress={()=>{
+                  const allSelected = staveraOrders.every(o=>printSelected[o.id]);
+                  const newSelected = {...printSelected};
+                  staveraOrders.forEach(o=>{ newSelected[o.id] = !allSelected; });
+                  setPrintSelected(newSelected);
+                }}>
+                <View style={{width:18,height:18,borderRadius:4,borderWidth:2,borderColor:'#555',backgroundColor:
+                  staveraOrders.length>0&&staveraOrders.every(o=>printSelected[o.id])?'#555':'white',alignItems:'center',justifyContent:'center'}}>
+                  {staveraOrders.length>0&&staveraOrders.every(o=>printSelected[o.id])&&<Text style={{color:'white',fontSize:15,fontWeight:'bold'}}>✓</Text>}
                 </View>
-              ))}
-              {/* ΣΤΑΘΕΡΑ — τελευταίο page */}
-              <View style={{width:pageWidth}}>
-                {(()=>{
-                  const staveraOrders = [
-                    ...prodOrders.filter(o=>o.stavera&&o.stavera.some(s=>s&&s.dim)),
-                    ...specialOrders.filter(o=>o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)
-                  ];
-                  const handleStaveraPrint = () => {
-                    const selected = Object.keys(printSelected).filter(id=>printSelected[id]);
-                    // Φιλτράρω μόνο παραγγελίες που ανήκουν στο ΣΤΑΘΕΡΑ tab
-                    const staveraIds = staveraOrders.map(o=>String(o.id));
-                    const staveraSelected = selected.filter(id=>staveraIds.includes(String(id)));
-                    if (staveraSelected.length===0) {
-                      // Αν δεν έχει επιλεγεί τίποτα από ΣΤΑΘΕΡΑ → εκτύπωσε όλες
-                      if (staveraOrders.length===0) return Alert.alert("Προσοχή","Δεν υπάρχουν παραγγελίες με σταθερά.");
-                      setPrintPreview({ visible:true, phaseKey:'stavera', orders:staveraOrders, copies:1 });
-                      return;
-                    }
-                    const matchedOrders = staveraOrders.filter(o=>staveraSelected.includes(String(o.id)));
-                    setPrintPreview({ visible:true, phaseKey:'stavera', orders:matchedOrders, copies:1 });
-                  };
-                  return (
-                    <View style={{marginTop:6}}>
-                      {/* PRINT BAR για ΣΤΑΘΕΡΑ */}
-                      <View style={{flexDirection:'row', alignItems:'center', gap:6, marginBottom:8, flexWrap:'wrap'}}>
-                        <TouchableOpacity
-                          style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:8, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
-                          onPress={()=>{
-                            const allSelected = staveraOrders.every(o=>printSelected[o.id]);
-                            const newSelected = {...printSelected};
-                            staveraOrders.forEach(o=>{ newSelected[o.id] = !allSelected; });
-                            setPrintSelected(newSelected);
-                          }}>
-                          <View style={{width:18,height:18,borderRadius:4,borderWidth:2,borderColor:'#555',backgroundColor:
-                            staveraOrders.length>0&&staveraOrders.every(o=>printSelected[o.id])?'#555':'white',alignItems:'center',justifyContent:'center'}}>
-                            {staveraOrders.length>0&&staveraOrders.every(o=>printSelected[o.id])&&<Text style={{color:'white',fontSize:11,fontWeight:'bold'}}>✓</Text>}
-                          </View>
-                          <Text style={{fontSize:11,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:8, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
-                          onPress={()=>{
-                            const newSelected = {...printSelected};
-                            staveraOrders.forEach(o=>{ newSelected[o.id] = !o.staveraPrinted; });
-                            setPrintSelected(newSelected);
-                          }}>
-                          <Text style={{fontSize:11,fontWeight:'bold',color:'#856404'}}>🖨️ ΜΗ ΕΚΤΥΠ.</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.printBtn,{flex:1,marginBottom:0}]}
-                          onPress={handleStaveraPrint}>
-                          <Text style={styles.printBtnTxt}>🖨️ ΕΚΤΥΠΩΣΗ ΕΠΙΛΕΓΜΕΝΩΝ</Text>
-                        </TouchableOpacity>
-                      </View>
-                      {staveraOrders.length===0?(
-                        <Text style={{textAlign:'center',color:'#999',padding:16}}>Δεν υπάρχουν παραγγελίες με σταθερά</Text>
-                      ):staveraOrders.map(o=>{
-                        const isSelected = !!printSelected[o.id];
-                        return (
-                        <View key={o.id} style={{backgroundColor:o.staveraDone?'#e8f5e9':o.staveraGiven?'#ede7f6':'#f3e5f5', borderRadius:8, padding:10, marginBottom:6, borderLeftWidth:4, borderLeftColor:o.staveraDone?'#00C851':o.staveraGiven?'#4a148c':'#7b1fa2', elevation:1, flexDirection:'row', alignItems:'flex-start'}}>
-                          <TouchableOpacity style={{marginRight:10, marginTop:2}} onPress={()=>setPrintSelected(p=>({...p,[o.id]:!p[o.id]}))}>
-                            <View style={{width:28,height:28,borderRadius:6,borderWidth:2,borderColor:isSelected?'#1565c0':'#7b1fa2',backgroundColor:isSelected?'#1565c0':'white',alignItems:'center',justifyContent:'center'}}>
-                              {isSelected&&<Text style={{color:'white',fontWeight:'bold',fontSize:14}}>✓</Text>}
-                            </View>
-                          </TouchableOpacity>
-                          <View style={{flex:1}}>
-                            <Text style={{fontWeight:'bold', fontSize:13, marginBottom:4}}>#{o.orderNo} {o.customer?`— ${o.customer}`:''}</Text>
-                            <Text style={{fontSize:12, color:'#555', marginBottom:6}}>{o.h}x{o.w} | {o.side}</Text>
-                            {(o.stavera||[]).map((s,idx)=>(
-                              <View key={idx} style={{backgroundColor:'white', borderRadius:6, padding:8, marginBottom:4, borderLeftWidth:2, borderLeftColor:'#ce93d8'}}>
-                                <Text style={{fontWeight:'bold', fontSize:13, color:'#4a148c'}}>📐 {s.dim||'—'}</Text>
-                                {s.note?<Text style={{fontSize:12, color:'#555', marginTop:2}}>{s.note}</Text>:null}
-                              </View>
-                            ))}
-                            {o.staveraDone&&<Text style={{fontSize:11,color:'#00796B',fontWeight:'bold',marginTop:2}}>✅ Ολοκληρώθηκαν</Text>}
-                          </View>
-                          <View style={{justifyContent:'space-between', gap:6, marginLeft:8, paddingVertical:2}}>
-                            <TouchableOpacity
-                              style={[styles.doneBtn, o.staveraDone&&styles.doneBtnActive]}
-                              onPress={async()=>{
-                                const newDone = !o.staveraDone;
-                                const upd={...o, staveraDone:newDone, ...(newDone && {staveraPendingAtReady:false})};
-                                setSpecialOrders(specialOrders.map(x=>x.id===o.id?upd:x));
-                                await syncToCloud(upd);
-                              }}>
-                              <Text style={styles.doneBtnTxt}>{o.staveraDone?'↩️ UNDO':'✓ DONE'}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={{backgroundColor:'#ff4444', paddingHorizontal:8, paddingVertical:3, borderRadius:5, alignSelf:'stretch', alignItems:'center'}}
-                              onPress={()=>Alert.alert("⚠️ Διαγραφή",`Διαγραφή παραγγελίας #${o.orderNo};`,[
-                                {text:"ΑΚΥΡΟ",style:"cancel"},
-                                {text:"ΔΙΑΓΡΑΦΗ",style:"destructive",onPress:async()=>{
-                                  setSpecialOrders(specialOrders.filter(x=>x.id!==o.id));
-                                  await deleteFromCloud(o.id);
-                                }}
-                              ])}>
-                              <Text style={{color:'white', fontSize:10, fontWeight:'bold'}}>✕ ΔΙΑ/ΦΗ</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                        );
-                      })}
-                    </View>
-                  );
-                })()}
+                <Text style={{fontSize:15,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:15, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
+                onPress={()=>{
+                  const newSelected = {...printSelected};
+                  staveraOrders.forEach(o=>{ newSelected[o.id] = !o.staveraPrinted; });
+                  setPrintSelected(newSelected);
+                }}>
+                <Text style={{fontSize:15,fontWeight:'bold',color:'#856404'}}>🖨️ ΜΗ ΕΚΤΥΠ.</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        }
+        // Κανονικές φάσεις
+        const getPhaseOrders = () => prodOrders.filter(o => {
+          const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+          if (activeProdPhase === 'epend') return hasCoatings;
+          return o.phases?.[activeProdPhase]?.active;
+        });
+        const phaseOrders = getPhaseOrders();
+        const allSelected = phaseOrders.length > 0 && phaseOrders.every(o => printSelected[o.id]);
+        return (
+          <View style={{gap:6}}>
+            <TouchableOpacity style={[styles.printBtn,{marginBottom:0, paddingVertical:15}]} onPress={()=>handlePrint(activeProdPhase)}>
+              <Text style={styles.printBtnTxt}>🖨️ ΕΚΤΥΠΩΣΗ ΕΠΙΛΕΓΜΕΝΩΝ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:15, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
+              onPress={()=>{
+                const newSelected = {...printSelected};
+                phaseOrders.forEach(o=>{ newSelected[o.id] = !allSelected; });
+                setPrintSelected(newSelected);
+              }}>
+              <View style={{width:18,height:18,borderRadius:4,borderWidth:2,borderColor:'#555',backgroundColor: allSelected?'#555':'white', alignItems:'center',justifyContent:'center'}}>
+                {allSelected?<Text style={{color:'white',fontSize:15,fontWeight:'bold'}}>✓</Text>:null}
               </View>
-            </ScrollView>
+              <Text style={{fontSize:15,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:15, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
+              onPress={()=>{
+                const newSelected = {...printSelected};
+                phaseOrders.forEach(o=>{
+                  const isPrinted = !!(o.phases?.[activeProdPhase]?.printed);
+                  newSelected[o.id] = !isPrinted;
+                });
+                setPrintSelected(newSelected);
+              }}>
+              <Text style={{fontSize:15,fontWeight:'bold',color:'#856404'}}>🖨️ ΜΗ ΕΚΤΥΠ.</Text>
+            </TouchableOpacity>
           </View>
-        )}
+        );
+      };
+
+      return (
+        <View style={{width:290, backgroundColor:'#f9f9f9', borderLeftWidth:1, borderLeftColor:'#e0e0e0', display:'flex', flexDirection:'column'}}>
+          {/* (1) Κίτρινη γραμμή */}
+          <View style={[styles.listHeader,{backgroundColor:'#ffbb33', flexDirection:'row', alignItems:'center', justifyContent:'space-between', margin:0, borderRadius:0, marginTop:0}]}>
+            <Text style={[styles.listHeaderText,{fontSize:14}]}>⚙️ ΠΑΡΑΓΩΓΗ ({maxPhaseCount})</Text>
+            <View style={{flexDirection:'row', gap:4}}>
+              <TouchableOpacity
+                style={{backgroundColor:'#1a1a2e', paddingHorizontal:7, paddingVertical:4, borderRadius:12}}
+                onPress={async()=>{
+                  const today = new Date();
+                  const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+                  const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
+                  const sorted = [...prodOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+                  const allCopies = getCopies(sorted, phaseLabel, dateStr);
+                  const html = buildPrintHTML([allCopies[0]], 'laser');
+                  await printHTML(html, `VAICON — ${phaseLabel}`);
+                }}>
+                <Text style={{color:'#FFD600', fontSize:14, fontWeight:'bold'}}>🖨️ ΠΡΟΓΡ.</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{backgroundColor:'white', paddingHorizontal:7, paddingVertical:4, borderRadius:12}}
+                onPress={()=>handlePrintProdStatus([...prodOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)))}>
+                <Text style={{color:'#8B0000', fontSize:14, fontWeight:'bold'}}>📋 ΚΑΤΑΣ.</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* (2) Καρτέλες φάσεων — κάθετη διάταξη */}
+          <View style={{paddingVertical:6, paddingHorizontal:6, gap:4, marginTop:8}}>
+            {PHASES.map(ph=>(
+              <TouchableOpacity key={ph.key} style={[styles.phaseTab, activeProdPhase===ph.key&&styles.phaseTabActive, {borderRadius:8, marginRight:0, flexDirection:'row', justifyContent:'space-between', alignItems:'center', minWidth:0, paddingVertical:15}]} onPress={()=>{
+                setActiveProdPhase(ph.key);
+                const idx = phaseKeys.indexOf(ph.key);
+                prodScrollRef.current?.scrollTo({x: idx * pageWidth, animated:true});
+              }}>
+                <Text style={[styles.phaseTabTxt, activeProdPhase===ph.key&&styles.phaseTabTxtActive]}>{ph.label}</Text>
+                <Text style={styles.phaseTabCount}>{(()=>{
+                  const activeOrders = prodOrders.filter(o => {
+                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                    if (ph.key === 'epend') return hasCoatings;
+                    if (o.phases?.[ph.key] !== undefined) return o.phases[ph.key].active;
+                    return true;
+                  });
+                  const total = activeOrders.length;
+                  const pending = activeOrders.filter(o => {
+                    const phase = o.phases?.[ph.key];
+                    if (ph.key === 'epend') {
+                      const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                      if (!phase || (!phase.active && hasCoatings)) return true;
+                      return !phase.done;
+                    }
+                    return !phase?.done;
+                  }).length;
+                  return `${pending} / ${total}`;
+                })()}</Text>
+              </TouchableOpacity>
+            ))}
+            {/* ΣΤΑΘΕΡΑ tab */}
+            <TouchableOpacity
+              style={[styles.phaseTab, activeProdPhase==='stavera'&&styles.phaseTabActive, {backgroundColor: activeProdPhase==='stavera'?'#7b1fa2':'#f3e5f5', borderRadius:8, marginRight:0, flexDirection:'row', justifyContent:'space-between', alignItems:'center', minWidth:0, paddingVertical:15}]}
+              onPress={()=>{ setActiveProdPhase('stavera'); prodScrollRef.current?.scrollTo({x: phaseKeys.indexOf('stavera') * pageWidth, animated:true}); }}>
+              <Text style={[styles.phaseTabTxt, activeProdPhase==='stavera'&&styles.phaseTabTxtActive]}>📐 ΣΤΑΘΕΡΑ</Text>
+              <Text style={styles.phaseTabCount}>{prodOrders.filter(o=>o.stavera&&o.stavera.some(s=>s&&s.dim)).length + specialOrders.filter(o=>o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone).length}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* (3) ΕΚΤΥΠΩΣΗ ΕΠΙΛΕΓΜΕΝΩΝ + ΟΛΩΝ/ΜΗ ΕΚΤΥΠ. */}
+          <View style={{padding:8, borderTopWidth:1, borderTopColor:'#e0e0e0'}}>
+            {renderPrintControls()}
+          </View>
+        </View>
+      );
+    };
+
+    return (
+      <View style={{flex:1, flexDirection:'row'}}>
+        {/* ΚΕΝΤΡΟ: Scrollable λίστα παραγγελιών */}
+        <ScrollView
+          style={{flex:1, backgroundColor:'#f9f9f9'}}
+          contentContainerStyle={{padding:8, paddingBottom:80}}>
+          {/* PAGED SCROLL — ένα page ανά φάση + ΣΤΑΘΕΡΑ */}
+          <ScrollView
+            ref={prodScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onLayout={e=>{ setPageWidth(e.nativeEvent.layout.width); }}
+            onMomentumScrollEnd={e=>{
+              const page = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+              if (page >= 0 && page < phaseKeys.length) setActiveProdPhase(phaseKeys[page]);
+            }}
+            scrollEventThrottle={16}>
+            {PHASES.map(ph=>(
+              <View key={ph.key} style={{width:pageWidth}}>
+                {prodOrders.length===0?(
+                  <Text style={{textAlign:'center',color:'#999',padding:20}}>Καμία παραγγελία στην παραγωγή</Text>
+                ):(
+                  prodOrders.map(o=>renderProdPhaseCard(o, ph.key))
+                )}
+              </View>
+            ))}
+            {/* ΣΤΑΘΕΡΑ — τελευταίο page */}
+            <View style={{width:pageWidth}}>
+              <View style={{marginTop:6}}>
+                {staveraOrders.length===0?(
+                  <Text style={{textAlign:'center',color:'#999',padding:16}}>Δεν υπάρχουν παραγγελίες με σταθερά</Text>
+                ):staveraOrders.map(o=>{
+                  const isSelected = !!printSelected[o.id];
+                  return (
+                  <View key={o.id} style={{backgroundColor:o.staveraDone?'#e8f5e9':o.staveraGiven?'#ede7f6':'#f3e5f5', borderRadius:8, padding:10, marginBottom:6, borderLeftWidth:4, borderLeftColor:o.staveraDone?'#00C851':o.staveraGiven?'#4a148c':'#7b1fa2', elevation:1, flexDirection:'row', alignItems:'flex-start'}}>
+                    <TouchableOpacity style={{marginRight:10, marginTop:2}} onPress={()=>setPrintSelected(p=>({...p,[o.id]:!p[o.id]}))}>
+                      <View style={{width:28,height:28,borderRadius:6,borderWidth:2,borderColor:isSelected?'#1565c0':'#7b1fa2',backgroundColor:isSelected?'#1565c0':'white',alignItems:'center',justifyContent:'center'}}>
+                        {isSelected&&<Text style={{color:'white',fontWeight:'bold',fontSize:14}}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                    <View style={{flex:1}}>
+                      <Text style={{fontWeight:'bold', fontSize:13, marginBottom:4}}>#{o.orderNo} {o.customer?`— ${o.customer}`:''}</Text>
+                      <Text style={{fontSize:12, color:'#555', marginBottom:6}}>{o.h}x{o.w} | {o.side}</Text>
+                      {(o.stavera||[]).map((s,idx)=>(
+                        <View key={idx} style={{backgroundColor:'white', borderRadius:6, padding:8, marginBottom:4, borderLeftWidth:2, borderLeftColor:'#ce93d8'}}>
+                          <Text style={{fontWeight:'bold', fontSize:13, color:'#4a148c'}}>📐 {s.dim||'—'}</Text>
+                          {s.note?<Text style={{fontSize:12, color:'#555', marginTop:2}}>{s.note}</Text>:null}
+                        </View>
+                      ))}
+                      {o.staveraDone&&<Text style={{fontSize:11,color:'#00796B',fontWeight:'bold',marginTop:2}}>✅ Ολοκληρώθηκαν</Text>}
+                    </View>
+                    <View style={{justifyContent:'space-between', gap:6, marginLeft:8, paddingVertical:2}}>
+                      <TouchableOpacity
+                        style={[styles.doneBtn, o.staveraDone&&styles.doneBtnActive]}
+                        onPress={async()=>{
+                          const newDone = !o.staveraDone;
+                          const upd={...o, staveraDone:newDone, ...(newDone && {staveraPendingAtReady:false})};
+                          setSpecialOrders(specialOrders.map(x=>x.id===o.id?upd:x));
+                          await syncToCloud(upd);
+                        }}>
+                        <Text style={styles.doneBtnTxt}>{o.staveraDone?'↩️ UNDO':'✓ DONE'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{backgroundColor:'#ff4444', paddingHorizontal:8, paddingVertical:3, borderRadius:5, alignSelf:'stretch', alignItems:'center'}}
+                        onPress={()=>Alert.alert("⚠️ Διαγραφή",`Διαγραφή παραγγελίας #${o.orderNo};`,[
+                          {text:"ΑΚΥΡΟ",style:"cancel"},
+                          {text:"ΔΙΑΓΡΑΦΗ",style:"destructive",onPress:async()=>{
+                            setSpecialOrders(specialOrders.filter(x=>x.id!==o.id));
+                            await deleteFromCloud(o.id);
+                          }}
+                        ])}>
+                        <Text style={{color:'white', fontSize:10, fontWeight:'bold'}}>✕ ΔΙΑ/ΦΗ</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
+        </ScrollView>
+
+        {/* ΔΕΞΙΑ: Σταθερή μπάρα controls */}
+        {renderRightBar()}
       </View>
     );
   };
@@ -2759,7 +2783,66 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             </TouchableOpacity>
           ))}
         </View>
-        {/* CONTENT 80% */}
+        {/* CONTENT 80% — ΠΑΡΑΓΩΓΗ και ΚΑΤΑΧΩΡΗΜΕΝΕΣ βγαίνουν εκτός ScrollView για flex:1 */}
+        {activeSection==='prod' ? (
+          <View style={{flex:1}}>
+            {renderProdSection()}
+          </View>
+        ) : activeSection==='pending' ? (
+          <View style={{flex:1, flexDirection:'row'}}>
+            {/* ΑΡΙΣΤΕΡΑ: Scrollable λίστα καρτών */}
+            <ScrollView style={{flex:1, padding:10}} keyboardShouldPersistTaps="handled">
+              <View style={{paddingBottom:80}}>
+                {[...specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone))].sort((a,b)=>
+                  pendingSort==='date' ? (b.createdAt||0)-(a.createdAt||0) : (parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)
+                ).map(o=>renderOrderCard(o, false, true))}
+              </View>
+            </ScrollView>
+            {/* ΔΕΞΙΑ: Σταθερή μπάρα */}
+            <View style={{width:280, backgroundColor:'#f9f9f9', borderLeftWidth:1, borderLeftColor:'#e0e0e0', padding:12, gap:32}}>
+              {/* Τίτλος + αριθμός */}
+              <View style={{backgroundColor:'#ffbb33', borderRadius:8, padding:14}}>
+                <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:18}}>● ΚΑΤΑΧΩΡΗΜΕΝΕΣ</Text>
+                <Text style={{color:'#1a1a1a', fontSize:16, marginTop:4}}>
+                  {specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)).length} παραγγελίες
+                </Text>
+              </View>
+              {/* Ταξινόμηση */}
+              <View style={{gap:6}}>
+                <Text style={{fontSize:13, fontWeight:'bold', color:'#555', letterSpacing:1}}>ΤΑΞΙΝΟΜΗΣΗ</Text>
+                <TouchableOpacity
+                  style={{backgroundColor: pendingSort==='no'?'#ff4444':'#e0e0e0', borderRadius:8, padding:11, alignItems:'center'}}
+                  onPress={()=>setPendingSort('no')}>
+                  <Text style={{color: pendingSort==='no'?'white':'#555', fontWeight:'bold', fontSize:16}}>🔢 ΑΡ. ΠΑΡΑΓΓΕΛΙΑΣ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{backgroundColor: pendingSort==='date'?'#ff4444':'#e0e0e0', borderRadius:8, padding:11, alignItems:'center'}}
+                  onPress={()=>setPendingSort('date')}>
+                  <Text style={{color: pendingSort==='date'?'white':'#555', fontWeight:'bold', fontSize:16}}>🕐 ΝΕΟΤΕΡΕΣ</Text>
+                </TouchableOpacity>
+              </View>
+              {/* Εκτύπωση */}
+              <View style={{gap:6}}>
+                <Text style={{fontSize:13, fontWeight:'bold', color:'#555', letterSpacing:1}}>ΕΚΤΥΠΩΣΗ</Text>
+                <TouchableOpacity
+                  style={{backgroundColor:'#ff4444', borderRadius:8, padding:11, alignItems:'center'}}
+                  onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'), 'ΕΚΚΡΕΜΕΙΣ')}>
+                  <Text style={{color:'white', fontWeight:'bold', fontSize:16}}>🖨️ ΕΚΚΡΕΜΕΙΣ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{backgroundColor:'#2e7d32', borderRadius:8, padding:11, alignItems:'center'}}
+                  onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PROD'), 'ΠΑΡΑΓΩΓΗ')}>
+                  <Text style={{color:'white', fontWeight:'bold', fontSize:16}}>🖨️ ΠΑΡΑΓΩΓΗ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{backgroundColor:'#1a1a1a', borderRadius:8, padding:11, alignItems:'center'}}
+                  onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)), 'ΟΛΕΣ')}>
+                  <Text style={{color:'white', fontWeight:'bold', fontSize:16}}>🖨️ ΟΛΕΣ</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        ) : (
         <ScrollView style={{flex:1, padding:10}} keyboardShouldPersistTaps="handled">
         <View style={{paddingBottom:80}}>
           {activeSection==='form'&&(<>
@@ -3149,9 +3232,6 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             </View>
           )}
 
-          {/* ΠΑΡΑΓΩΓΗ */}
-          {activeSection==='prod'&&renderProdSection()}
-
           {/* ΕΤΟΙΜΑ */}
           {activeSection==='ready'&&(
             <View>
@@ -3182,6 +3262,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
         </View>
         </ScrollView>
+        )}
       </View>
     </View>
   );
@@ -3310,11 +3391,11 @@ const styles = StyleSheet.create({
   phaseTabs: { marginBottom:10 },
   phaseTab: { paddingHorizontal:14, paddingVertical:10, backgroundColor:'#e0e0e0', borderRadius:20, marginRight:8, alignItems:'center', minWidth:80 },
   phaseTabActive: { backgroundColor:'#8B0000' },
-  phaseTabTxt: { fontSize:11, fontWeight:'bold', color:'#555', textAlign:'center' },
+  phaseTabTxt: { fontSize:15, fontWeight:'bold', color:'#555', textAlign:'center' },
   phaseTabTxtActive: { color:'white' },
-  phaseTabCount: { fontSize:10, color:'#888', marginTop:2 },
+  phaseTabCount: { fontSize:14, color:'#888', marginTop:2 },
   printBtn: { backgroundColor:'#1a1a1a', padding:12, borderRadius:8, alignItems:'center', marginBottom:10 },
-  printBtnTxt: { color:'white', fontWeight:'bold', fontSize:13 },
+  printBtnTxt: { color:'white', fontWeight:'bold', fontSize:18 },
   phaseCard: { backgroundColor:'#fff', borderRadius:8, marginBottom:6, borderLeftWidth:5, borderLeftColor:'#ffbb33', flexDirection:'row', alignItems:'center', padding:10, elevation:2 },
   phaseCardDone: { borderLeftColor:'#00C851', opacity:0.7 },
   printCheck: { marginRight:4 },
