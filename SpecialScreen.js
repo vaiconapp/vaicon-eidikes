@@ -164,6 +164,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [showHardwarePicker, setShowHardwarePicker] = useState(false);
   const [showLockPicker, setShowLockPicker] = useState(false);
   const [showCoatingsPicker, setShowCoatingsPicker] = useState(false);
+  const [lockEditText, setLockEditText] = useState('');
   const [dupModal, setDupModal] = useState({ visible:false, base:'', suggested:'', onUse:null, onKeep:null, onCancel:null });
   const [confirmModal, setConfirmModal] = useState({ visible:false, title:'', message:'', confirmText:'', onConfirm:null });
   const [archiveDeleteModal, setArchiveDeleteModal] = useState({ visible:false, orderId:null, pwd:'', error:false });
@@ -2378,7 +2379,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       {/* MODAL ΚΛΕΙΔΑΡΙΕΣ */}
       <Modal visible={showLockPicker} transparent animationType="slide" onRequestClose={()=>setShowLockPicker(false)}>
         <View style={{flex:1,backgroundColor:'rgba(0,0,0,0.5)',justifyContent:'flex-end'}}>
-          <View style={{backgroundColor:'#fff',borderTopLeftRadius:16,borderTopRightRadius:16,maxHeight:'60%'}}>
+          <View style={{backgroundColor:'#fff',borderTopLeftRadius:16,borderTopRightRadius:16,maxHeight:'70%'}}>
             <View style={{backgroundColor:'#8B0000',padding:16,borderTopLeftRadius:16,borderTopRightRadius:16,flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
               <Text style={{color:'white',fontWeight:'bold',fontSize:16}}>🔒 Κλειδαριά</Text>
               <TouchableOpacity onPress={()=>setShowLockPicker(false)}>
@@ -2388,24 +2389,43 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <ScrollView>
               <TouchableOpacity
                 style={{padding:16,borderBottomWidth:1,borderBottomColor:'#eee',flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}
-                onPress={()=>{setCustomForm({...customForm,lock:''});setShowLockPicker(false);}}>
+                onPress={()=>{setLockEditText('');setCustomForm({...customForm,lock:''});setShowLockPicker(false);}}>
                 <Text style={{fontSize:15,color:'#888'}}>— Χωρίς κλειδαριά</Text>
                 {!customForm.lock&&<Text style={{color:'#00C851',fontSize:18}}>✓</Text>}
               </TouchableOpacity>
               {(locks||[]).map(l=>(
                 <TouchableOpacity key={l.id}
                   style={{padding:16,borderBottomWidth:1,borderBottomColor:'#eee',flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}
-                  onPress={()=>{setCustomForm({...customForm,lock:l.name+(l.type?' ('+l.type+')':'')});setShowLockPicker(false);}}>
+                  onPress={()=>{ const base = l.name+(l.type?' ('+l.type+')':''); setLockEditText(base); setCustomForm({...customForm,lock:base}); }}>
                   <View>
                     <Text style={{fontSize:15,color:'#000',fontWeight:'600'}}>{l.name}</Text>
                     {l.type?<Text style={{fontSize:12,color:'#666'}}>{l.type}</Text>:null}
                   </View>
-                  {customForm.lock===l.name+(l.type?' ('+l.type+')':'')&&<Text style={{color:'#00C851',fontSize:18}}>✓</Text>}
+                  {customForm.lock.startsWith(l.name+(l.type?' ('+l.type+')':''))&&<Text style={{color:'#00C851',fontSize:18}}>✓</Text>}
                 </TouchableOpacity>
               ))}
               {(locks||[]).length===0&&<Text style={{textAlign:'center',color:'#aaa',padding:24}}>Δεν υπάρχουν καταχωρημένες κλειδαριές.</Text>}
             </ScrollView>
-            <View style={{height:20}}/>
+            {/* Πεδίο επεξεργασίας — εμφανίζεται μόνο αν έχει επιλεγεί κλειδαριά */}
+            {lockEditText!==''&&(
+              <View style={{padding:12,borderTopWidth:1,borderTopColor:'#eee',backgroundColor:'#f9f9f9'}}>
+                <Text style={{fontSize:11,fontWeight:'bold',color:'#555',marginBottom:6,letterSpacing:0.5}}>✏️ ΕΠΕΞΕΡΓΑΣΙΑ / ΠΡΟΣΘΗΚΗ ΚΕΙΜΕΝΟΥ</Text>
+                <TextInput
+                  autoFocus
+                  style={{backgroundColor:'#fff',borderWidth:2,borderColor:'#8B0000',borderRadius:8,padding:10,fontSize:14,color:'#1a1a1a',marginBottom:8}}
+                  value={lockEditText}
+                  onChangeText={v=>{ setLockEditText(v); setCustomForm(f=>({...f,lock:v})); }}
+                  returnKeyType="done"
+                  onSubmitEditing={()=>setShowLockPicker(false)}
+                />
+                <TouchableOpacity
+                  style={{backgroundColor:'#8B0000',padding:12,borderRadius:8,alignItems:'center'}}
+                  onPress={()=>setShowLockPicker(false)}>
+                  <Text style={{color:'white',fontWeight:'bold',fontSize:15}}>✓ ΟΚ</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={{height:lockEditText===''?20:0}}/>
           </View>
         </View>
       </Modal>
@@ -2424,7 +2444,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               {coatings.length===0 && (
                 <Text style={{padding:20,color:'#aaa',textAlign:'center'}}>Δεν υπάρχουν επενδύσεις. Προσθέστε από το μενού ☰.</Text>
               )}
-              {coatings.map(c=>{
+              {[...coatings].sort((a,b)=>{
+                const nameA = (a.name||'').toUpperCase();
+                const nameB = (b.name||'').toUpperCase();
+                const groupOf = n => n.includes('ΕΞΩ') ? 0 : (n.includes('ΜΕΣΑ')||n.includes('ΕΣΩΤ')) ? 1 : 2;
+                const gA = groupOf(nameA), gB = groupOf(nameB);
+                if (gA !== gB) return gA - gB;
+                return (a.name||'').localeCompare(b.name||'', 'el');
+              }).map(c=>{
                 const selected = (customForm.coatings||[]).includes(c.name);
                 const n = c.name?.toLowerCase()||'';
                 const bg = n.includes('μέσα')||n.includes('μεσα') ? '#E8F4FD' : n.includes('έξω')||n.includes('εξω') ? '#FFF3E0' : '#fff';
@@ -3148,10 +3175,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   </View>
                   <View style={{flex:2}}>
                     <Text style={vstyles.fieldLabelDark}>Κλειδαριά</Text>
-                    <TouchableOpacity style={[vstyles.selectBtn,{marginTop:2,marginBottom:6}]} onPress={()=>{blurAll();setShowLockPicker(true);}}>
-                      <Text style={{fontSize:13,color:customForm.lock?'#1a1a1a':'#aaa',flex:1}} numberOfLines={1}>{customForm.lock||'Επιλέξτε...'}</Text>
-                      <Text style={{color:'#aaa',fontSize:11}}>▼</Text>
-                    </TouchableOpacity>
+                    <View style={[vstyles.selectBtn,{marginTop:2,marginBottom:6,paddingHorizontal:0,paddingVertical:0}]}>
+                      <TextInput
+                        style={{flex:1,fontSize:13,color:'#1a1a1a',paddingHorizontal:8,paddingVertical:7,minHeight:36}}
+                        placeholder="Επιλέξτε ή γράψτε..."
+                        placeholderTextColor="#aaa"
+                        value={customForm.lock||''}
+                        onChangeText={v=>setCustomForm({...customForm,lock:v})}
+                        returnKeyType="done"
+                      />
+                      <TouchableOpacity style={{paddingHorizontal:8,paddingVertical:7,justifyContent:'center'}} onPress={()=>{blurAll();setLockEditText(customForm.lock||'');setShowLockPicker(true);}}>
+                        <Text style={{color:'#aaa',fontSize:11}}>▼</Text>
+                      </TouchableOpacity>
+                    </View>
                     <Text style={vstyles.fieldLabelDark}>Τζάμι</Text>
                     <View style={{flexDirection:'row', gap:4, marginTop:2}}>
                       <TextInput ref={glassRef} style={[vstyles.staveraCell,{width:90,textAlign:'center',fontSize:13,fontWeight:'700',minHeight:36}]} placeholder="Υ × Π" keyboardType="numeric" value={customForm.glassDim} selectTextOnFocus onChangeText={v=>setCustomForm({...customForm,glassDim:v})} onSubmitEditing={handleGlassEnter} blurOnSubmit={false} returnKeyType="next"/>
