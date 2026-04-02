@@ -109,8 +109,8 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
       if (isNumeric) {
         return (c.phone || '').startsWith(search);
       } else {
-        const nameWords = (c.name || '').toLowerCase().split(' ');
-        const identWords = (c.identifier || '').toLowerCase().split(' ');
+        const nameWords = (c.name || '').toLowerCase().split(' ').map(w => w.replace(/[()]/g, ''));
+        const identWords = (c.identifier || '').toLowerCase().split(' ').map(w => w.replace(/[()]/g, ''));
         return (
           nameWords.some(w => w.startsWith(q)) ||
           identWords.some(w => w.startsWith(q))
