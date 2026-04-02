@@ -101,11 +101,23 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
     await deleteFromCloud(id);
   };
 
-  const filtered = customers.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone?.includes(search) ||
-    c.identifier?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = customers
+    .filter(c => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      const isNumeric = /^\d+$/.test(search);
+      if (isNumeric) {
+        return (c.phone || '').startsWith(search);
+      } else {
+        const nameWords = (c.name || '').toLowerCase().split(' ');
+        const identWords = (c.identifier || '').toLowerCase().split(' ');
+        return (
+          nameWords.some(w => w.startsWith(q)) ||
+          identWords.some(w => w.startsWith(q))
+        );
+      }
+    })
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'el'));
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
