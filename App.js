@@ -272,8 +272,8 @@ export default function App() {
           setCustomers={setCustomers}
           customOrders={[]}
           allOrders={[...specialOrders, ...soldSpecialOrders]}
-          setCustomOrders={() => {}}
-          setSoldOrders={() => {}}
+          setSpecialOrders={setSpecialOrders}
+          setSoldSpecialOrders={setSoldSpecialOrders}
           specialOrders={[...specialOrders, ...soldSpecialOrders]}
           onClose={() => { setShowCustomers(false); setPendingCustomer(null); setPendingCustomerCallback(null); }}
           prefillName={pendingCustomer}

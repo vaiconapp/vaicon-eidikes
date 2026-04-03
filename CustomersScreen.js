@@ -62,7 +62,7 @@ const fmtDate = (ts) => {
 
 const INIT = { name: '', phone: '', identifier: '' };
 
-export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setCustomOrders, setSoldOrders, specialOrders=[] }) {
+export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[] }) {
   const [form, setForm] = useState(prefillName ? { name: prefillName, phone: '', identifier: '' } : INIT);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
@@ -97,24 +97,30 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
   const saveCustomer = async () => {
     if (!form.name.trim()) return Alert.alert("Προσοχή", "Βάλτε Όνομα Πελάτη.");
     if (editingId) {
-      const updated = { ...customers.find(c => c.id === editingId), ...form };
+      const prevCustomer = customers.find(c => c.id === editingId);
+      const oldName = prevCustomer?.name ?? '';
+      const updated = { ...prevCustomer, ...form };
       setCustomers(customers.map(c => c.id === editingId ? updated : c));
       await syncToCloud(updated);
 
-      // Ενημέρωση παραγγελιών που έχουν αυτόν τον πελάτη
-      if (setCustomOrders && setSoldOrders) {
+      // Ενημέρωση παραγγελιών ειδικών (Firebase: /special_orders/) + τοπική κατάσταση
+      if (setSpecialOrders && setSoldSpecialOrders) {
+        const matchesCustomer = (order) =>
+          order.customerId === editingId ||
+          (!order.customerId && oldName && order.customer === oldName);
+
         const updateOrder = async (order) => {
-          if (order.customerId !== editingId) return order;
-          const updatedOrder = { ...order, customer: updated.name };
-          // Ενημέρωση Firebase — όλες οι παραγγελίες στο /orders/
-          await fetch(`${FIREBASE_URL}/orders/${order.id}.json`, { method: 'PATCH', body: JSON.stringify({ customer: updated.name }) });
+          if (!matchesCustomer(order)) return order;
+          const patch = { customer: updated.name };
+          if (!order.customerId) patch.customerId = editingId;
+          const updatedOrder = { ...order, ...patch };
+          await fetch(`${FIREBASE_URL}/special_orders/${order.id}.json`, { method: 'PATCH', body: JSON.stringify(patch) });
           return updatedOrder;
         };
-        // Ενημέρωση ΚΑΙ active ΚΑΙ sold ΚΑΙ όλα τα orderType (ΕΙΔΙΚΗ/ΤΥΠΟΠΟΙΗΜΕΝΗ)
-        const updatedActive = await Promise.all(allOrders.filter(o=>o.status!=='SOLD').map(updateOrder));
-        const updatedSold = await Promise.all(allOrders.filter(o=>o.status==='SOLD').map(updateOrder));
-        setCustomOrders(updatedActive);
-        setSoldOrders(updatedSold);
+        const updatedActive = await Promise.all(allOrders.filter(o => o.status !== 'SOLD').map(updateOrder));
+        const updatedSold = await Promise.all(allOrders.filter(o => o.status === 'SOLD').map(updateOrder));
+        setSpecialOrders(updatedActive);
+        setSoldSpecialOrders(updatedSold);
       }
 
       Alert.alert("VAICON", `Ο πελάτης ενημερώθηκε!\n${form.name}`);
