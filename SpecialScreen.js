@@ -3078,6 +3078,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <Text style={{color:'#1a1a1a', fontSize:16, marginTop:4}}>
                   {specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)).length} παραγγελίες
                 </Text>
+                <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:18, marginTop:10}}>● ΑΝΑΜΟΝΗ</Text>
+                <Text style={{color:'#1a1a1a', fontSize:16, marginTop:4}}>
+                  {specialOrders.filter(o=>o.status==='PENDING').length} παραγγελίες
+                </Text>
               </View>
               {/* Ταξινόμηση */}
               <View style={{gap:6}}>
