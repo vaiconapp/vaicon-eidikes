@@ -192,6 +192,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [lastChangedIds, setLastChangedIds] = useState([]); // τελευταία παρτίδα αλλαγών
   const [prodBatch, setProdBatch] = useState([]); // καλάθι παραγγελιών για ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ
   const [programModal, setProgramModal] = useState({ visible: false, programNo: '' }); // modal αριθμού προγράμματος
+  const [printProgramModal, setPrintProgramModal] = useState({ visible: false, programs: [], selected: null, phaseKey: null }); // modal επιλογής programNo για εκτύπωση ΠΡΟΓΡΑΜΜΑ / φάσεων
   const panPosition = useRef({ x: 0, y: 0 });
   const [panPos, setPanPos] = useState({ x: 0, y: 0 });
   const isDragging = useRef(false);
@@ -2037,12 +2038,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const renderPrintControls = () => {
         if (activeProdPhase === 'stavera') {
           return (
-            <View style={{gap:6}}>
-              <TouchableOpacity style={[styles.printBtn,{marginBottom:0, paddingVertical:15}]} onPress={handleStaveraPrint}>
-                <Text style={styles.printBtnTxt}>🖨️ ΕΚΤΥΠΩΣΗ ΕΠΙΛΕΓΜΕΝΩΝ</Text>
+            <View style={{gap:4}}>
+              <TouchableOpacity style={[styles.printBtn,{marginBottom:0, paddingVertical:10}]} onPress={handleStaveraPrint}>
+                <Text style={styles.printBtnTxt}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:15, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
+                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
                 onPress={()=>{
                   const allSelected = staveraOrders.every(o=>printSelected[o.id]);
                   const newSelected = {...printSelected};
@@ -2056,7 +2057,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <Text style={{fontSize:15,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:15, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
+                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
                 onPress={()=>{
                   const newSelected = {...printSelected};
                   staveraOrders.forEach(o=>{ newSelected[o.id] = !o.staveraPrinted; });
@@ -2075,13 +2076,31 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         });
         const phaseOrders = getPhaseOrders();
         const allSelected = phaseOrders.length > 0 && phaseOrders.every(o => printSelected[o.id]);
+
+        // 3β: Έλεγχος unique programNo για φιλτράρισμα εκτύπωσης φάσης
+        const handlePhasePrint = () => {
+          const selected = Object.keys(printSelected).filter(id => printSelected[id]);
+          if (selected.length === 0) {
+            if (Platform.OS === 'web') window.alert('Επίλεξε τουλάχιστον μία παραγγελία.');
+            else Alert.alert("Προσοχή","Επίλεξε τουλάχιστον μία παραγγελία.");
+            return;
+          }
+          const selectedOrders = phaseOrders.filter(o => selected.includes(o.id));
+          const uniquePrograms = [...new Set(selectedOrders.filter(o=>o.programNo).map(o=>o.programNo))];
+          if (uniquePrograms.length >= 2) {
+            setPrintProgramModal({ visible: true, programs: uniquePrograms, selected: null, phaseKey: activeProdPhase });
+          } else {
+            handlePrint(activeProdPhase);
+          }
+        };
+
         return (
-          <View style={{gap:6}}>
-            <TouchableOpacity style={[styles.printBtn,{marginBottom:0, paddingVertical:15}]} onPress={()=>handlePrint(activeProdPhase)}>
-              <Text style={styles.printBtnTxt}>🖨️ ΕΚΤΥΠΩΣΗ ΕΠΙΛΕΓΜΕΝΩΝ</Text>
+          <View style={{gap:4}}>
+            <TouchableOpacity style={[styles.printBtn,{marginBottom:0, paddingVertical:10}]} onPress={handlePhasePrint}>
+              <Text style={styles.printBtnTxt}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:15, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
+              style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#f0f0f0', borderRadius:8, borderWidth:1, borderColor:'#ccc'}}
               onPress={()=>{
                 const newSelected = {...printSelected};
                 phaseOrders.forEach(o=>{ newSelected[o.id] = !allSelected; });
@@ -2093,7 +2112,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <Text style={{fontSize:15,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:15, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
+              style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
               onPress={()=>{
                 const newSelected = {...printSelected};
                 phaseOrders.forEach(o=>{
@@ -2103,6 +2122,65 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 setPrintSelected(newSelected);
               }}>
               <Text style={{fontSize:15,fontWeight:'bold',color:'#856404'}}>🖨️ ΜΗ ΕΚΤΥΠ.</Text>
+            </TouchableOpacity>
+            {/* 3α: Κουμπί ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ */}
+            <TouchableOpacity
+              style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#e8f0fe', borderRadius:8, borderWidth:1, borderColor:'#4a90d9'}}
+              onPress={async ()=>{
+                const pendingWithProgram = specialOrders.filter(o=>o.status==='PENDING' && o.programNo);
+                if (pendingWithProgram.length === 0) {
+                  if (Platform.OS==='web') window.alert('Δεν υπάρχουν καταχωρημένες παραγγελίες με αριθμό προγράμματος.');
+                  else Alert.alert("Προσοχή","Δεν υπάρχουν καταχωρημένες παραγγελίες με αριθμό προγράμματος.");
+                  return;
+                }
+                // Ομαδοποίηση κατά programNo
+                const groups = {};
+                pendingWithProgram.forEach(o => {
+                  if (!groups[o.programNo]) groups[o.programNo] = [];
+                  groups[o.programNo].push(o);
+                });
+                const today = new Date();
+                const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+                const tableCSS = `
+                  body{font-family:Arial,sans-serif;margin:8mm;color:#000;}
+                  h1{font-size:16px;font-weight:bold;margin-bottom:4px;}
+                  h2{font-size:12px;color:#555;margin-bottom:10px;}
+                  h3{font-size:14px;font-weight:bold;margin:14px 0 4px;background:#1a1a2e;color:#FFD600;padding:6px 10px;border-radius:4px;}
+                  table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;}
+                  th{padding:4px 6px;text-align:left;border:1px solid #000;font-weight:bold;background:#ddd;font-size:9px;}
+                  td{padding:4px 6px;border:1px solid #000;vertical-align:top;}
+                  tr:nth-child(even) td{background:#f5f5f5;}
+                  @media print{@page{size:A4 landscape;margin:8mm;}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+                `;
+                const groupsHTML = Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).map(([pNo, orders])=>{
+                  const sorted = [...orders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+                  const rows = sorted.map(o=>{
+                    const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
+                    const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? 'Δ/Θ' : 'Μ/Θ';
+                    return `<tr>
+                      <td style="font-weight:bold;font-size:14px">${o.orderNo||'—'}</td>
+                      <td>${o.customer||'—'}</td>
+                      <td style="font-weight:bold">${o.h||'—'} × ${o.w||'—'}</td>
+                      <td>${fora}</td>
+                      <td>${armorVal}</td>
+                      <td>${o.lock||'—'}</td>
+                      <td>${o.deliveryDate||'—'}</td>
+                      <td>${o.notes||''}</td>
+                    </tr>`;
+                  }).join('');
+                  return `<h3>📋 ΠΡΟΓΡΑΜΜΑ ${pNo} — ${sorted.length} παραγγελίες</h3>
+                    <table><thead><tr>
+                      <th>Νο</th><th>Πελάτης</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Κλειδαριά</th><th>Παράδοση</th><th>Παρατηρήσεις</th>
+                    </tr></thead><tbody>${rows}</tbody></table>`;
+                }).join('');
+                const html = `<html><head><meta charset="utf-8"><style>${tableCSS}</style></head><body>
+                  <h1>VAICON — ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ — ΚΑΤΑΧΩΡΗΜΕΝΕΣ</h1>
+                  <h2>📅 ${dateStr} | ${pendingWithProgram.length} παραγγελίες σε ${Object.keys(groups).length} προγράμματα</h2>
+                  ${groupsHTML}
+                </body></html>`;
+                await printHTML(html, 'VAICON — ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ');
+              }}>
+              <Text style={{fontSize:14,fontWeight:'bold',color:'#1a1a2e'}}>📋 ΑΡ. ΠΡΟΓΡΑΜΜΑΤΟΣ</Text>
             </TouchableOpacity>
           </View>
         );
@@ -2116,14 +2194,24 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <View style={{flexDirection:'row', gap:4}}>
               <TouchableOpacity
                 style={{backgroundColor:'#1a1a2e', paddingHorizontal:7, paddingVertical:4, borderRadius:12}}
-                onPress={async()=>{
-                  const today = new Date();
-                  const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
-                  const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
-                  const sorted = [...prodOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
-                  const allCopies = getCopies(sorted, phaseLabel, dateStr);
-                  const html = buildPrintHTML([allCopies[0]], 'laser');
-                  await printHTML(html, `VAICON — ${phaseLabel}`);
+                onPress={()=>{
+                  // Βρίσκω unique programNo από τις παραγγελίες PROD
+                  const uniquePrograms = [...new Set(prodOrders.filter(o=>o.programNo).map(o=>o.programNo))];
+                  if (uniquePrograms.length >= 2) {
+                    // Υπάρχουν πολλαπλά προγράμματα → άνοιγμα modal επιλογής
+                    setPrintProgramModal({ visible: true, programs: uniquePrograms, selected: null });
+                  } else {
+                    // Μόνο ένα ή κανένα programNo → εκτύπωση όλων κανονικά
+                    (async () => {
+                      const today = new Date();
+                      const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+                      const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
+                      const sorted = [...prodOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+                      const allCopies = getCopies(sorted, phaseLabel, dateStr);
+                      const html = buildPrintHTML([allCopies[0]], 'laser');
+                      await printHTML(html, `VAICON — ${phaseLabel}`);
+                    })();
+                  }
                 }}>
                 <Text style={{color:'#FFD600', fontSize:14, fontWeight:'bold'}}>🖨️ ΠΡΟΓΡ.</Text>
               </TouchableOpacity>
@@ -2417,6 +2505,48 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 setProdBatch([]);
               }}>
                 <Text style={{fontWeight:'bold', color:'white', fontSize:14}}>🚀 ΟΚ — ΕΝΑΡΞΗ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL ΕΠΙΛΟΓΗΣ ΠΡΟΓΡΑΜΜΑΤΟΣ ΓΙΑ ΕΚΤΥΠΩΣΗ */}
+      <Modal visible={printProgramModal.visible} transparent animationType="fade" onRequestClose={()=>setPrintProgramModal({visible:false,programs:[],selected:null})}>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.6)', justifyContent:'center', alignItems:'center'}}>
+          <View style={{backgroundColor:'#fff', borderRadius:16, padding:20, width:'85%', maxWidth:420}}>
+            <Text style={{fontSize:17, fontWeight:'bold', color:'#1a1a1a', marginBottom:6, textAlign:'center'}}>🖨️ Επιλογή Προγράμματος</Text>
+            <Text style={{fontSize:13, color:'#666', marginBottom:16, textAlign:'center'}}>Επίλεξε ποιο πρόγραμμα θέλεις να εκτυπώσεις:</Text>
+            <View style={{flexDirection:'row', flexWrap:'wrap', gap:10, justifyContent:'center', marginBottom:20}}>
+              {printProgramModal.programs.map(pNo=>(
+                <TouchableOpacity key={pNo}
+                  style={{backgroundColor: printProgramModal.selected===pNo?'#1a1a2e':'#f0f0f0', paddingHorizontal:24, paddingVertical:14, borderRadius:10, borderWidth:2, borderColor: printProgramModal.selected===pNo?'#FFD600':'#ddd', minWidth:80, alignItems:'center'}}
+                  onPress={()=>setPrintProgramModal(m=>({...m, selected:pNo}))}>
+                  <Text style={{fontWeight:'bold', fontSize:20, color: printProgramModal.selected===pNo?'#FFD600':'#555'}}>{pNo}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={{flexDirection:'row', gap:8}}>
+              <TouchableOpacity style={{flex:1, padding:12, borderRadius:10, alignItems:'center', backgroundColor:'#e0e0e0'}} onPress={()=>setPrintProgramModal({visible:false,programs:[],selected:null})}>
+                <Text style={{fontWeight:'bold', color:'#555'}}>ΑΚΥΡΟ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{flex:2, padding:12, borderRadius:10, alignItems:'center', backgroundColor: printProgramModal.selected?'#1a1a2e':'#ccc'}}
+                disabled={!printProgramModal.selected}
+                onPress={async()=>{
+                  const selectedPNo = printProgramModal.selected;
+                  setPrintProgramModal({visible:false, programs:[], selected:null});
+                  const prodOrders = specialOrders.filter(o=>o.status==='PROD');
+                  const filteredOrders = prodOrders.filter(o=>o.programNo===selectedPNo);
+                  const today = new Date();
+                  const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+                  const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
+                  const sorted = [...filteredOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+                  const allCopies = getCopies(sorted, phaseLabel, dateStr);
+                  const html = buildPrintHTML([allCopies[0]], 'laser');
+                  await printHTML(html, `VAICON — ${phaseLabel} — Πρόγρ. ${selectedPNo}`);
+                }}>
+                <Text style={{fontWeight:'bold', color:'white', fontSize:14}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
               </TouchableOpacity>
             </View>
           </View>
