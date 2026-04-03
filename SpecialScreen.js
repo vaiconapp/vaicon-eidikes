@@ -185,6 +185,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [showCustomerList, setShowCustomerList] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showCustomerInfo, setShowCustomerInfo] = useState(false);
+  const [pendingSearch, setPendingSearch] = useState('');
+  const [prodSearch, setProdSearch] = useState('');
 
   const [printSelected, setPrintSelected] = useState({});
   const [printPreview, setPrintPreview] = useState({ visible:false, phaseKey:null, orders:[], copies:1 });
@@ -1643,7 +1645,46 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
   const toggleSection = (s) => { setActiveSection(s); };
 
-  const renderOrderCard = (order, isArchive=false, isInPending=false) => {
+  // Helper: highlight κειμένου — επιστρέφει <Text> με μπλε spans στα matching
+  const highlightText = (text, query, baseStyle={}) => {
+    if (!text) return null;
+    const str = String(text);
+    if (!query || !query.trim()) return <Text style={baseStyle}>{str}</Text>;
+    const q = query.trim();
+    const idx = str.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) return <Text style={baseStyle}>{str}</Text>;
+    return (
+      <Text style={baseStyle}>
+        {str.slice(0, idx)}
+        <Text style={{color:'#007AFF', fontWeight:'bold', backgroundColor:'#e3f0ff'}}>{str.slice(idx, idx + q.length)}</Text>
+        {str.slice(idx + q.length)}
+      </Text>
+    );
+  };
+
+  // Helper: φιλτράρισμα παραγγελιών με contains, case-insensitive, σε όλα τα πεδία
+  const matchesSearch = (order, query) => {
+    if (!query || !query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    const fields = [
+      order.orderNo,
+      order.customer,
+      order.h,
+      order.w,
+      order.lock,
+      order.notes,
+      order.hardware,
+      order.caseMaterial,
+      order.glassDim,
+      order.glassNotes,
+      order.deliveryDate,
+      (order.coatings || []).join(' '),
+      (order.stavera || []).map(s => (s.dim || '') + ' ' + (s.note || '')).join(' '),
+    ];
+    return fields.some(f => f && String(f).toLowerCase().includes(q));
+  };
+
+  const renderOrderCard = (order, isArchive=false, isInPending=false, searchQuery='') => {
     const isProd = order.status==='PROD';
     const bc = isArchive?'#333':(isProd?'#2e7d32':order.status==='PENDING'?'#ff4444':'#00C851');
     const next = order.status==='PENDING'?'PROD':order.status==='PROD'?'READY':'SOLD';
@@ -1651,7 +1692,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const btnC = isArchive?'#000':(order.status==='PENDING'?'#ffbb33':order.status==='PROD'?'#00C851':'#222');
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
     return (
-      <TouchableOpacity key={order.id} onLongPress={()=>!isArchive&&order.status==='PENDING'&&editOrder(order)} delayLongPress={1000} activeOpacity={0.7} style={[styles.orderCard,{borderLeftColor:bc, backgroundColor: isProd?'#e8f5e9':'white'}]}>
+        <TouchableOpacity key={order.id} onLongPress={()=>!isArchive&&order.status==='PENDING'&&editOrder(order)} delayLongPress={1000} activeOpacity={0.7} style={[styles.orderCard,{borderLeftColor:bc, backgroundColor: isProd?'#e8f5e9':'white', ...(searchQuery && {borderTopWidth:2, borderTopColor:'#007AFF', borderBottomWidth:2, borderBottomColor:'#007AFF', borderRightWidth:2, borderRightColor:'#007AFF'})}]}>
         <View style={[styles.cardContent, {flexDirection:'row'}]}>
           {/* ΣΤΗΛΗ 1 */}
           <View style={{flexShrink:1}}>
@@ -1661,18 +1702,18 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {order.staveraPendingAtReady&&!order.staveraDone&&<View style={{backgroundColor:'#e65100', borderRadius:6, paddingHorizontal:10, paddingVertical:3, alignSelf:'flex-start', marginBottom:5}}>
               <Text style={{color:'white', fontWeight:'bold', fontSize:14}}>⏳ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ</Text>
             </View>}
-            <Text style={{fontSize:24,fontWeight:'900',color:'#1a1a1a',letterSpacing:1,marginBottom:2}}>#{order.orderNo}</Text>
-            {order.customer?<Text style={{fontSize:17,fontWeight:'bold',color:'#333',marginBottom:3}}>👤 {order.customer}</Text>:null}
+            {highlightText('#'+order.orderNo, searchQuery, {fontSize:24,fontWeight:'900',color:'#1a1a1a',letterSpacing:1,marginBottom:2})}
+            {order.customer?highlightText('👤 '+order.customer, searchQuery, {fontSize:17,fontWeight:'bold',color:'#333',marginBottom:3}):null}
             <View style={{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:4,marginBottom:3}}>
-              <Text style={[styles.cardDetails,{fontSize:14}]}>{order.h}x{order.w}</Text>
+              {highlightText(`${order.h}x${order.w}`, searchQuery, [styles.cardDetails,{fontSize:14}])}
               {order.qty&&parseInt(order.qty)>1?<Text style={{fontWeight:'900',fontSize:17,color:'#cc0000'}}>{order.qty}τεμ</Text>:null}
               <Text style={[styles.cardDetails,{fontSize:14}]}>{order.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ'}</Text>
               {!isStd?<Text style={[styles.cardDetails,{fontSize:14}]}>{(order.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ')?'Δ/Θ':'Μ/Θ'}</Text>:null}
-              {order.hardware?<Text style={[styles.cardDetails,{fontSize:14,color:'#555'}]}>{order.hardware}</Text>:null}
+              {order.hardware?highlightText(order.hardware, searchQuery, [styles.cardDetails,{fontSize:14,color:'#555'}]):null}
             </View>
-            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Μεντ: {order.hinges}{(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''}</Text>}
-            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Κλειδ: {order.lock||'—'}</Text>}
-            {isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>{order.lock?`Κλειδ: ${order.lock} | `:''}  {order.hardware}</Text>}
+            {!isStd&&highlightText(`Μεντ: ${order.hinges}${(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''}`  , searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {!isStd&&highlightText(`Κλειδ: ${order.lock||'—'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {isStd&&highlightText(`${order.lock?`Κλειδ: ${order.lock} | `:''}  ${order.hardware}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {(isStd||!isStd)&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:16}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
           </View>
 
@@ -1681,11 +1722,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
           {/* ΣΤΗΛΗ 2 */}
           <View style={{flex:1}}>
-            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Κάσα: {order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | {order.caseMaterial||'DKP'}</Text>}
-            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>📐 Σταθ: {order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}</Text>}
+            {!isStd&&highlightText(`Κάσα: ${order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | ${order.caseMaterial||'DKP'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {isStd&&order.heightReduction?<Text style={[styles.cardSubDetails,{fontSize:13,color:'#b71c1c',fontWeight:'bold'}]}>📏 ΜΕΙΩΣΗ ΥΨΟΥΣ: {order.heightReduction} cm</Text>:null}
-            {order.coatings&&order.coatings.length>0&&<Text style={[styles.cardSubDetails,{fontSize:13,color:'#007AFF'}]}>🎨 {order.coatings.join(', ')}</Text>}
-            {order.notes?<Text style={[styles.cardSubDetails,{fontSize:13}]}>Σημ: {order.notes}</Text>:null}
+            {order.coatings&&order.coatings.length>0&&highlightText(`🎨 ${order.coatings.join(', ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13,color:'#007AFF'}])}
+            {order.notes?highlightText(`Σημ: ${order.notes}`, searchQuery, [styles.cardSubDetails,{fontSize:13}]):null}
             <View style={styles.datesRow}>
               {fmtDate(order.createdAt)&&<Text style={[styles.dateChip,{fontSize:12}]}>📅 {fmtDate(order.createdAt)}</Text>}
               {order.deliveryDate?<Text style={[styles.dateChip,{fontSize:12,backgroundColor:'#fff3e0',color:'#e65100'}]}>🚚 {order.deliveryDate}</Text>:null}
@@ -1762,7 +1803,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   };
 
   // Κάρτα πόρτας μέσα σε υποκαρτέλα παραγωγής
-  const renderProdPhaseCard = (order, phaseKey) => {
+  const renderProdPhaseCard = (order, phaseKey, searchQuery='') => {
     // Backward compatibility: αν το phase δεν υπάρχει (παλιές παραγγελίες)
     // Για 'epend': active μόνο αν η παραγγελία έχει coatings
     const hasCoatings = !!(order.coatings && order.coatings.length > 0);
@@ -1793,12 +1834,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         <View style={{flex:1, paddingHorizontal:8, flexDirection:'row'}}>
           {/* ΣΤΗΛΗ 1: αριθμός, πελάτης, διαστάσεις, μεντ/τζάμι/κλειδ, κάσα, μονταρισμα */}
           <View style={{flexShrink:1}}>
-            <Text style={[styles.cardDetails,{fontWeight:'bold',fontSize:14}]}>#{order.orderNo}</Text>
-            {order.customer?<Text style={[styles.cardSubDetails,{marginTop:2,fontSize:13}]}>👤 {order.customer}</Text>:null}
-            <Text style={[styles.cardDetails,{fontSize:14}]}>{order.h}x{order.w} | {order.side}{!isStd?` | ${order.armor} ΘΩΡ.`:''}</Text>
-            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Μεντ: {order.hinges}{(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''} | Κλειδ: {order.lock||'—'}</Text>}
-            {!isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>Κάσα: {order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | {order.caseMaterial||'DKP'} | {order.hardware||'—'}</Text>}
-            {isStd&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>{order.hardware||''}</Text>}
+            {highlightText('#'+order.orderNo, searchQuery, [styles.cardDetails,{fontWeight:'bold',fontSize:14}])}
+            {order.customer?highlightText('👤 '+order.customer, searchQuery, [styles.cardSubDetails,{marginTop:2,fontSize:13}]):null}
+            {highlightText(`${order.h}x${order.w} | ${order.side}${!isStd?` | ${order.armor} ΘΩΡ.`:''}`, searchQuery, [styles.cardDetails,{fontSize:14}])}
+            {!isStd&&highlightText(`Μεντ: ${order.hinges}${(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''} | Κλειδ: ${order.lock||'—'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {!isStd&&highlightText(`Κάσα: ${order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | ${order.caseMaterial||'DKP'} | ${order.hardware||'—'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {isStd&&highlightText(order.hardware||'', searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {(isStd||!isStd)&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:16}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
           </View>
 
@@ -1807,11 +1848,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
           {/* ΣΤΗΛΗ 2: σταθερό, τεμάχια, επενδύσεις, παρατηρήσεις, done, ημερομηνίες */}
           <View style={{flex:1}}>
-            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&<Text style={[styles.cardSubDetails,{fontSize:13}]}>📐 Σταθ: {order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}</Text>}
+            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {order.qty&&parseInt(order.qty)>1?<Text style={[styles.cardSubDetails,{color:'#007AFF',fontWeight:'bold',fontSize:13}]}>Τεμ: {order.qty}</Text>:null}
-            {order.coatings&&order.coatings.length>0&&<Text style={[styles.cardSubDetails,{color:'#007AFF',fontSize:13}]}>🎨 {order.coatings.join(', ')}</Text>}
-            {order.notes?<Text style={[styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold',fontSize:13}]}>📝 {order.notes}</Text>:null}
-            {phase.done&&<Text style={[styles.doneTxt,{fontSize:12}]}>✅ Ολοκληρώθηκε</Text>}
+            {order.coatings&&order.coatings.length>0&&highlightText(`🎨 ${order.coatings.join(', ')}`, searchQuery, [styles.cardSubDetails,{color:'#007AFF',fontSize:13}])}
+            {order.notes?highlightText(`📝 ${order.notes}`, searchQuery, [styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold',fontSize:13}]):null}
+            {phase.done&&<Text style={[styles.doneTxt,{fontSize:15, color:'#00C851', fontWeight:'900'}]}>✅ Ολοκληρώθηκε</Text>}
             {order.prodAt&&<Text style={{fontSize:12,color:'#666',marginTop:4}}>📥 Είσοδος: {fmtDateTime(order.prodAt)}</Text>}
             {order.deliveryDate?<Text style={{fontSize:12,color:'#e65100',fontWeight:'bold'}}>🚚 Παράδοση: {order.deliveryDate}</Text>:null}
           </View>
@@ -2226,7 +2267,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           {/* (2) Καρτέλες φάσεων — κάθετη διάταξη */}
           <View style={{paddingVertical:6, paddingHorizontal:6, gap:4, marginTop:8}}>
             {PHASES.map(ph=>(
-              <TouchableOpacity key={ph.key} style={[styles.phaseTab, activeProdPhase===ph.key&&styles.phaseTabActive, {borderRadius:8, marginRight:0, flexDirection:'row', justifyContent:'space-between', alignItems:'center', minWidth:0, paddingVertical:15}]} onPress={()=>{
+              <TouchableOpacity key={ph.key} style={[styles.phaseTab, activeProdPhase===ph.key&&styles.phaseTabActive, {borderRadius:8, marginRight:0, flexDirection:'row', justifyContent:'space-between', alignItems:'center', minWidth:0, paddingVertical:8}]} onPress={()=>{
                 setActiveProdPhase(ph.key);
                 const idx = phaseKeys.indexOf(ph.key);
                 prodScrollRef.current?.scrollTo({x: idx * pageWidth, animated:true});
@@ -2255,7 +2296,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             ))}
             {/* ΣΤΑΘΕΡΑ tab */}
             <TouchableOpacity
-              style={[styles.phaseTab, activeProdPhase==='stavera'&&styles.phaseTabActive, {backgroundColor: activeProdPhase==='stavera'?'#7b1fa2':'#f3e5f5', borderRadius:8, marginRight:0, flexDirection:'row', justifyContent:'space-between', alignItems:'center', minWidth:0, paddingVertical:15}]}
+              style={[styles.phaseTab, activeProdPhase==='stavera'&&styles.phaseTabActive, {backgroundColor: activeProdPhase==='stavera'?'#7b1fa2':'#f3e5f5', borderRadius:8, marginRight:0, flexDirection:'row', justifyContent:'space-between', alignItems:'center', minWidth:0, paddingVertical:8}]}
               onPress={()=>{ setActiveProdPhase('stavera'); prodScrollRef.current?.scrollTo({x: phaseKeys.indexOf('stavera') * pageWidth, animated:true}); }}>
               <Text style={[styles.phaseTabTxt, activeProdPhase==='stavera'&&styles.phaseTabTxtActive]}>📐 ΣΤΑΘΕΡΑ</Text>
               <Text style={styles.phaseTabCount}>{prodOrders.filter(o=>o.stavera&&o.stavera.some(s=>s&&s.dim)).length + specialOrders.filter(o=>o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone).length}</Text>
@@ -2265,6 +2306,33 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           {/* (3) ΕΚΤΥΠΩΣΗ ΕΠΙΛΕΓΜΕΝΩΝ + ΟΛΩΝ/ΜΗ ΕΚΤΥΠ. */}
           <View style={{padding:8, borderTopWidth:1, borderTopColor:'#e0e0e0'}}>
             {renderPrintControls()}
+          </View>
+          {/* Αναζήτηση */}
+          <View style={{padding:8, borderTopWidth:1, borderTopColor:'#e0e0e0', gap:4}}>
+            <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
+              <Text style={{fontSize:13, fontWeight:'bold', color:'#555', letterSpacing:1}}>ΑΝΑΖΗΤΗΣΗ</Text>
+              {prodSearch.length > 0 && (
+                <Text style={{fontSize:12, fontWeight:'bold', color:'#007AFF'}}>
+                  {prodOrders.filter(o=>matchesSearch(o, prodSearch)).length} αποτελ.
+                </Text>
+              )}
+            </View>
+            <View style={{flexDirection:'row', alignItems:'center', backgroundColor:'#fff', borderRadius:8, borderWidth:1.5, borderColor:'#ddd', paddingHorizontal:8, paddingVertical:4}}>
+              <Text style={{fontSize:14, marginRight:4, color:'#aaa'}}>🔍</Text>
+              <TextInput
+                style={{flex:1, fontSize:13, color:'#1a1a1a', padding:0}}
+                placeholder="Αναζήτηση..."
+                placeholderTextColor="#bbb"
+                value={prodSearch}
+                onChangeText={v=>setProdSearch(v)}
+                clearButtonMode="while-editing"
+              />
+              {prodSearch.length > 0 && (
+                <TouchableOpacity onPress={()=>setProdSearch('')}>
+                  <Text style={{color:'#aaa', fontSize:16, fontWeight:'bold', paddingLeft:4}}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       );
@@ -2293,7 +2361,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 {prodOrders.length===0?(
                   <Text style={{textAlign:'center',color:'#999',padding:20}}>Καμία παραγγελία στην παραγωγή</Text>
                 ):(
-                  prodOrders.map(o=>renderProdPhaseCard(o, ph.key))
+                  prodOrders.filter(o=>matchesSearch(o, prodSearch)).map(o=>renderProdPhaseCard(o, ph.key, prodSearch))
                 )}
               </View>
             ))}
@@ -3067,7 +3135,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <View style={{paddingBottom:80}}>
                 {[...specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone))].sort((a,b)=>
                   pendingSort==='date' ? (b.createdAt||0)-(a.createdAt||0) : (parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)
-                ).map(o=>renderOrderCard(o, false, true))}
+                ).filter(o=>matchesSearch(o, pendingSearch)).map(o=>renderOrderCard(o, false, true, pendingSearch))}
               </View>
             </ScrollView>
             {/* ΔΕΞΙΑ: Σταθερή μπάρα */}
@@ -3115,6 +3183,33 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)), 'ΟΛΕΣ')}>
                   <Text style={{color:'white', fontWeight:'bold', fontSize:16}}>🖨️ ΟΛΕΣ</Text>
                 </TouchableOpacity>
+              </View>
+              {/* Αναζήτηση */}
+              <View style={{gap:6, marginTop:'auto'}}>
+                <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
+                  <Text style={{fontSize:13, fontWeight:'bold', color:'#555', letterSpacing:1}}>ΑΝΑΖΗΤΗΣΗ</Text>
+                  {pendingSearch.length > 0 && (
+                    <Text style={{fontSize:12, fontWeight:'bold', color:'#007AFF'}}>
+                      {[...specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone))].filter(o=>matchesSearch(o, pendingSearch)).length} αποτελ.
+                    </Text>
+                  )}
+                </View>
+                <View style={{flexDirection:'row', alignItems:'center', backgroundColor:'#fff', borderRadius:8, borderWidth:1.5, borderColor:'#ddd', paddingHorizontal:10, paddingVertical:6}}>
+                  <Text style={{fontSize:16, marginRight:6, color:'#aaa'}}>🔍</Text>
+                  <TextInput
+                    style={{flex:1, fontSize:14, color:'#1a1a1a', padding:0}}
+                    placeholder="Αναζήτηση..."
+                    placeholderTextColor="#bbb"
+                    value={pendingSearch}
+                    onChangeText={v=>setPendingSearch(v)}
+                    clearButtonMode="while-editing"
+                  />
+                  {pendingSearch.length > 0 && (
+                    <TouchableOpacity onPress={()=>setPendingSearch('')}>
+                      <Text style={{color:'#aaa', fontSize:18, fontWeight:'bold', paddingLeft:6}}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             </View>
           </View>
