@@ -190,6 +190,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [printPreview, setPrintPreview] = useState({ visible:false, phaseKey:null, orders:[], copies:1 });
   const [pendingChanges, setPendingChanges] = useState([]); // καλάθι αλλαγών done/undone
   const [lastChangedIds, setLastChangedIds] = useState([]); // τελευταία παρτίδα αλλαγών
+  const [prodBatch, setProdBatch] = useState([]); // καλάθι παραγγελιών για ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ
+  const [programModal, setProgramModal] = useState({ visible: false, programNo: '' }); // modal αριθμού προγράμματος
   const panPosition = useRef({ x: 0, y: 0 });
   const [panPos, setPanPos] = useState({ x: 0, y: 0 });
   const isDragging = useRef(false);
@@ -1691,12 +1693,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             </View>
             {isProd&&order.phases&&(
               <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:4}}>
-                {Object.entries(order.phases).map(([key,phase])=>{
-                  if(!phase.active) return null;
+                {PHASES.map(ph=>{
+                  const phase = order.phases[ph.key];
+                  if(!phase||!phase.active) return null;
                   const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',epend:'ΕΠΕΝ.',montDoor:'ΜΟΝΤ.'};
                   return (
-                    <View key={key} style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
-                      <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[key]||key}</Text>
+                    <View key={ph.key} style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
+                      <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[ph.key]||ph.key}</Text>
                     </View>
                   );
                 })}
@@ -1714,6 +1717,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             onChangeText={text=>updateSaleNote(order, text)}
           />
         )}
+        {order.status==='PENDING'&&order.programNo&&(
+          <View style={{justifyContent:'center', alignItems:'center', paddingHorizontal:8, borderRightWidth:1, borderRightColor:'#e0e0e0', backgroundColor:'#fff8e1', minWidth:52}}>
+            <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{order.programNo}</Text>
+            <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+          </View>
+        )}
         <View style={styles.sideBtnContainer}>
           {!isArchive&&(order.status==='PENDING'||order.status==='PROD')&&<TouchableOpacity style={[styles.upperBtn,{backgroundColor:'#007AFF'}]} delayLongPress={2000} onLongPress={()=>{ setEditForm({ deliveryDate:order.deliveryDate||'', lock:order.lock||'', glassDim:order.glassDim||'', glassNotes:order.glassNotes||'', hardware:order.hardware||'', coatings:order.coatings||[], stavera:order.stavera||[], notes:order.notes||'' }); setEditModal({visible:true,order}); }} onPress={()=>{ if(Platform.OS==='web') window.alert('Κράτα πατημένο 2 δευτερόλεπτα για επεξεργασία'); }}><Text style={[styles.upperBtnText,{color:'white'}]}>✏️</Text></TouchableOpacity>}
           {!isArchive&&!(isInPending&&order.status==='READY'&&order.staveraPendingAtReady&&!order.staveraDone)&&<TouchableOpacity style={[styles.upperBtn,{backgroundColor:order.status==='PENDING'?'#000':'#666'}]} onPress={()=>order.status==='PENDING'?cancelOrder(order.id):moveBack(order.id,order.status)}><Text style={[styles.upperBtnText,{color:order.status==='PENDING'?'#ff4444':'white'}]}>{order.status==='PENDING'?'ΑΚΥΡΩΣΗ':'⟲'}</Text></TouchableOpacity>}
@@ -1725,7 +1734,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <Text style={[styles.upperBtnText,{color:'white'}]}>⟲</Text>
             </TouchableOpacity>
           )}
-          {order.status!=='PROD'&&!(isInPending&&order.status==='READY'&&order.staveraPendingAtReady&&!order.staveraDone)&&!isArchive&&<TouchableOpacity style={[styles.lowerBtn,{backgroundColor:btnC}]} onPress={()=>updateStatus(order.id,next)}><Text style={styles.sideBtnText}>{btn}</Text></TouchableOpacity>}
+          {order.status!=='PROD'&&!(isInPending&&order.status==='READY'&&order.staveraPendingAtReady&&!order.staveraDone)&&!isArchive&&<TouchableOpacity style={[styles.lowerBtn,{backgroundColor:btnC}, order.status==='PENDING'&&prodBatch.some(o=>o.id===order.id)&&{borderWidth:3, borderColor:'#ff4444'}]} onPress={()=>{
+            if (order.status==='PENDING') {
+              // Αντί για άμεση μετάβαση → προσθήκη στο prodBatch
+              const alreadyIn = prodBatch.some(o=>o.id===order.id);
+              if (alreadyIn) {
+                setProdBatch(prev=>prev.filter(o=>o.id!==order.id));
+              } else {
+                setProdBatch(prev=>[...prev, order]);
+              }
+            } else {
+              updateStatus(order.id, next);
+            }
+          }}><Text style={styles.sideBtnText}>{prodBatch.some(o=>o.id===order.id)?'✓ ΕΠΙΛΕΓΗ':btn}</Text></TouchableOpacity>}
           {isArchive&&(
             <TouchableOpacity
               style={[styles.lowerBtn,{backgroundColor:'#b71c1c'}]}
@@ -2304,6 +2325,100 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               </View>
             )}
             <View style={{height:20}}/>
+          </View>
+        </View>
+      </Modal>
+
+      {/* FLOATING PANEL ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ */}
+      {prodBatch.length > 0 && (
+        <View style={{
+          position:'absolute', bottom: 20 - panPos.y, left: `calc(50% - 160px + ${panPos.x}px)`,
+          width:320, backgroundColor:'#1a1a2e', borderRadius:12, elevation:20, zIndex:1000,
+          shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.4, shadowRadius:8,
+        }}>
+          <View
+            style={{backgroundColor:'#ffbb33', borderTopLeftRadius:12, borderTopRightRadius:12, padding:10, alignItems:'center', cursor:'grab'}}
+            {...(Platform.OS==='web' ? { onMouseDown: handleDragStart, onTouchStart: handleDragStart } : {})}>
+            <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:14}}>🚀 ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ ({prodBatch.length})</Text>
+          </View>
+          <ScrollView style={{maxHeight:140}} contentContainerStyle={{padding:8}}>
+            {prodBatch.map((o,i)=>(
+              <View key={i} style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingVertical:4, borderBottomWidth:1, borderBottomColor:'rgba(255,255,255,0.1)'}}>
+                <Text style={{color:'white', fontWeight:'bold', fontSize:14}}>#{o.orderNo}{o.customer ? `  ${o.customer}` : ''}</Text>
+                <TouchableOpacity onPress={()=>setProdBatch(prev=>prev.filter(x=>x.id!==o.id))}>
+                  <Text style={{color:'#ff4444', fontSize:15, paddingHorizontal:6}}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ScrollView>
+          <View style={{flexDirection:'row', gap:8, padding:10, borderTopWidth:1, borderTopColor:'rgba(255,255,255,0.15)'}}>
+            <TouchableOpacity style={{flex:1, padding:10, borderRadius:8, alignItems:'center', backgroundColor:'#555'}} onPress={()=>setProdBatch([])}>
+              <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>ΑΚΥΡΟ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{flex:2, padding:10, borderRadius:8, alignItems:'center', backgroundColor:'#ffbb33'}} onPress={()=>setProgramModal({visible:true, programNo:''})}>
+              <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:13}}>✅ ΕΠΙΒΕΒΑΙΩΣΗ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* MODAL ΑΡΙΘΜΟΥ ΠΡΟΓΡΑΜΜΑΤΟΣ */}
+      <Modal visible={programModal.visible} transparent animationType="fade" onRequestClose={()=>setProgramModal({visible:false,programNo:''})}>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.6)', justifyContent:'center', alignItems:'center'}}>
+          <View style={{backgroundColor:'#fff', borderRadius:16, padding:20, width:'85%', maxWidth:420}}>
+            <Text style={{fontSize:17, fontWeight:'bold', color:'#1a1a1a', marginBottom:12, textAlign:'center'}}>🔢 Αριθμός Προγράμματος</Text>
+            <TextInput
+              style={{borderWidth:2, borderColor:'#ffbb33', borderRadius:8, padding:12, fontSize:20, fontWeight:'bold', textAlign:'center', marginBottom:12, color:'#1a1a1a'}}
+              placeholder="Νέος αριθμός..."
+              keyboardType="numeric"
+              value={programModal.programNo}
+              onChangeText={v=>setProgramModal(m=>({...m, programNo:v}))}
+              autoFocus
+            />
+            {/* Υπάρχοντες αριθμοί προγράμματος */}
+            {[...new Set(specialOrders.filter(o=>o.programNo).map(o=>o.programNo))].length > 0 && (
+              <View style={{marginBottom:12}}>
+                <Text style={{fontSize:12, fontWeight:'bold', color:'#555', marginBottom:6}}>Ή επίλεξε υπάρχον πρόγραμμα:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{flexDirection:'row', gap:6}}>
+                    {[...new Set(specialOrders.filter(o=>o.programNo).map(o=>o.programNo))].map(pNo=>(
+                      <TouchableOpacity key={pNo}
+                        style={{backgroundColor: programModal.programNo===pNo?'#ffbb33':'#f0f0f0', paddingHorizontal:14, paddingVertical:8, borderRadius:8, borderWidth:2, borderColor: programModal.programNo===pNo?'#e6a800':'#ddd'}}
+                        onPress={()=>setProgramModal(m=>({...m, programNo:pNo}))}>
+                        <Text style={{fontWeight:'bold', fontSize:15, color: programModal.programNo===pNo?'#1a1a1a':'#555'}}>{pNo}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
+            <View style={{flexDirection:'row', gap:8}}>
+              <TouchableOpacity style={{flex:1, padding:12, borderRadius:10, alignItems:'center', backgroundColor:'#e0e0e0'}} onPress={()=>{ setProgramModal({visible:false, programNo:''}); setProdBatch([]); }}>
+                <Text style={{fontWeight:'bold', color:'#555'}}>ΑΚΥΡΟ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{flex:2, padding:12, borderRadius:10, alignItems:'center', backgroundColor:'#2e7d32'}} onPress={async()=>{
+                const pNo = programModal.programNo.trim();
+                const batch = [...prodBatch];
+                for (const order of batch) {
+                  const phases = {};
+                  PHASES.forEach(ph => {
+                    if (ph.key==='montDoor' && order.installation!=='ΝΑΙ') {
+                      phases[ph.key] = { active:false, printed:false, done:false };
+                    } else {
+                      phases[ph.key] = { active:true, printed:false, done:false };
+                    }
+                  });
+                  const upd = {...order, status:'PROD', prodAt:Date.now(), phases, ...(pNo ? {programNo: pNo} : {})};
+                  setSpecialOrders(prev=>prev.map(o=>o.id===order.id?upd:o));
+                  await syncToCloud(upd);
+                  await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΠΑΡΑΓΩΓΗ', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}`, programNo: pNo||'—' });
+                }
+                setProgramModal({visible:false, programNo:''});
+                setProdBatch([]);
+              }}>
+                <Text style={{fontWeight:'bold', color:'white', fontSize:14}}>🚀 ΟΚ — ΕΝΑΡΞΗ</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
