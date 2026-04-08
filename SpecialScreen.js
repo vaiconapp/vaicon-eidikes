@@ -741,7 +741,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         // Όνομα πελάτη με αναδίπλωση σε κάθε κενό
         const customerWrapped = o.customer ? o.customer.split(' ').join('<br>') : '';
         const montBadge = o.installation === 'ΝΑΙ' ? ` <span style="color:#cc0000;font-weight:900;font-size:15px">Μ</span>` : '';
-        const noCell = `<span style="font-weight:bold;font-size:13px">${o.orderNo||'—'}${montBadge}</span>${customerWrapped ? `<br><span style="font-size:9px;color:#555;font-weight:normal;line-height:1.2">${customerWrapped}</span>` : ''}`;
+        const programNoPrefix = o.programNo ? `<span style="color:#cc0000;font-weight:900;font-size:16px">${o.programNo}</span> / ` : '';
+        const noCell = `${programNoPrefix}<span style="font-weight:bold;font-size:13px">${o.orderNo||'—'}${montBadge}</span>${customerWrapped ? `<br><span style="font-size:9px;color:#555;font-weight:normal;line-height:1.2">${customerWrapped}</span>` : ''}`;
         return `<tr>
           <td class="col-no" style="white-space:normal;word-break:break-word;vertical-align:top">${noCell}</td>
           <td class="col-tem">${qtyDisplay(o)}</td>
@@ -759,7 +760,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const total = totalQty(orders);
       const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="9"></td></tr>`;
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:80px"><col style="width:30px"><col style="width:100px"><col style="width:30px"><col style="width:32px">
+        <col style="width:110px"><col style="width:30px"><col style="width:100px"><col style="width:30px"><col style="width:32px">
         <col style="width:28px"><col style="width:110px"><col style="width:140px"><col style="width:32px"><col style="width:80px"><col>
       </colgroup><thead><tr>
         <th>Νο / Πελάτης</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th>
@@ -1759,7 +1760,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             onChangeText={text=>updateSaleNote(order, text)}
           />
         )}
-        {order.status==='PENDING'&&order.programNo&&(
+        {order.programNo&&(
           <View style={{justifyContent:'center', alignItems:'center', paddingHorizontal:8, borderRightWidth:1, borderRightColor:'#e0e0e0', backgroundColor:'#fff8e1', minWidth:52}}>
             <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{order.programNo}</Text>
             <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
@@ -1857,6 +1858,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {order.deliveryDate?<Text style={{fontSize:12,color:'#e65100',fontWeight:'bold'}}>🚚 Παράδοση: {order.deliveryDate}</Text>:null}
           </View>
         </View>
+
+        {/* ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ */}
+        {order.programNo&&(
+          <View style={{justifyContent:'center', alignItems:'center', paddingHorizontal:8, borderRightWidth:1, borderRightColor:'#e0e0e0', backgroundColor:'#fff8e1', minWidth:52}}>
+            <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{order.programNo}</Text>
+            <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+          </View>
+        )}
 
         {/* ΚΟΥΜΠΙΑ ΔΕΞΙΑ */}
         <View style={{justifyContent:'space-between', paddingVertical:4, gap:4}}>
@@ -2003,6 +2012,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         return `<td style="background:#f8d7da;text-align:center;color:#721c24">●</td>`;
       }).join('');
       return `<tr>
+        <td style="font-weight:bold;color:#cc0000;background:#fff3cd;text-align:center;font-size:13px">${o.programNo||'—'}</td>
         <td style="font-weight:bold">${o.orderNo||'—'}</td>
         <td>${o.customer||'—'}</td>
         <td style="font-weight:bold">${o.h||'—'}x${o.w||'—'}</td>
@@ -2032,7 +2042,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       <h1>VAICON — ΚΑΤΑΣΤΑΣΗ ΠΑΡΑΓΩΓΗΣ</h1>
       <h2>📅 ${dateStr} &nbsp;|&nbsp; Σύνολο: ${prodOrders.length} παραγγελίες σε παραγωγή</h2>
       <table><thead><tr>
-        <th>Νο</th><th>Πελάτης</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th>
+        <th style="background:#fff3cd">Πρόγρ.</th><th>Νο</th><th>Πελάτης</th><th>Διάσταση</th><th>Φορά</th><th>Θωράκιση</th>
         ${phaseHeader}
       </tr></thead><tbody>${rows}</tbody></table>
       ${legend}
@@ -2168,15 +2178,22 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#e8f0fe', borderRadius:8, borderWidth:1, borderColor:'#4a90d9'}}
               onPress={async ()=>{
-                const pendingWithProgram = specialOrders.filter(o=>o.status==='PENDING' && o.programNo);
-                if (pendingWithProgram.length === 0) {
-                  if (Platform.OS==='web') window.alert('Δεν υπάρχουν καταχωρημένες παραγγελίες με αριθμό προγράμματος.');
-                  else Alert.alert("Προσοχή","Δεν υπάρχουν καταχωρημένες παραγγελίες με αριθμό προγράμματος.");
+                const prodWithProgram = specialOrders.filter(o=>o.status==='PROD' && o.programNo);
+                if (prodWithProgram.length === 0) {
+                  if (Platform.OS==='web') window.alert('Δεν υπάρχουν παραγγελίες στην παραγωγή με αριθμό προγράμματος.');
+                  else Alert.alert("Προσοχή","Δεν υπάρχουν παραγγελίες στην παραγωγή με αριθμό προγράμματος.");
                   return;
                 }
-                // Ομαδοποίηση κατά programNo
+                // Έλεγχος unique programNo
+                const uniquePrograms = [...new Set(prodWithProgram.map(o=>o.programNo))];
+                if (uniquePrograms.length >= 2) {
+                  // Πολλαπλά προγράμματα → άνοιγμα modal επιλογής
+                  setPrintProgramModal({ visible: true, programs: uniquePrograms, selected: null, phaseKey: null });
+                  return;
+                }
+                // Μόνο ένα πρόγραμμα → εκτύπωση απευθείας
                 const groups = {};
-                pendingWithProgram.forEach(o => {
+                prodWithProgram.forEach(o => {
                   if (!groups[o.programNo]) groups[o.programNo] = [];
                   groups[o.programNo].push(o);
                 });
@@ -2215,8 +2232,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     </tr></thead><tbody>${rows}</tbody></table>`;
                 }).join('');
                 const html = `<html><head><meta charset="utf-8"><style>${tableCSS}</style></head><body>
-                  <h1>VAICON — ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ — ΚΑΤΑΧΩΡΗΜΕΝΕΣ</h1>
-                  <h2>📅 ${dateStr} | ${pendingWithProgram.length} παραγγελίες σε ${Object.keys(groups).length} προγράμματα</h2>
+                  <h1>VAICON — ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ — ΣΤΗΝ ΠΑΡΑΓΩΓΗ</h1>
+                  <h2>📅 ${dateStr} | ${prodWithProgram.length} παραγγελίες σε ${Object.keys(groups).length} προγράμματα</h2>
                   ${groupsHTML}
                 </body></html>`;
                 await printHTML(html, 'VAICON — ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ');
@@ -2552,26 +2569,33 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <TouchableOpacity style={{flex:1, padding:12, borderRadius:10, alignItems:'center', backgroundColor:'#e0e0e0'}} onPress={()=>{ setProgramModal({visible:false, programNo:''}); setProdBatch([]); }}>
                 <Text style={{fontWeight:'bold', color:'#555'}}>ΑΚΥΡΟ</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={{flex:2, padding:12, borderRadius:10, alignItems:'center', backgroundColor:'#2e7d32'}} onPress={async()=>{
-                const pNo = programModal.programNo.trim();
-                const batch = [...prodBatch];
-                for (const order of batch) {
-                  const phases = {};
-                  PHASES.forEach(ph => {
-                    if (ph.key==='montDoor' && order.installation!=='ΝΑΙ') {
-                      phases[ph.key] = { active:false, printed:false, done:false };
-                    } else {
-                      phases[ph.key] = { active:true, printed:false, done:false };
-                    }
-                  });
-                  const upd = {...order, status:'PROD', prodAt:Date.now(), phases, ...(pNo ? {programNo: pNo} : {})};
-                  setSpecialOrders(prev=>prev.map(o=>o.id===order.id?upd:o));
-                  await syncToCloud(upd);
-                  await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΠΑΡΑΓΩΓΗ', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}`, programNo: pNo||'—' });
-                }
-                setProgramModal({visible:false, programNo:''});
-                setProdBatch([]);
-              }}>
+              <TouchableOpacity 
+                style={{flex:2, padding:12, borderRadius:10, alignItems:'center', backgroundColor: programModal.programNo.trim() ? '#2e7d32' : '#ccc'}} 
+                disabled={!programModal.programNo.trim()}
+                onPress={async()=>{
+                  const pNo = programModal.programNo.trim();
+                  if (!pNo) {
+                    Alert.alert("Προσοχή", "Πρέπει να εισάγετε αριθμό προγράμματος!");
+                    return;
+                  }
+                  const batch = [...prodBatch];
+                  for (const order of batch) {
+                    const phases = {};
+                    PHASES.forEach(ph => {
+                      if (ph.key==='montDoor' && order.installation!=='ΝΑΙ') {
+                        phases[ph.key] = { active:false, printed:false, done:false };
+                      } else {
+                        phases[ph.key] = { active:true, printed:false, done:false };
+                      }
+                    });
+                    const upd = {...order, status:'PROD', prodAt:Date.now(), phases, programNo: pNo};
+                    setSpecialOrders(prev=>prev.map(o=>o.id===order.id?upd:o));
+                    await syncToCloud(upd);
+                    await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΠΑΡΑΓΩΓΗ', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}`, programNo: pNo });
+                  }
+                  setProgramModal({visible:false, programNo:''});
+                  setProdBatch([]);
+                }}>
                 <Text style={{fontWeight:'bold', color:'white', fontSize:14}}>🚀 ΟΚ — ΕΝΑΡΞΗ</Text>
               </TouchableOpacity>
             </View>
@@ -2603,16 +2627,46 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 disabled={!printProgramModal.selected}
                 onPress={async()=>{
                   const selectedPNo = printProgramModal.selected;
-                  setPrintProgramModal({visible:false, programs:[], selected:null});
-                  const prodOrders = specialOrders.filter(o=>o.status==='PROD');
-                  const filteredOrders = prodOrders.filter(o=>o.programNo===selectedPNo);
-                  const today = new Date();
-                  const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
-                  const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
-                  const sorted = [...filteredOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
-                  const allCopies = getCopies(sorted, phaseLabel, dateStr);
-                  const html = buildPrintHTML([allCopies[0]], 'laser');
-                  await printHTML(html, `VAICON — ${phaseLabel} — Πρόγρ. ${selectedPNo}`);
+                  const phaseKey = printProgramModal.phaseKey;
+                  setPrintProgramModal({visible:false, programs:[], selected:null, phaseKey:null});
+                  
+                  if (phaseKey) {
+                    // Εκτύπωση συγκεκριμένης φάσης με φιλτράρισμα programNo
+                    const prodOrders = specialOrders.filter(o=>o.status==='PROD');
+                    const filteredOrders = prodOrders.filter(o=>o.programNo===selectedPNo && o.phases?.[phaseKey]?.active);
+                    if (filteredOrders.length === 0) {
+                      Alert.alert("Προσοχή", `Δεν υπάρχουν παραγγελίες με πρόγραμμα ${selectedPNo} σε αυτή τη φάση.`);
+                      return;
+                    }
+                    const today = new Date();
+                    const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+                    const phaseLabel = PHASES.find(p=>p.key===phaseKey)?.label || phaseKey;
+                    const allCopies = getCopies(filteredOrders, phaseLabel, dateStr);
+                    const html = buildPrintHTML([allCopies[0]], phaseKey);
+                    await printHTML(html, `VAICON — ${phaseLabel} — Πρόγρ. ${selectedPNo}`);
+                    
+                    // Μαρκάρει ως printed
+                    const selectedIds = filteredOrders.map(o=>o.id);
+                    const updated = specialOrders.map(o => {
+                      if (selectedIds.includes(o.id) && o.phases?.[phaseKey]?.active) {
+                        return {...o, phases:{...o.phases, [phaseKey]:{...o.phases[phaseKey], printed:true, printHistory:[...(o.phases[phaseKey].printHistory||[]), {ts:Date.now(), copies:1}]}}};
+                      }
+                      return o;
+                    });
+                    setSpecialOrders(updated);
+                    for (const o of updated.filter(o=>selectedIds.includes(o.id))) await syncToCloud(o);
+                  } else {
+                    // Εκτύπωση ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ (όλες οι παραγγελίες του προγράμματος)
+                    const prodOrders = specialOrders.filter(o=>o.status==='PROD');
+                    const filteredOrders = prodOrders.filter(o=>o.programNo===selectedPNo);
+                    const today = new Date();
+                    const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+                    const phaseLabel = 'ΠΡΟΓΡΑΜΜΑ ΕΙΔΙΚΩΝ ΠΑΡΑΓΓΕΛΙΩΝ';
+                    const sorted = [...filteredOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+                    const allCopies = getCopies(sorted, phaseLabel, dateStr);
+                    const html = buildPrintHTML([allCopies[0]], 'laser');
+                    await printHTML(html, `VAICON — ${phaseLabel} — Πρόγρ. ${selectedPNo}`);
+                  }
                 }}>
                 <Text style={{fontWeight:'bold', color:'white', fontSize:14}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
               </TouchableOpacity>
