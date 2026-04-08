@@ -1,4 +1,4 @@
-const FIREBASE_URL = "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app";
+import { FIREBASE_URL } from './App';
 
 // Καταγραφή κίνησης στο Firebase
 export const logActivity = async (section, action, details = {}) => {
