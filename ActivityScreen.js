@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { loadActivityLog, cleanOldLogs, fmtDateTime } from './activityLog';
 import { FIREBASE_URL as FB_URL } from './App';
 
@@ -40,11 +40,27 @@ export default function ActivityScreen({ onClose }) {
   };
 
   const clearAll = async () => {
-    if (window.confirm('Διαγραφή όλου του ιστορικού;')) {
-      try {
-        await fetch(`${FB_URL}/activity_log.json`, { method: 'DELETE' });
-        setEntries([]);
-      } catch(e) {}
+    if (Platform.OS === 'web') {
+      if (window.confirm('Διαγραφή όλου του ιστορικού;')) {
+        try {
+          await fetch(`${FB_URL}/activity_log.json`, { method: 'DELETE' });
+          setEntries([]);
+        } catch(e) {}
+      }
+    } else {
+      Alert.alert(
+        'Διαγραφή',
+        'Διαγραφή όλου του ιστορικού;',
+        [
+          { text: 'Όχι', style: 'cancel' },
+          { text: 'Ναι', style: 'destructive', onPress: async () => {
+            try {
+              await fetch(`${FB_URL}/activity_log.json`, { method: 'DELETE' });
+              setEntries([]);
+            } catch(e) {}
+          }}
+        ]
+      );
     }
   };
 
