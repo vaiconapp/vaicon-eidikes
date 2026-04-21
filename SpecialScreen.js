@@ -3644,6 +3644,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
 
           <View style={{flexDirection:'row', gap:8}}>
+            {(editingOrder || customForm.orderNo || customForm.customer || customForm.h || customForm.w || customForm.programNo) ? (
             <TouchableOpacity
               style={[styles.saveBtn, {backgroundColor:'#888', flex:1}]}
               onPress={()=>{
@@ -3659,6 +3660,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               }}>
               <Text style={{color:'white',fontWeight:'bold',fontSize:15}}>✕ ΑΚΥΡΩΣΗ</Text>
             </TouchableOpacity>
+            ) : null}
             <TouchableOpacity style={[styles.saveBtn,{backgroundColor:'#007AFF', flex:2}]} onPress={()=>{
               Keyboard.dismiss();
               if(Platform.OS==='web'){
