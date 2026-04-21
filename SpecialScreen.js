@@ -64,7 +64,7 @@ const fmtDateTime = (ts) => { if (!ts) return null; const d = new Date(ts); retu
 
 const STD_HEIGHTS = ['208','213','218','223'];
 const STD_WIDTHS  = ['83','88','93','98'];
-const INIT_FORM   = { customer:'', orderNo:'', h:'', w:'', hinges:'2', qty:'1', glassDim:'', glassNotes:'', armor:'ΜΟΝΗ', side:'ΔΕΞΙΑ', lock:'', notes:'', status:'PENDING', hardware:'', installation:'ΟΧΙ', caseType:'ΚΛΕΙΣΤΟΥ ΤΥΠΟΥ', caseMaterial:'DKP', deliveryDate:'', sasiType:'ΜΟΝΗ ΘΩΡΑΚΙΣΗ', coatings:[], stavera:[], heightReduction:'' };
+const INIT_FORM   = { customer:'', orderNo:'', h:'', w:'', hinges:'2', qty:'1', glassDim:'', glassNotes:'', armor:'ΜΟΝΗ', side:'ΔΕΞΙΑ', lock:'', notes:'', status:'PENDING', hardware:'', installation:'ΟΧΙ', caseType:'ΚΛΕΙΣΤΟΥ ΤΥΠΟΥ', caseMaterial:'DKP', deliveryDate:'', sasiType:'ΜΟΝΗ ΘΩΡΑΚΙΣΗ', coatings:[], stavera:[], heightReduction:'', programNo:'' };
 
 const PHASES = [
   { key:'laser',    label:'🔴 LASER ΚΟΠΕΣ' },
@@ -3415,6 +3415,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               }
             }}
             blurOnSubmit={false} />
+            <View style={{width:80}}>
+              <Text style={[styles.input, {fontSize:10, fontWeight:'bold', color:'#888', marginBottom:3, borderWidth:0, padding:0, backgroundColor:'transparent'}]}>ΑΡ.ΠΡΟΓΡ.</Text>
+              <TextInput
+                style={[styles.input, {fontSize:18, fontWeight:'bold', width:80, letterSpacing:1, marginBottom:0, color:'#e65100', borderColor: customForm.programNo ? '#e65100' : '#ddd'}]}
+                placeholder="—"
+                keyboardType="numeric"
+                value={customForm.programNo||''}
+                selectTextOnFocus
+                onChangeText={v=>setCustomForm(f=>({...f, programNo:v}))}
+              />
+            </View>
             <View style={{width:110}}>
               <Text style={[vstyles.fieldLabel,{marginBottom:3}]}>Παράδοση</Text>
               <TouchableOpacity style={[vstyles.selectBtn,{paddingVertical:8,paddingHorizontal:5}]} onPress={()=>setShowDatePicker(true)}>
