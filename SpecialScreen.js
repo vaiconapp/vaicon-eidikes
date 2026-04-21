@@ -2534,7 +2534,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <TouchableOpacity style={{flex:1, padding:10, borderRadius:8, alignItems:'center', backgroundColor:'#555'}} onPress={()=>setProdBatch([])}>
               <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>ΑΚΥΡΟ</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{flex:2, padding:10, borderRadius:8, alignItems:'center', backgroundColor:'#ffbb33'}} onPress={()=>setProgramModal({visible:true, programNo:''})}>
+            <TouchableOpacity style={{flex:2, padding:10, borderRadius:8, alignItems:'center', backgroundColor:'#ffbb33'}} onPress={()=>{
+              const batchPrograms = [...new Set(prodBatch.map(o=>o.programNo).filter(Boolean))];
+              const prefill = batchPrograms.length === 1 ? batchPrograms[0] : '';
+              setProgramModal({visible:true, programNo: prefill});
+            }}>
               <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:13}}>✅ ΕΠΙΒΕΒΑΙΩΣΗ</Text>
             </TouchableOpacity>
           </View>
