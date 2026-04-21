@@ -1591,35 +1591,41 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     ]);
   };
 
-  const cancelOrder = (id) => Alert.alert("Ακύρωση","Οριστική διαγραφή;",[{text:"Όχι"},{text:"Ναι",style:"destructive",onPress:async()=>{
-    const order = specialOrders.find(o=>o.id===id);
-    setSpecialOrders(specialOrders.filter(o=>o.id!==id));
-    await deleteFromCloud(id);
-    if (!order || order.orderType!=='ΤΥΠΟΠΟΙΗΜΕΝΗ') return;
-    const customer = order.customer || `#${order.orderNo}`;
-    const orderQty = parseInt(order.qty)||1;
-    const isMoni = order.sasiType==='ΜΟΝΗ ΘΩΡΑΚΙΣΗ' || !order.sasiType;
-    const removeRes = async (stockOrders, setStockOrders, firebasePath) => {
-      const sameSize = s => String(s.selectedHeight)===String(order.h) && String(s.selectedWidth)===String(order.w) && s.side===order.side;
-      let target = stockOrders.find(s=>sameSize(s)&&s.autoNote&&s.autoNote.includes(customer));
-      if (!target) target = stockOrders.find(s=>sameSize(s)&&s.status!=='SOLD');
-      if (!target) return;
-      const customerMap = {};
-      if (target.autoNote) {
-        target.autoNote.split(',').forEach(entry => {
-          const match = entry.trim().match(/^(.+)\s+\((\d+)τεμ\)$/);
-          if (match) customerMap[match[1].trim()] = (customerMap[match[1].trim()]||0) + parseInt(match[2]);
-        });
-      }
-      if (customerMap[customer]) { customerMap[customer] -= orderQty; if (customerMap[customer]<=0) delete customerMap[customer]; }
-      const newNote = Object.entries(customerMap).map(([n,q])=>`${n} (${q}τεμ)`).join(', ');
-      const hasRes = newNote.trim().length > 0;
-      const upd = {...target, autoNote: newNote, isAuto: hasRes};
-      setStockOrders(prev=>prev.map(s=>s.id===target.id?upd:s));
-      await fetch(`${FIREBASE_URL}/${firebasePath}/${upd.id}.json`,{method:'PUT',body:JSON.stringify(upd)});
+  const cancelOrder = (id) => {
+    const doCancel = async () => {
+      const order = specialOrders.find(o=>o.id===id);
+      setSpecialOrders(specialOrders.filter(o=>o.id!==id));
+      await deleteFromCloud(id);
+      if (!order || order.orderType!=='ΤΥΠΟΠΟΙΗΜΕΝΗ') return;
+      const customer = order.customer || `#${order.orderNo}`;
+      const orderQty = parseInt(order.qty)||1;
+      const isMoni = order.sasiType==='ΜΟΝΗ ΘΩΡΑΚΙΣΗ' || !order.sasiType;
+      const removeRes = async (stockOrders, setStockOrders, firebasePath) => {
+        const sameSize = s => String(s.selectedHeight)===String(order.h) && String(s.selectedWidth)===String(order.w) && s.side===order.side;
+        let target = stockOrders.find(s=>sameSize(s)&&s.autoNote&&s.autoNote.includes(customer));
+        if (!target) target = stockOrders.find(s=>sameSize(s)&&s.status!=='SOLD');
+        if (!target) return;
+        const customerMap = {};
+        if (target.autoNote) {
+          target.autoNote.split(',').forEach(entry => {
+            const match = entry.trim().match(/^(.+)\s+\((\d+)τεμ\)$/);
+            if (match) customerMap[match[1].trim()] = (customerMap[match[1].trim()]||0) + parseInt(match[2]);
+          });
+        }
+        if (customerMap[customer]) { customerMap[customer] -= orderQty; if (customerMap[customer]<=0) delete customerMap[customer]; }
+        const newNote = Object.entries(customerMap).map(([n,q])=>`${n} (${q}τεμ)`).join(', ');
+        const hasRes = newNote.trim().length > 0;
+        const upd = {...target, autoNote: newNote, isAuto: hasRes};
+        setStockOrders(prev=>prev.map(s=>s.id===target.id?upd:s));
+        await fetch(`${FIREBASE_URL}/${firebasePath}/${upd.id}.json`,{method:'PUT',body:JSON.stringify(upd)});
+      };
     };
-
-  }}]);
+    if (Platform.OS === 'web') {
+      if (window.confirm("Οριστική διαγραφή παραγγελίας;")) doCancel();
+    } else {
+      Alert.alert("Ακύρωση","Οριστική διαγραφή;",[{text:"Όχι"},{text:"Ναι",style:"destructive",onPress:doCancel}]);
+    }
+  };
   const deleteFromArchive = (id) => setArchiveDeleteModal({ visible:true, orderId:id, pwd:'', error:false });
   const confirmDeleteFromArchive = async (id) => {
     setSoldSpecialOrders(soldSpecialOrders.filter(o=>o.id!==id));
