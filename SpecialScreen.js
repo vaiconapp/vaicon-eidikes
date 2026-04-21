@@ -834,6 +834,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   });
 
   const getCopies = (orders, phaseLabel, dateStr) => {
+    const uniqueProgs = [...new Set(orders.map(o=>o.programNo).filter(Boolean))];
+    const progSuffix = uniqueProgs.length > 0 ? ` — Α.Π. <b>${uniqueProgs.join(', ')}</b>` : '';
     if (phaseLabel.includes('LASER')) {
       const copy1 = [...orders].sort((a,b) => (parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
 
@@ -868,12 +870,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const copy4 = sortByDimension(orders);
 
       return [
-        { title:`VAICON — ${dateStr} — ΚΑΣΣΕΣ`, orders:copy2 },
-        { title:`VAICON — ${dateStr} — ΣΑΣΙ`, orders:copy3 },
-        { title:`VAICON — ${dateStr} — ΠΡΟΦΙΛ`, orders:copy4 },
+        { title:`VAICON — ${dateStr} — ΚΑΣΣΕΣ${progSuffix}`, orders:copy2 },
+        { title:`VAICON — ${dateStr} — ΣΑΣΙ${progSuffix}`, orders:copy3 },
+        { title:`VAICON — ${dateStr} — ΠΡΟΦΙΛ${progSuffix}`, orders:copy4 },
       ];
     }
-    return [{ title:`VAICON — ${dateStr} — ${phaseLabel}`, orders:[...orders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)) }];
+    return [{ title:`VAICON — ${dateStr} — ${phaseLabel}${progSuffix}`, orders:[...orders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)) }];
   };
 
   // Άνοιγμα preview εκτύπωσης
