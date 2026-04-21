@@ -2407,7 +2407,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       ))}
                       {o.staveraDone&&<Text style={{fontSize:11,color:'#00796B',fontWeight:'bold',marginTop:2}}>✅ Ολοκληρώθηκαν</Text>}
                     </View>
-                    <View style={{justifyContent:'space-between', gap:6, marginLeft:8, paddingVertical:2}}>
+                    {o.programNo ? (
+                      <View style={{justifyContent:'center', alignItems:'center', paddingHorizontal:8, borderRightWidth:1, borderRightColor:'#e0e0e0', backgroundColor:'#fff8e1', minWidth:52, alignSelf:'stretch'}}>
+                        <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{o.programNo}</Text>
+                        <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+                      </View>
+                    ) : null}
+                    <View style={{justifyContent:'space-between', gap:6, marginLeft: o.programNo ? 0 : 8, paddingVertical:2}}>
                       <TouchableOpacity
                         style={[styles.doneBtn, o.staveraDone&&styles.doneBtnActive]}
                         onPress={async()=>{
