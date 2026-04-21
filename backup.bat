@@ -6,4 +6,4 @@ git commit -m "backup"
 git push
 echo.
 echo Ανέβηκε στο GitHub!
-pause
+cmd /k
