@@ -2678,7 +2678,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
                     const phaseLabel = PHASES.find(p=>p.key===phaseKey)?.label || phaseKey;
                     const allCopies = getCopies(filteredOrders, phaseLabel, dateStr);
-                    const html = buildPrintHTML([allCopies[0]], phaseKey);
+                    const html = buildPrintHTML(allCopies, phaseKey);
                     await printHTML(html, `VAICON — ${phaseLabel} — Πρόγρ. ${selectedPNo}`);
                     
                     // Μαρκάρει ως printed
