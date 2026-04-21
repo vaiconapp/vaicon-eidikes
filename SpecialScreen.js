@@ -247,6 +247,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
   const resetForm = () => { setCustomForm(INIT_FORM); setCustomerSearch(''); setSelectedCustomer(null); setShowCustomerList(false); setEditingOrder(null); };
 
+  // Ακύρωση φόρμας: αν είμαστε σε επεξεργασία, επαναφέρει την παραγγελία
+  const cancelForm = async () => {
+    if (editingOrder) {
+      const restored = editingOrder;
+      setSpecialOrders(prev => [restored, ...prev.filter(o => o.id !== restored.id)]);
+      await syncToCloud(restored);
+    }
+    resetForm();
+  };
+
   // Auto-focus πελάτη στο mount
   useEffect(()=>{ setTimeout(()=>customerRef.current?.focus(), 300); }, []);
 
@@ -3649,12 +3659,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               style={[styles.saveBtn, {backgroundColor:'#888', flex:1}]}
               onPress={()=>{
                 Keyboard.dismiss();
+                const msg = editingOrder
+                  ? 'Ακύρωση επεξεργασίας; Η παραγγελία θα επιστρέψει όπως ήταν.'
+                  : 'Ακύρωση καταχώρησης; Τα στοιχεία θα διαγραφούν.';
                 if (Platform.OS==='web') {
-                  if (window.confirm('Ακύρωση καταχώρησης; Τα στοιχεία θα διαγραφούν.')) resetForm();
+                  if (window.confirm(msg)) cancelForm();
                 } else {
-                  Alert.alert("Ακύρωση", "Τα στοιχεία θα διαγραφούν.", [
+                  Alert.alert("Ακύρωση", msg, [
                     {text:"ΟΧΙ", style:"cancel"},
-                    {text:"ΑΚΥΡΩΣΗ", style:"destructive", onPress:()=>resetForm()}
+                    {text:"ΑΚΥΡΩΣΗ", style:"destructive", onPress:()=>cancelForm()}
                   ]);
                 }
               }}>
