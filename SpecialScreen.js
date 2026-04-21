@@ -2153,7 +2153,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const phaseOrders = getPhaseOrders();
         const allSelected = phaseOrders.length > 0 && phaseOrders.every(o => printSelected[o.id]);
 
-        // 3β: Έλεγχος unique programNo για φιλτράρισμα εκτύπωσης φάσης
+        // Εκτύπωση φάσης: τυπώνει τις επιλεγμένες όπως είναι, χωρίς modal
         const handlePhasePrint = () => {
           const selected = Object.keys(printSelected).filter(id => printSelected[id]);
           if (selected.length === 0) {
@@ -2161,13 +2161,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             else Alert.alert("Προσοχή","Επίλεξε τουλάχιστον μία παραγγελία.");
             return;
           }
-          const selectedOrders = phaseOrders.filter(o => selected.includes(o.id));
-          const uniquePrograms = [...new Set(selectedOrders.filter(o=>o.programNo).map(o=>o.programNo))];
-          if (uniquePrograms.length >= 2) {
-            setPrintProgramModal({ visible: true, programs: uniquePrograms, selected: null, phaseKey: activeProdPhase });
-          } else {
-            handlePrint(activeProdPhase);
-          }
+          handlePrint(activeProdPhase);
         };
 
         return (
@@ -2212,8 +2206,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 // Έλεγχος unique programNo
                 const uniquePrograms = [...new Set(prodWithProgram.map(o=>o.programNo))];
                 if (uniquePrograms.length >= 2) {
-                  // Πολλαπλά προγράμματα → άνοιγμα modal επιλογής
-                  setPrintProgramModal({ visible: true, programs: uniquePrograms, selected: null, phaseKey: null });
+                  // Πολλαπλά προγράμματα → άνοιγμα modal επιλογής, με την τρέχουσα φάση ώστε να εκτυπωθούν οι σωστές σελίδες
+                  setPrintProgramModal({ visible: true, programs: uniquePrograms, selected: null, phaseKey: activeProdPhase });
                   return;
                 }
                 // Μόνο ένα πρόγραμμα → εκτύπωση απευθείας
