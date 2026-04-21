@@ -3643,19 +3643,36 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
 
 
-          <TouchableOpacity style={[styles.saveBtn,{backgroundColor:'#007AFF'}]} onPress={()=>{
-            Keyboard.dismiss();
-            if(Platform.OS==='web'){
-              if(window.confirm('Αποθήκευση παραγγελίας προς παραγωγή;')){ saveOrder(); setTimeout(()=>customerRef.current?.focus(), 400); }
-            } else {
-              Alert.alert("Επιβεβαίωση", "Αποθήκευση παραγγελίας προς παραγωγή;", [
-                {text:"ΟΧΙ", style:"cancel"},
-                {text:"ΝΑΙ", onPress:()=>{ saveOrder(); setTimeout(()=>customerRef.current?.focus(), 400); }}
-              ]);
-            }
-          }}>
-            <Text style={{color:'white',fontWeight:'bold',fontSize:15}}>ΑΠΟΘΗΚΕΥΣΗ ΠΡΟΣ ΠΑΡΑΓΩΓΗ</Text>
-          </TouchableOpacity>
+          <View style={{flexDirection:'row', gap:8}}>
+            <TouchableOpacity
+              style={[styles.saveBtn, {backgroundColor:'#888', flex:1}]}
+              onPress={()=>{
+                Keyboard.dismiss();
+                if (Platform.OS==='web') {
+                  if (window.confirm('Ακύρωση καταχώρησης; Τα στοιχεία θα διαγραφούν.')) resetForm();
+                } else {
+                  Alert.alert("Ακύρωση", "Τα στοιχεία θα διαγραφούν.", [
+                    {text:"ΟΧΙ", style:"cancel"},
+                    {text:"ΑΚΥΡΩΣΗ", style:"destructive", onPress:()=>resetForm()}
+                  ]);
+                }
+              }}>
+              <Text style={{color:'white',fontWeight:'bold',fontSize:15}}>✕ ΑΚΥΡΩΣΗ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.saveBtn,{backgroundColor:'#007AFF', flex:2}]} onPress={()=>{
+              Keyboard.dismiss();
+              if(Platform.OS==='web'){
+                if(window.confirm('Αποθήκευση παραγγελίας προς παραγωγή;')){ saveOrder(); setTimeout(()=>customerRef.current?.focus(), 400); }
+              } else {
+                Alert.alert("Επιβεβαίωση", "Αποθήκευση παραγγελίας προς παραγωγή;", [
+                  {text:"ΟΧΙ", style:"cancel"},
+                  {text:"ΝΑΙ", onPress:()=>{ saveOrder(); setTimeout(()=>customerRef.current?.focus(), 400); }}
+                ]);
+              }
+            }}>
+              <Text style={{color:'white',fontWeight:'bold',fontSize:15}}>ΑΠΟΘΗΚΕΥΣΗ ΠΡΟΣ ΠΑΡΑΓΩΓΗ</Text>
+            </TouchableOpacity>
+          </View>
           </>)}
 
           {/* ΚΑΤΑΧΩΡΗΜΕΝΕΣ */}
