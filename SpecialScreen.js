@@ -239,6 +239,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const staveraHRefs = useRef({});
   const staveraWRefs = useRef({});
   const staveraGridNoteRefs = useRef({});
+  const staveraQtyRefs = useRef({});
+  const editStaveraQtyRefs = useRef({});
   const [pageWidth, setPageWidth] = useState(SCREEN_WIDTH);
 
 
@@ -265,6 +267,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     glassNotesRef.current?.blur();
     Object.values(staveraHRefs.current).forEach(r=>r?.blur());
     Object.values(staveraGridNoteRefs.current).forEach(r=>r?.blur());
+    Object.values(staveraQtyRefs.current).forEach(r=>r?.blur());
   };
 
   const handleGlassEnter = () => {
@@ -553,7 +556,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const exo = allCoatings.filter(c=>c.toUpperCase().includes('ΕΞΩ'));
         const mesa = allCoatings.filter(c=>c.toUpperCase().includes('ΜΕΣΑ')||c.toUpperCase().includes('ΕΣΩΤ'));
         const staveraEntries = (o.stavera||[]).filter(s=>s&&s.dim);
-        const staveraStr = staveraEntries.map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ');
+        const staveraStr = staveraEntries.map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ');
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"";
         const notesLines = [];
         if (o.notes) notesLines.push(`<span style="color:#000">${o.notes}</span>`);
@@ -739,7 +742,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const mesa = allCoatings.filter(c=>c.toUpperCase().includes('ΜΕΣΑ')||c.toUpperCase().includes('ΕΣΩΤ'));
         // Σταθερά
         const staveraEntries = (o.stavera||[]).filter(s=>s&&s.dim);
-        const staveraStr = staveraEntries.map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ');
+        const staveraStr = staveraEntries.map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ');
         // Παρατηρήσεις — σύνθεση
         const notesLines = [];
         if (o.notes) notesLines.push(`<span style="color:#000">${o.notes}</span>`);
@@ -943,6 +946,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
                 <td style="font-size:13px">${o.caseType||'—'}</td>
                 <td style="font-size:20px;font-weight:900">—</td>
+                <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
                 <td style="font-size:13px;min-width:180px"></td>
                 <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
               </tr>`];
@@ -951,6 +955,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
               <td style="font-size:13px">${o.caseType||'—'}</td>
               <td style="font-size:20px;font-weight:900">${s.dim||'—'}</td>
+              <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center">${s.qty||''}</td>
               <td style="font-size:13px;min-width:180px">${s.note||''}</td>
               <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
             </tr>`);
@@ -967,7 +972,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </style></head><body>
             <h1>📏 ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ</h1>
             <h2>📅 ${dateStr} | ${orders.length} παραγγελίες</h2>
-            <table><thead><tr><th>Νο</th><th>Τ.Κάσας</th><th>Διάσταση Σταθερού</th><th>Παρατήρηση</th><th>Ημερομηνία</th></tr></thead>
+            <table><thead><tr><th>Νο</th><th>Τ.Κάσας</th><th>Διάσταση Σταθερού</th><th style="text-align:center">Τεμ.</th><th>Παρατήρηση</th><th>Ημερομηνία</th></tr></thead>
             <tbody>${rows}</tbody></table>
           </body></html>`;
           await printHTML(html, 'ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ');
@@ -1039,6 +1044,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
               <td style="font-size:13px">${o.caseType||'—'}</td>
               <td style="font-size:20px;font-weight:900">—</td>
+              <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
               <td style="font-size:13px;min-width:180px"></td>
               <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
             </tr>`];
@@ -1047,6 +1053,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
             <td style="font-size:13px">${o.caseType||'—'}</td>
             <td style="font-size:20px;font-weight:900">${s.dim||'—'}</td>
+            <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center">${s.qty||''}</td>
             <td style="font-size:13px;min-width:180px">${s.note||''}</td>
             <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
           </tr>`);
@@ -1063,7 +1070,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </style></head><body>
           <h1>📏 ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ</h1>
           <h2>📅 ${dateStr} | ${orders.length} παραγγελίες</h2>
-          <table><thead><tr><th>Νο</th><th>Τ.Κάσας</th><th>Διάσταση Σταθερού</th><th>Παρατήρηση</th><th>Ημερομηνία</th></tr></thead>
+          <table><thead><tr><th>Νο</th><th>Τ.Κάσας</th><th>Διάσταση Σταθερού</th><th style="text-align:center">Τεμ.</th><th>Παρατήρηση</th><th>Ημερομηνία</th></tr></thead>
           <tbody>${rows}</tbody></table>
         </body></html>`;
         await printHTML(html, 'ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ');
@@ -1696,7 +1703,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       order.glassNotes,
       order.deliveryDate,
       (order.coatings || []).join(' '),
-      (order.stavera || []).map(s => (s.dim || '') + ' ' + (s.note || '')).join(' '),
+      (order.stavera || []).map(s => (s.dim || '') + ' ' + (s.qty || '') + ' ' + (s.note || '')).join(' '),
     ];
     return fields.some(f => f && String(f).toLowerCase().includes(q));
   };
@@ -1740,7 +1747,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           {/* ΣΤΗΛΗ 2 */}
           <View style={{flex:1}}>
             {!isStd&&highlightText(`Κάσα: ${order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | ${order.caseMaterial||'DKP'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
-            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {isStd&&order.heightReduction?<Text style={[styles.cardSubDetails,{fontSize:13,color:'#b71c1c',fontWeight:'bold'}]}>📏 ΜΕΙΩΣΗ ΥΨΟΥΣ: {order.heightReduction} cm</Text>:null}
             {order.coatings&&order.coatings.length>0&&highlightText(`🎨 ${order.coatings.join(', ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13,color:'#007AFF'}])}
             {order.notes?highlightText(`Σημ: ${order.notes}`, searchQuery, [styles.cardSubDetails,{fontSize:13}]):null}
@@ -1865,7 +1872,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
           {/* ΣΤΗΛΗ 2: σταθερό, τεμάχια, επενδύσεις, παρατηρήσεις, done, ημερομηνίες */}
           <View style={{flex:1}}>
-            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {order.qty&&parseInt(order.qty)>1?<Text style={[styles.cardSubDetails,{color:'#007AFF',fontWeight:'bold',fontSize:13}]}>Τεμ: {order.qty}</Text>:null}
             {order.coatings&&order.coatings.length>0&&highlightText(`🎨 ${order.coatings.join(', ')}`, searchQuery, [styles.cardSubDetails,{color:'#007AFF',fontSize:13}])}
             {order.notes?highlightText(`📝 ${order.notes}`, searchQuery, [styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold',fontSize:13}]):null}
@@ -2417,7 +2424,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       <Text style={{fontSize:12, color:'#555', marginBottom:6}}>{o.h}x{o.w} | {o.side}</Text>
                       {(o.stavera||[]).map((s,idx)=>(
                         <View key={idx} style={{backgroundColor:'white', borderRadius:6, padding:8, marginBottom:4, borderLeftWidth:2, borderLeftColor:'#ce93d8'}}>
-                          <Text style={{fontWeight:'bold', fontSize:13, color:'#4a148c'}}>📐 {s.dim||'—'}</Text>
+                          <View style={{flexDirection:'row', alignItems:'center', gap:6}}>
+                            <Text style={{fontWeight:'bold', fontSize:13, color:'#4a148c'}}>📐 {s.dim||'—'}</Text>
+                            {s.qty?<Text style={{fontWeight:'900', fontSize:15, color:'#d32f2f'}}>×{s.qty}</Text>:null}
+                          </View>
                           {s.note?<Text style={{fontSize:12, color:'#555', marginTop:2}}>{s.note}</Text>:null}
                         </View>
                       ))}
@@ -3076,7 +3086,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               {/* Σταθερά */}
               <Text style={{fontWeight:'bold',color:'#555',marginBottom:4,fontSize:12}}>📐 ΣΤΑΘΕΡΑ</Text>
               {[0,1,2,3].map(i=>{
-                const s=(editForm.stavera||[])[i]||{dim:'',note:''};
+                const s=(editForm.stavera||[])[i]||{dim:'',qty:'',note:''};
                 return (
                   <View key={i} style={{flexDirection:'row',gap:8,marginBottom:8}}>
                     <TextInput
@@ -3088,23 +3098,43 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       blurOnSubmit={false}
                       value={s.dim||''}
                       onChangeText={v=>{
-                        const upd=[...(editForm.stavera||Array(4).fill(null).map(()=>({dim:'',note:''})))];
-                        while(upd.length<=i) upd.push({dim:'',note:''});
+                        const upd=[...(editForm.stavera||Array(4).fill(null).map(()=>({dim:'',qty:'',note:''})))];
+                        while(upd.length<=i) upd.push({dim:'',qty:'',note:''});
                         upd[i]={...upd[i],dim:v};
                         setEditForm(f=>({...f,stavera:upd}));
                       }}
                       onSubmitEditing={()=>{
-                        const upd=[...(editForm.stavera||Array(4).fill(null).map(()=>({dim:'',note:''})))];
-                        while(upd.length<=i) upd.push({dim:'',note:''});
+                        const upd=[...(editForm.stavera||Array(4).fill(null).map(()=>({dim:'',qty:'',note:''})))];
+                        while(upd.length<=i) upd.push({dim:'',qty:'',note:''});
                         const dim=upd[i].dim||'';
                         if(dim && !dim.includes('×')){
                           upd[i]={...upd[i],dim:dim+' × '};
                           setEditForm(f=>({...f,stavera:upd}));
                           setTimeout(()=>editStaveraRefs.current[i]?.focus(),30);
                         } else {
-                          editStaveraNoteRefs.current[i]?.focus();
+                          editStaveraQtyRefs.current[i]?.focus();
                         }
                       }}
+                    />
+                    <TextInput
+                      ref={el=>{editStaveraQtyRefs.current[i]=el;}}
+                      style={{backgroundColor:'#fff',borderWidth:1,borderColor:'#ddd',borderRadius:8,padding:10,fontSize:17,fontWeight:'900',color:'#d32f2f',width:55,textAlign:'center'}}
+                      placeholder="Τεμ."
+                      placeholderTextColor="#bbb"
+                      keyboardType="numeric"
+                      maxLength={2}
+                      selectTextOnFocus
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      value={s.qty||''}
+                      onChangeText={v=>{
+                        const clean=v.replace(/[^0-9]/g,'');
+                        const upd=[...(editForm.stavera||Array(4).fill(null).map(()=>({dim:'',qty:'',note:''})))];
+                        while(upd.length<=i) upd.push({dim:'',qty:'',note:''});
+                        upd[i]={...upd[i],qty:clean};
+                        setEditForm(f=>({...f,stavera:upd}));
+                      }}
+                      onSubmitEditing={()=>{ editStaveraNoteRefs.current[i]?.focus(); }}
                     />
                     <TextInput
                       ref={el=>{editStaveraNoteRefs.current[i]=el;}}
@@ -3114,8 +3144,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       blurOnSubmit={false}
                       value={s.note||''}
                       onChangeText={v=>{
-                        const upd=[...(editForm.stavera||Array(4).fill(null).map(()=>({dim:'',note:''})))];
-                        while(upd.length<=i) upd.push({dim:'',note:''});
+                        const upd=[...(editForm.stavera||Array(4).fill(null).map(()=>({dim:'',qty:'',note:''})))];
+                        while(upd.length<=i) upd.push({dim:'',qty:'',note:''});
                         upd[i]={...upd[i],note:v};
                         setEditForm(f=>({...f,stavera:upd}));
                       }}
@@ -3518,11 +3548,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <View style={{flex:6}}>
                   <Text style={{fontSize:11,fontWeight:'900',color:'#2c2c2c',letterSpacing:2,marginBottom:4,textAlign:'center'}}>ΣΤΑΘΕΡΑ</Text>
                   <View style={{flexDirection:'row',gap:3,marginBottom:3}}>
-                    <Text style={[vstyles.fieldLabel,{flex:1}]}>Διάσταση</Text>
-                    <Text style={[vstyles.fieldLabel,{flex:2}]}>Παρατήρηση Σταθερά</Text>
+                    <Text style={[vstyles.fieldLabel,{width:90,textAlign:'center'}]}>Διάσταση</Text>
+                    <Text style={[vstyles.fieldLabel,{width:45,textAlign:'center'}]}>Τεμ.</Text>
+                    <Text style={[vstyles.fieldLabel,{flex:1}]}>Παρατήρηση Σταθερά</Text>
                   </View>
                   {[0,1,2,3].map(i=>{
-                    const s=(customForm.stavera||[])[i]||{dim:'',note:''};
+                    const s=(customForm.stavera||[])[i]||{dim:'',qty:'',note:''};
                     return (
                       <View key={i} style={{flexDirection:'row',gap:3,marginBottom:4,alignItems:'center'}}>
                         <TextInput
@@ -3533,23 +3564,41 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                           returnKeyType="next"
                           value={s.dim||''}
                           onChangeText={v=>{
-                            const upd=[...(customForm.stavera||Array(4).fill(null).map(()=>({dim:'',note:''})))];
-                            while(upd.length<=i) upd.push({dim:'',note:''});
+                            const upd=[...(customForm.stavera||Array(4).fill(null).map(()=>({dim:'',qty:'',note:''})))];
+                            while(upd.length<=i) upd.push({dim:'',qty:'',note:''});
                             upd[i]={...upd[i],dim:v};
                             setCustomForm({...customForm,stavera:upd});
                           }}
                           onSubmitEditing={()=>{
-                            const upd=[...(customForm.stavera||Array(4).fill(null).map(()=>({dim:'',note:''})))];
-                            while(upd.length<=i) upd.push({dim:'',note:''});
+                            const upd=[...(customForm.stavera||Array(4).fill(null).map(()=>({dim:'',qty:'',note:''})))];
+                            while(upd.length<=i) upd.push({dim:'',qty:'',note:''});
                             const dim=upd[i].dim||'';
                             if(dim && !dim.includes(' × ')){
                               upd[i]={...upd[i],dim:dim+' × '};
                               setCustomForm({...customForm,stavera:upd});
                               setTimeout(()=>staveraHRefs.current['e'+i]?.focus(),30);
                             } else {
-                              staveraGridNoteRefs.current['e'+i]?.focus();
+                              staveraQtyRefs.current['e'+i]?.focus();
                             }
                           }}
+                        />
+                        <TextInput
+                          ref={el=>{staveraQtyRefs.current['e'+i]=el;}}
+                          style={[vstyles.staveraCell,{width:45,textAlign:'center',fontSize:17,fontWeight:'900',color:'#d32f2f'}]}
+                          placeholder=""
+                          keyboardType="numeric"
+                          maxLength={2}
+                          returnKeyType="next"
+                          selectTextOnFocus
+                          value={s.qty||''}
+                          onChangeText={v=>{
+                            const clean=v.replace(/[^0-9]/g,'');
+                            const upd=[...(customForm.stavera||Array(4).fill(null).map(()=>({dim:'',qty:'',note:''})))];
+                            while(upd.length<=i) upd.push({dim:'',qty:'',note:''});
+                            upd[i]={...upd[i],qty:clean};
+                            setCustomForm({...customForm,stavera:upd});
+                          }}
+                          onSubmitEditing={()=>{ staveraGridNoteRefs.current['e'+i]?.focus(); }}
                         />
                         <TextInput
                           ref={el=>{staveraGridNoteRefs.current['e'+i]=el;}}
@@ -3559,8 +3608,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                           blurOnSubmit={false}
                           value={s.note||''}
                           onChangeText={v=>{
-                            const upd=[...(customForm.stavera||Array(4).fill(null).map(()=>({dim:'',note:''})))];
-                            while(upd.length<=i) upd.push({dim:'',note:''});
+                            const upd=[...(customForm.stavera||Array(4).fill(null).map(()=>({dim:'',qty:'',note:''})))];
+                            while(upd.length<=i) upd.push({dim:'',qty:'',note:''});
                             upd[i]={...upd[i],note:v};
                             setCustomForm({...customForm,stavera:upd});
                           }}
