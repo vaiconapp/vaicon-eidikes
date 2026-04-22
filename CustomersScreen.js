@@ -66,6 +66,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
   const [form, setForm] = useState(prefillName ? { name: prefillName, phone: '', identifier: '' } : INIT);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
+  const [sortMode, setSortMode] = useState('name'); // 'name' | 'orders'
   const [selectedCustomerOrders, setSelectedCustomerOrders] = useState(null); // πελάτης για εμφάνιση παραγγελιών
   const [deleteCustomerModal, setDeleteCustomerModal] = useState({ visible:false, customerId:null, customerName:'' });
 
@@ -214,7 +215,15 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
         );
       }
     })
-    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'el'));
+    .sort((a, b) => {
+      if (sortMode === 'orders') {
+        const aCount = allOrders.filter(o => o.customer === a.name).length;
+        const bCount = allOrders.filter(o => o.customer === b.name).length;
+        if (bCount !== aCount) return bCount - aCount;
+        return (a.name || '').localeCompare(b.name || '', 'el');
+      }
+      return (a.name || '').localeCompare(b.name || '', 'el');
+    });
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
@@ -244,20 +253,32 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
           <TextInput style={styles.input} placeholder="Τηλέφωνο Επικοινωνίας" keyboardType="phone-pad" value={form.phone} onChangeText={v => setForm({...form, phone:v})} />
           <TextInput style={styles.input} placeholder="Αναγνωριστικό (π.χ. Γιώργης Μαραθώνας)" value={form.identifier} onChangeText={v => setForm({...form, identifier:v})} />
 
-          <View style={{ flexDirection:'row', gap:8 }}>
+          <View style={{ flexDirection:'row', gap:8, alignItems:'center' }}>
             {editingId && (
-              <TouchableOpacity style={[styles.saveBtn, { flex:1, backgroundColor:'#888' }]} onPress={() => { setForm(INIT); setEditingId(null); }}>
+              <TouchableOpacity style={[styles.saveBtn, { paddingHorizontal:16, backgroundColor:'#888' }]} onPress={() => { setForm(INIT); setEditingId(null); }}>
                 <Text style={{ color:'white', fontWeight:'bold', fontSize:14 }}>ΑΚΥΡΟ</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={[styles.saveBtn, { flex:2 }]} onPress={saveCustomer}>
+            <TouchableOpacity style={[styles.saveBtn, { paddingHorizontal:20, alignSelf:'flex-start' }]} onPress={saveCustomer}>
               <Text style={{ color:'white', fontWeight:'bold', fontSize:14 }}>
                 {editingId ? '💾 ΑΠΟΘΗΚΕΥΣΗ ΑΛΛΑΓΩΝ' : 'ΑΠΟΘΗΚΕΥΣΗ ΠΕΛΑΤΗ'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.sectionTitle, { marginTop:24 }]}>ΛΙΣΤΑ ΠΕΛΑΤΩΝ ({customers.length})</Text>
+          <View style={{ flexDirection:'row', alignItems:'center', marginTop:24, marginBottom:10, gap:6 }}>
+            <Text style={[styles.sectionTitle, { marginBottom:0 }]}>ΛΙΣΤΑ ΠΕΛΑΤΩΝ ({customers.length})</Text>
+            <TouchableOpacity
+              onPress={()=>setSortMode('name')}
+              style={{ marginLeft:10, paddingHorizontal:10, paddingVertical:6, borderRadius:6, backgroundColor: sortMode==='name' ? '#8B0000' : '#ddd' }}>
+              <Text style={{ color: sortMode==='name' ? 'white' : '#555', fontWeight:'bold', fontSize:12 }}>🔤 A→Ω</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={()=>setSortMode('orders')}
+              style={{ paddingHorizontal:10, paddingVertical:6, borderRadius:6, backgroundColor: sortMode==='orders' ? '#8B0000' : '#ddd' }}>
+              <Text style={{ color: sortMode==='orders' ? 'white' : '#555', fontWeight:'bold', fontSize:12 }}>🔢 #↓</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.hint}>💡 Κράτα 3 δευτ. για επεξεργασία • Κράτα το ✕ 2 δευτ. για διαγραφή</Text>
           <TextInput style={[styles.input, { backgroundColor:'#fff' }]} placeholder="🔍 Αναζήτηση" value={search} onChangeText={setSearch} />
 
