@@ -567,8 +567,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"";
         const notesLines = [];
         if (o.notes) notesLines.push(`<span style="color:#000">${o.notes}</span>`);
-        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${exo.join(', ')}</span>`);
-        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${mesa.join(', ')}</span>`);
+        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${coatingsHtml(exo)}</span>`);
+        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${coatingsHtml(mesa)}</span>`);
         if (staveraStr) notesLines.push(`<span style="color:#6a0dad;font-weight:bold">📐 ${staveraStr}</span>`);
         if (tzami) notesLines.push(`<span style="color:#555">🪟 ${tzami}</span>`);
         const notesCell = notesLines.join('<br>');
@@ -754,8 +754,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const notesLines = [];
         if (o.notes) notesLines.push(`<span style="color:#000;font-size:12px">${o.notes.replace(/\n/g,'<br>')}</span>`);
         if (o.hardware) notesLines.push(`<span style="color:#333;font-weight:bold">🔩 ${o.hardware}</span>`);
-        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${exo.join(', ')}</span>`);
-        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${mesa.join(', ')}</span>`);
+        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${coatingsHtml(exo)}</span>`);
+        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${coatingsHtml(mesa)}</span>`);
         if (staveraStr) notesLines.push(`<span style="color:#6a0dad;font-weight:bold">📐 ${staveraStr}</span>`);
         const notesCell = notesLines.join('<br>');
         // Όνομα πελάτη με αναδίπλωση σε κάθε κενό
