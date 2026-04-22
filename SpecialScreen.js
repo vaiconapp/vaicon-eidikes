@@ -1771,6 +1771,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     </View>
                   );
                 })}
+                {order.stavera&&order.stavera.some(s=>s&&s.dim)&&(
+                  <View style={{backgroundColor:order.staveraDone?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
+                    <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{order.staveraDone?'✅':'⏳'} 📐 ΣΤΑΘ.</Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -2136,10 +2141,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
                 onPress={()=>{
                   const newSelected = {...printSelected};
-                  staveraOrders.forEach(o=>{ newSelected[o.id] = !o.staveraPrinted; });
+                  staveraOrders.forEach(o=>{ newSelected[o.id] = !o.staveraDone; });
                   setPrintSelected(newSelected);
                 }}>
-                <Text style={{fontSize:15,fontWeight:'bold',color:'#856404'}}>🖨️ ΜΗ ΕΚΤΥΠ.</Text>
+                <Text style={{fontSize:15,fontWeight:'bold',color:'#856404'}}>🖨️ ΕΚΚΡΕΜΟΥΝ</Text>
               </TouchableOpacity>
             </View>
           );
