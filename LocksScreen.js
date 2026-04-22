@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { FIREBASE_URL } from './App';
+import { SIZE_OPTIONS, COLOR_OPTIONS, COLOR_MAP, getFormatStyle } from './formatHelpers';
 
 export default function LocksScreen({ locks, setLocks, onClose }) {
   const [form, setForm] = useState('');
+  const [fmtBold, setFmtBold] = useState(false);
+  const [fmtSize, setFmtSize] = useState('M');
+  const [fmtColor, setFmtColor] = useState('black');
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
+
+  const resetForm = () => { setForm(''); setFmtBold(false); setFmtSize('M'); setFmtColor('black'); setEditingId(null); };
 
   const syncToCloud = async (lock) => {
     try {
@@ -30,22 +36,28 @@ export default function LocksScreen({ locks, setLocks, onClose }) {
   const saveLock = async () => {
     if (!form.trim()) return Alert.alert("Προσοχή", "Βάλτε όνομα κλειδαριάς.");
     if (editingId) {
-      const updated = { ...locks.find(l => l.id === editingId), name: form.trim() };
+      const updated = { ...locks.find(l => l.id === editingId), name: form.trim(), bold: fmtBold, size: fmtSize, color: fmtColor };
       setLocks(locks.map(l => l.id === editingId ? updated : l));
       await syncToCloud(updated);
       Alert.alert("VAICON", `Η κλειδαριά ενημερώθηκε!\n${form.trim()}`);
     } else {
       const exists = locks.some(l => l.name.toLowerCase() === form.trim().toLowerCase());
       if (exists) return Alert.alert("Προσοχή", "Αυτή η κλειδαριά υπάρχει ήδη.");
-      const newLock = { id: Date.now().toString(), name: form.trim(), createdAt: Date.now(), order: locks.length };
+      const newLock = { id: Date.now().toString(), name: form.trim(), createdAt: Date.now(), order: locks.length, bold: fmtBold, size: fmtSize, color: fmtColor };
       setLocks([...locks, newLock]);
       await syncToCloud(newLock);
       Alert.alert("VAICON", `Κλειδαριά αποθηκεύτηκε!\n${form.trim()}`);
     }
-    setForm(''); setEditingId(null);
+    resetForm();
   };
 
-  const editLock = (lock) => { setForm(lock.name); setEditingId(lock.id); };
+  const editLock = (lock) => {
+    setForm(lock.name);
+    setFmtBold(!!lock.bold);
+    setFmtSize(lock.size || 'M');
+    setFmtColor(lock.color || 'black');
+    setEditingId(lock.id);
+  };
 
   const deleteLock = (id) => {
     Alert.alert("Διαγραφή", "Οριστική διαγραφή κλειδαριάς;", [
@@ -76,8 +88,48 @@ export default function LocksScreen({ locks, setLocks, onClose }) {
             <Text style={styles.saveTxt}>{editingId ? '✓' : '+'}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* ΜΟΡΦΟΠΟΙΗΣΗ */}
+        <View style={styles.fmtBox}>
+          <Text style={styles.fmtTitle}>🎨 ΜΟΡΦΟΠΟΙΗΣΗ</Text>
+          <View style={styles.previewBox}>
+            <Text style={styles.previewLabel}>Προεπισκόπηση:</Text>
+            <Text style={[styles.previewText, getFormatStyle({bold:fmtBold,size:fmtSize,color:fmtColor}, 14)]}>
+              {form.trim() || 'ΠΛΗΚΤΡΟΛΟΓΗΣΤΕ...'}
+            </Text>
+          </View>
+
+          <View style={styles.fmtRow}>
+            <Text style={styles.fmtLabel}>💪 Bold:</Text>
+            <TouchableOpacity style={[styles.fmtBtn, !fmtBold && styles.fmtBtnActive]} onPress={()=>setFmtBold(false)}>
+              <Text style={[styles.fmtBtnTxt, !fmtBold && styles.fmtBtnTxtActive]}>ΟΧΙ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.fmtBtn, fmtBold && styles.fmtBtnActive]} onPress={()=>setFmtBold(true)}>
+              <Text style={[styles.fmtBtnTxt, fmtBold && styles.fmtBtnTxtActive]}>ΝΑΙ</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.fmtRow}>
+            <Text style={styles.fmtLabel}>🔠 Μέγεθος:</Text>
+            {SIZE_OPTIONS.map(s=>(
+              <TouchableOpacity key={s} style={[styles.fmtBtn, fmtSize===s && styles.fmtBtnActive]} onPress={()=>setFmtSize(s)}>
+                <Text style={[styles.fmtBtnTxt, fmtSize===s && styles.fmtBtnTxtActive]}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.fmtRow}>
+            <Text style={styles.fmtLabel}>🎨 Χρώμα:</Text>
+            {COLOR_OPTIONS.map(co=>(
+              <TouchableOpacity key={co.key} style={[styles.colorBtn, {borderColor: fmtColor===co.key ? '#000' : 'transparent', backgroundColor: COLOR_MAP[co.key]+'22'}]} onPress={()=>setFmtColor(co.key)}>
+                <Text style={{fontSize:18}}>{co.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {editingId && (
-          <TouchableOpacity onPress={() => { setForm(''); setEditingId(null); }} style={styles.cancelEdit}>
+          <TouchableOpacity onPress={resetForm} style={styles.cancelEdit}>
             <Text style={styles.cancelTxt}>ΑΚΥΡΟ</Text>
           </TouchableOpacity>
         )}
@@ -94,7 +146,7 @@ export default function LocksScreen({ locks, setLocks, onClose }) {
                   <Text style={[styles.orderBtn, sorted.indexOf(l) === sorted.length - 1 && {opacity:0.2}]}>▼</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.cardName}>{l.name}</Text>
+              <Text style={[styles.cardName, { fontWeight: l.bold ? 'bold' : 'normal' }, getFormatStyle(l, 14)]}>{l.name}</Text>
               <View style={styles.cardBtns}>
                 <TouchableOpacity style={styles.editBtn} onPress={() => editLock(l)}>
                   <Text style={styles.editTxt}>✏️</Text>
@@ -138,4 +190,16 @@ const styles = StyleSheet.create({
   deleteBtn: { padding: 6 },
   deleteTxt: { fontSize: 16 },
   empty: { textAlign: 'center', color: '#aaa', marginTop: 40, fontSize: 14 },
+  fmtBox: { backgroundColor: '#fafafa', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#e0e0e0' },
+  fmtTitle: { fontSize: 11, fontWeight: 'bold', color: '#555', marginBottom: 6 },
+  previewBox: { backgroundColor: 'white', borderRadius: 6, padding: 8, marginBottom: 8, borderWidth: 1, borderColor: '#eee' },
+  previewLabel: { fontSize: 9, color: '#999', marginBottom: 2 },
+  previewText: { fontSize: 14, color: '#000' },
+  fmtRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' },
+  fmtLabel: { fontSize: 11, color: '#555', minWidth: 75 },
+  fmtBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 5, backgroundColor: '#e0e0e0', minWidth: 32, alignItems: 'center' },
+  fmtBtnActive: { backgroundColor: '#8B0000' },
+  fmtBtnTxt: { fontSize: 11, fontWeight: 'bold', color: '#555' },
+  fmtBtnTxtActive: { color: 'white' },
+  colorBtn: { width: 32, height: 32, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
 });

@@ -5,6 +5,7 @@ import { FIREBASE_URL } from './App';
 import { logActivity } from './activityLog';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { findFormatItem, getFormatStyle, formatNamesHtml, wrapHtml } from './formatHelpers';
 
 // Helper εκτύπωσης — web: window.print(), mobile: expo-print + sharing
 const printHTML = async (html, title, existingWin=null) => {
@@ -159,6 +160,12 @@ function DuplicateModal({ visible, base, suggested, onUse, onKeep, onCancel }) {
 }
 
 export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[] }) {
+  // ---------- Helpers μορφοποίησης επενδύσεων/κλειδαριών ----------
+  // Επιστρέφουν RN style για UI και HTML string για εκτυπώσεις, με βάση τις ρυθμίσεις bold/size/color
+  const coatingStyle = (name, baseSize) => getFormatStyle(findFormatItem(name, coatings), baseSize);
+  const lockStyle    = (name, baseSize) => getFormatStyle(findFormatItem(name, locks), baseSize);
+  const coatingsHtml = (names, sep=', ') => formatNamesHtml(names||[], coatings, sep);
+  const lockHtml     = (name) => name ? wrapHtml(name, findFormatItem(name, locks)) : '—';
   const [activeSection, setActiveSection] = useState('pending'); // form | pending | prod | ready | archive
   const [pendingSort, setPendingSort] = useState('no');
   const [showHardwarePicker, setShowHardwarePicker] = useState(false);
@@ -486,7 +493,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
         const hingesNum = parseInt(o.hinges)||2;
         const mentStyle = hingesNum>=3 ? 'font-size:22px;font-weight:900;color:#cc0000;' : 'font-size:16px;';
-        const kleidaria = o.lock||'—';
+        const kleidaria = lockHtml(o.lock);
         const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
@@ -518,7 +525,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const mentStyle = hingesNum>=3 ? 'font-size:22px;font-weight:900;color:#cc0000;' : 'font-size:16px;';
         const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
-        const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
+        const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':lockHtml(o.lock);
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const datesLine = [createdFmt, deliveryFmt].filter(Boolean).join('    ');
@@ -548,7 +555,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
         const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
         const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
-        const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
+        const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':lockHtml(o.lock);
         const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
         const datesLine = [createdFmt, deliveryFmt].filter(Boolean).join('    ');
@@ -636,7 +643,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           const hingesNum = parseInt(o.hinges)||2;
           const mentesedesVal = (!o.hinges||o.hinges==='2')?'—':o.hinges;
           const mentStyle = hingesNum>=3 ? 'font-size:14px;font-weight:900;color:#cc0000;' : 'font-size:10px;';
-          const kleidaria = o.lock||'—';
+          const kleidaria = lockHtml(o.lock);
           const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
           return `<tr>
             <td class="col-no" style="font-weight:bold">${o.orderNo||'—'}</td>
@@ -678,7 +685,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td class="col-fora" style="font-weight:bold">${fora}</td>
             <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentVal}</td>
-            <td class="col-lock" style="font-size:10px">${o.lock||'—'}</td>
+            <td class="col-lock" style="font-size:10px">${lockHtml(o.lock)}</td>
             <td class="col-type" style="font-size:10px;text-align:center">${caseTypeVal}</td>
             <td class="col-mat" style="font-size:10px;font-weight:bold">${mat}</td>
             <td class="notes" style="font-size:10px">${o.notes||''}</td>
@@ -713,7 +720,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentVal}</td>
             <td class="col-glass" style="font-size:10px">${((o.glassDim||'')+(o.glassNotes?' '+o.glassNotes:''))||'—'}</td>
-            <td class="col-lock" style="font-size:10px">${o.lock||'—'}</td>
+            <td class="col-lock" style="font-size:10px">${lockHtml(o.lock)}</td>
             <td class="notes" style="font-size:10px">${o.notes||''}</td>
           </tr>`;
         }).join('');
@@ -732,7 +739,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const hingesNum = parseInt(o.hinges)||2;
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
         const mentStyle = hingesNum>=3 ? 'font-size:14px;font-weight:900;color:#cc0000;' : 'font-size:10px;';
-        const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
+        const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':lockHtml(o.lock);
         const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
         const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
@@ -784,7 +791,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const rows = orders.map(o => {
         const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
         const mentesedesVal = (!o.hinges||o.hinges==='2')?'':o.hinges;
-        const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—');
+        const kleidaria = o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':lockHtml(o.lock);
         const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
         const caseTypeVal = (o.caseType||'').includes('ΑΝΟΙΧΤΟΥ') ? '<b>Α/Τ</b>' : '';
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"—":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"—";
@@ -804,7 +811,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="text-align:center">${caseTypeVal}</td>
           <td>${o.caseMaterial||'DKP'}</td>
           <td>${o.installation==='ΝΑΙ'?'✓':''}</td>
-          ${showCoatings?`<td>${(o.coatings&&o.coatings.length>0)?o.coatings.join(', '):''}</td>`:''}
+          ${showCoatings?`<td>${coatingsHtml(o.coatings)}</td>`:''}
           <td style="min-width:140px">${o.notes||''}</td>
           <td style="font-size:10px;color:#444">${datesLine}</td>
         </tr>`;
@@ -1236,7 +1243,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:95},...[bold]]}>{o.h||'—'} × {o.w||'—'}</Text>
                     <Text style={[styles.previewTd,{width:40},...[bold]]}>{fora}</Text>
                     <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
-                    <Text style={[styles.previewTd,{width:80}]}>{o.lock||'—'}</Text>
+                    <Text style={[styles.previewTd,{width:80}, lockStyle(o.lock, 11)]}>{o.lock||'—'}</Text>
                     <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{caseTypeTxt}</Text>
                     <Text style={[styles.previewTd,{width:65}]}>{o.caseMaterial||'DKP'}</Text>
                     <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
@@ -1278,7 +1285,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{armorTxt}</Text>
                     <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
                     <View style={{width:55,paddingHorizontal:6,justifyContent:'center'}}><Text style={{fontSize:11,color:'#000',fontWeight:'bold',flexWrap:'wrap'}}>{tzami}</Text></View>
-                    <View style={{width:70,paddingHorizontal:6,justifyContent:'center'}}><Text style={{fontSize:11,color:'#000',flexWrap:'wrap'}}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text></View>
+                    <View style={{width:70,paddingHorizontal:6,justifyContent:'center'}}><Text style={[{fontSize:11,color:'#000',flexWrap:'wrap'}, o.orderType!=='ΤΥΠΟΠΟΙΗΜΕΝΗ'?lockStyle(o.lock,11):null]}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text></View>
                     <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
                     <Text style={[styles.previewTd,{width:120,fontSize:11,color:'#555'}]}>{[createdFmt,deliveryFmt].filter(Boolean).join('  ')}</Text>
                   </View>
@@ -1321,9 +1328,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={[styles.previewTd,{width:50}]}>{o.hardware||'—'}</Text>
                     <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
                     <View style={{width:55,paddingHorizontal:6,justifyContent:'center'}}><Text style={{fontSize:11,color:'#000',fontWeight:'bold',flexWrap:'wrap'}}>{tzami}</Text></View>
-                    <View style={{width:70,paddingHorizontal:6,justifyContent:'center'}}><Text style={{fontSize:11,color:'#000',flexWrap:'wrap'}}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text></View>
+                    <View style={{width:70,paddingHorizontal:6,justifyContent:'center'}}><Text style={[{fontSize:11,color:'#000',flexWrap:'wrap'}, o.orderType!=='ΤΥΠΟΠΟΙΗΜΕΝΗ'?lockStyle(o.lock,11):null]}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text></View>
                     <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{caseTypeTxt}</Text>
-                    <Text style={[styles.previewTd,{width:120}]}>{(o.coatings&&o.coatings.length>0)?o.coatings.join(', '):''}</Text>
+                    <Text style={[styles.previewTd,{width:120}]}>{(o.coatings||[]).map((n,i)=>(<Text key={i} style={coatingStyle(n, 11)}>{i>0?', ':''}{n}</Text>))}</Text>
                     <Text style={[styles.previewTd,{width:220}]}>{o.notes||''}</Text>
                     <Text style={[styles.previewTd,{width:120,fontSize:11,color:'#555'}]}>{[createdFmt2,deliveryFmt2].filter(Boolean).join('  ')}</Text>
                   </View>
@@ -1401,12 +1408,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{armorTxt}</Text>
                 <Text style={[styles.previewTd,{width:35},...[bold]]}>{mentesedesVal}</Text>
                 <View style={{width:55,paddingHorizontal:6}}><Text style={{fontSize:11,color:'#000'}}>{tzami}</Text></View>
-                <View style={{width:140,paddingHorizontal:6}}><Text style={{fontSize:11,color:'#000'}}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text></View>
+                <View style={{width:140,paddingHorizontal:6}}><Text style={[{fontSize:11,color:'#000'}, o.orderType!=='ΤΥΠΟΠΟΙΗΜΕΝΗ'?lockStyle(o.lock,11):null]}>{o.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ'?'—':(o.lock||'—')}</Text></View>
                 <Text style={[styles.previewTd,{width:50}]}>{o.hardware||'—'}</Text>
                 <Text style={[styles.previewTd,{width:36,fontWeight:'bold'}]}>{caseTypeTxt}</Text>
                 <Text style={[styles.previewTd,{width:65}]}>{o.caseMaterial||'DKP'}</Text>
                 <Text style={[styles.previewTd,{width:40}]}>{o.installation==='ΝΑΙ'?'✓':''}</Text>
-                <Text style={[styles.previewTd,{width:120}]}>{(o.coatings&&o.coatings.length>0)?o.coatings.join(', '):''}</Text>
+                <Text style={[styles.previewTd,{width:120}]}>{(o.coatings||[]).map((n,i)=>(<Text key={i} style={coatingStyle(n, 11)}>{i>0?', ':''}{n}</Text>))}</Text>
                 <Text style={[styles.previewTd,{width:160,flexWrap:'wrap'}]}>{o.notes||''}</Text>
               </View>
             );
@@ -1738,8 +1745,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               {order.hardware?highlightText(order.hardware, searchQuery, [styles.cardDetails,{fontSize:14,color:'#555'}]):null}
             </View>
             {!isStd&&highlightText(`Μεντ: ${order.hinges}${(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''}`  , searchQuery, [styles.cardSubDetails,{fontSize:13}])}
-            {!isStd&&highlightText(`Κλειδ: ${order.lock||'—'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
-            {isStd&&highlightText(`${order.lock?`Κλειδ: ${order.lock} | `:''}  ${order.hardware}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {!isStd&&(
+              <Text style={[styles.cardSubDetails,{fontSize:13}]}>Κλειδ: <Text style={lockStyle(order.lock,13)}>{order.lock||'—'}</Text></Text>
+            )}
+            {isStd&&(
+              <Text style={[styles.cardSubDetails,{fontSize:13}]}>
+                {order.lock?(<Text>Κλειδ: <Text style={lockStyle(order.lock,13)}>{order.lock}</Text> | </Text>):null}
+                {'  '}{order.hardware}
+              </Text>
+            )}
             {(isStd||!isStd)&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:16}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
           </View>
 
@@ -1751,7 +1765,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {!isStd&&highlightText(`Κάσα: ${order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | ${order.caseMaterial||'DKP'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {isStd&&order.heightReduction?<Text style={[styles.cardSubDetails,{fontSize:13,color:'#b71c1c',fontWeight:'bold'}]}>📏 ΜΕΙΩΣΗ ΥΨΟΥΣ: {order.heightReduction} cm</Text>:null}
-            {order.coatings&&order.coatings.length>0&&highlightText(`🎨 ${order.coatings.join(', ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13,color:'#007AFF'}])}
+            {order.coatings&&order.coatings.length>0&&(
+              <Text style={[styles.cardSubDetails,{fontSize:13,color:'#007AFF'}]}>
+                {'🎨 '}
+                {order.coatings.map((n,i)=>(<Text key={i} style={[{fontSize:13,color:'#007AFF'}, coatingStyle(n,13)]}>{i>0?', ':''}{n}</Text>))}
+              </Text>
+            )}
             {order.notes?highlightText(`Σημ: ${order.notes}`, searchQuery, [styles.cardSubDetails,{fontSize:13}]):null}
             <View style={styles.datesRow}>
               {fmtDate(order.createdAt)&&<Text style={[styles.dateChip,{fontSize:12}]}>📅 {fmtDate(order.createdAt)}</Text>}
@@ -1868,7 +1887,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {highlightText('#'+order.orderNo, searchQuery, [styles.cardDetails,{fontWeight:'bold',fontSize:14}])}
             {order.customer?highlightText('👤 '+order.customer, searchQuery, [styles.cardSubDetails,{marginTop:2,fontSize:13}]):null}
             {highlightText(`${order.h}x${order.w} | ${order.side}${!isStd?` | ${order.armor} ΘΩΡ.`:''}`, searchQuery, [styles.cardDetails,{fontSize:14}])}
-            {!isStd&&highlightText(`Μεντ: ${order.hinges}${(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''} | Κλειδ: ${order.lock||'—'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {!isStd&&(
+              <Text style={[styles.cardSubDetails,{fontSize:13}]}>
+                Μεντ: {order.hinges}
+                {(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''}
+                {' | Κλειδ: '}
+                <Text style={lockStyle(order.lock,13)}>{order.lock||'—'}</Text>
+              </Text>
+            )}
             {!isStd&&highlightText(`Κάσα: ${order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | ${order.caseMaterial||'DKP'} | ${order.hardware||'—'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {isStd&&highlightText(order.hardware||'', searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {(isStd||!isStd)&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:16}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
@@ -1881,7 +1907,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <View style={{flex:1}}>
             {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {order.qty&&parseInt(order.qty)>1?<Text style={[styles.cardSubDetails,{color:'#007AFF',fontWeight:'bold',fontSize:13}]}>Τεμ: {order.qty}</Text>:null}
-            {order.coatings&&order.coatings.length>0&&highlightText(`🎨 ${order.coatings.join(', ')}`, searchQuery, [styles.cardSubDetails,{color:'#007AFF',fontSize:13}])}
+            {order.coatings&&order.coatings.length>0&&(
+              <Text style={[styles.cardSubDetails,{color:'#007AFF',fontSize:13}]}>
+                {'🎨 '}
+                {order.coatings.map((n,i)=>(<Text key={i} style={[{fontSize:13,color:'#007AFF'}, coatingStyle(n,13)]}>{i>0?', ':''}{n}</Text>))}
+              </Text>
+            )}
             {order.notes?highlightText(`📝 ${order.notes}`, searchQuery, [styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold',fontSize:13}]):null}
             {phase.done&&<Text style={[styles.doneTxt,{fontSize:15, color:'#00C851', fontWeight:'900'}]}>✅ Ολοκληρώθηκε</Text>}
             {order.prodAt&&<Text style={{fontSize:12,color:'#666',marginTop:4}}>📥 Είσοδος: {fmtDateTime(order.prodAt)}</Text>}
@@ -1987,7 +2018,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         <td style="text-align:center;font-weight:bold;color:${hasCase?'#155724':'#721c24'}">${kasaStatus}</td>
         <td style="text-align:center;font-weight:bold;color:${hasSasi?'#155724':'#721c24'}">${sasiStatus}</td>
         <td style="text-align:center;font-weight:bold">${montStatus}</td>
-        ${isMounting?`<td>${(o.coatings&&o.coatings.length>0)?o.coatings.join(', '):''}</td>`:''}
+        ${isMounting?`<td>${coatingsHtml(o.coatings)}</td>`:''}
         <td>${o.deliveryDate||'—'}</td>
         <td style="min-width:140px">${o.notes||''}</td>
       </tr>`;
@@ -2245,7 +2276,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       <td style="font-weight:bold">${o.h||'—'} × ${o.w||'—'}</td>
                       <td>${fora}</td>
                       <td>${armorVal}</td>
-                      <td>${o.lock||'—'}</td>
+                      <td>${lockHtml(o.lock)}</td>
                       <td>${o.deliveryDate||'—'}</td>
                       <td>${o.notes||''}</td>
                     </tr>`;
