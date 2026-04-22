@@ -745,7 +745,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const staveraStr = staveraEntries.map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ');
         // Παρατηρήσεις — σύνθεση
         const notesLines = [];
-        if (o.notes) notesLines.push(`<span style="color:#000">${o.notes}</span>`);
+        if (o.notes) notesLines.push(`<span style="color:#000;font-size:12px">${o.notes.replace(/\n/g,'<br>')}</span>`);
         if (o.hardware) notesLines.push(`<span style="color:#333;font-weight:bold">🔩 ${o.hardware}</span>`);
         if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${exo.join(', ')}</span>`);
         if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${mesa.join(', ')}</span>`);
