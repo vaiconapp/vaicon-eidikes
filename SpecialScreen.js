@@ -196,6 +196,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [showCustomerInfo, setShowCustomerInfo] = useState(false);
   const [pendingSearch, setPendingSearch] = useState('');
   const [prodSearch, setProdSearch] = useState('');
+  const [readySearch, setReadySearch] = useState('');
 
   const [printSelected, setPrintSelected] = useState({});
   const [printPreview, setPrintPreview] = useState({ visible:false, phaseKey:null, orders:[], copies:1 });
@@ -3817,14 +3818,30 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           {/* ΕΤΟΙΜΑ */}
           {activeSection==='ready'&&(
             <View>
-              <View style={[styles.listHeader,{backgroundColor:'#00C851', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
-                <Text style={styles.listHeaderText}>● ΕΤΟΙΜΑ ΑΠΟΘΗΚΗΣ ({specialOrders.filter(o=>o.status==='READY').length})</Text>
+              <View style={[styles.listHeader,{backgroundColor:'#00C851', flexDirection:'row', alignItems:'center'}]}>
+                <Text style={[styles.listHeaderText,{flex:1}]}>● ΕΤΟΙΜΑ ΑΠΟΘΗΚΗΣ ({specialOrders.filter(o=>o.status==='READY').length}){readySearch.length>0?` · ${specialOrders.filter(o=>o.status==='READY').filter(o=>matchesSearch(o, readySearch)).length} αποτελ.`:''}</Text>
+                <View style={{flexDirection:'row', alignItems:'center', backgroundColor:'#fff', borderRadius:8, borderWidth:1.5, borderColor:'#ddd', paddingHorizontal:10, paddingVertical:4, width:240, marginRight:10}}>
+                  <Text style={{fontSize:14, marginRight:6, color:'#aaa'}}>🔍</Text>
+                  <TextInput
+                    style={{flex:1, fontSize:13, color:'#1a1a1a', padding:0}}
+                    placeholder="Αναζήτηση..."
+                    placeholderTextColor="#bbb"
+                    value={readySearch}
+                    onChangeText={v=>setReadySearch(v)}
+                    clearButtonMode="while-editing"
+                  />
+                  {readySearch.length > 0 && (
+                    <TouchableOpacity onPress={()=>setReadySearch('')}>
+                      <Text style={{color:'#aaa', fontSize:16, fontWeight:'bold', paddingLeft:4}}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
                   onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='READY'), 'ΕΤΟΙΜΑ ΑΠΟΘΗΚΗΣ')}>
                   <Text style={{color:'#00C851', fontSize:11, fontWeight:'bold'}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
                 </TouchableOpacity>
               </View>
-              {[...specialOrders.filter(o=>o.status==='READY')].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)).map(o=>renderOrderCard(o))}
+              {[...specialOrders.filter(o=>o.status==='READY')].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)).filter(o=>matchesSearch(o, readySearch)).map(o=>renderOrderCard(o, false, false, readySearch))}
             </View>
           )}
 
