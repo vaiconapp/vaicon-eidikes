@@ -166,6 +166,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const lockStyle    = (name, baseSize) => getFormatStyle(findFormatItem(name, locks), baseSize);
   const coatingsHtml = (names, sep=', ') => formatNamesHtml(names||[], coatings, sep);
   const lockHtml     = (name) => name ? wrapHtml(name, findFormatItem(name, locks)) : '—';
+  // Επείγων αριθμός προγράμματος: ξεκινά με γράμμα (ελληνικό ή λατινικό)
+  const isUrgentProgram = (pNo) => !!pNo && /^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ]/.test(String(pNo).trim());
   const [activeSection, setActiveSection] = useState('pending'); // form | pending | prod | ready | archive
   const [pendingSort, setPendingSort] = useState('no');
   const [showHardwarePicker, setShowHardwarePicker] = useState(false);
@@ -761,7 +763,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         // Όνομα πελάτη με αναδίπλωση σε κάθε κενό
         const customerWrapped = o.customer ? o.customer.split(' ').join('<br>') : '';
         const montBadge = o.installation === 'ΝΑΙ' ? ` <span style="color:#cc0000;font-weight:900;font-size:15px">Μ</span>` : '';
-        const programNoPrefix = o.programNo ? `<span style="color:#cc0000;font-weight:900;font-size:16px">${o.programNo}</span> / ` : '';
+        const programNoPrefix = o.programNo ? `<span style="color:#cc0000;font-weight:900;font-size:16px;${isUrgentProgram(o.programNo)?'border:3px solid #cc0000;border-radius:3px;padding:0 2px;':''}">${o.programNo}</span> / ` : '';
         const noCell = `${programNoPrefix}<span style="font-weight:bold;font-size:13px">${o.orderNo||'—'}${montBadge}</span>${customerWrapped ? `<br><span style="font-size:9px;color:#555;font-weight:normal;line-height:1.2">${customerWrapped}</span>` : ''}`;
         return `<tr>
           <td class="col-no" style="white-space:normal;word-break:break-word;vertical-align:top">${noCell}</td>
@@ -1811,8 +1813,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         )}
         {order.programNo&&(
           <View style={{justifyContent:'center', alignItems:'center', paddingHorizontal:8, borderRightWidth:1, borderRightColor:'#e0e0e0', backgroundColor:'#fff8e1', minWidth:52}}>
-            <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{order.programNo}</Text>
-            <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+            <View style={isUrgentProgram(order.programNo) ? {borderWidth:3, borderColor:'#e65100', borderRadius:4, paddingHorizontal:3, paddingVertical:1, alignItems:'center'} : {alignItems:'center'}}>
+              <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{order.programNo}</Text>
+              <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+            </View>
           </View>
         )}
         <View style={styles.sideBtnContainer}>
@@ -1923,8 +1927,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         {/* ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ */}
         {order.programNo&&(
           <View style={{justifyContent:'center', alignItems:'center', paddingHorizontal:8, borderRightWidth:1, borderRightColor:'#e0e0e0', backgroundColor:'#fff8e1', minWidth:52}}>
-            <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{order.programNo}</Text>
-            <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+            <View style={isUrgentProgram(order.programNo) ? {borderWidth:3, borderColor:'#e65100', borderRadius:4, paddingHorizontal:3, paddingVertical:1, alignItems:'center'} : {alignItems:'center'}}>
+              <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{order.programNo}</Text>
+              <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+            </View>
           </View>
         )}
 
@@ -2073,7 +2079,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         return `<td style="background:#f8d7da;text-align:center;color:#721c24">●</td>`;
       }).join('');
       return `<tr>
-        <td style="font-weight:bold;color:#cc0000;background:#fff3cd;text-align:center;font-size:13px">${o.programNo||'—'}</td>
+        <td style="font-weight:bold;color:#cc0000;background:#fff3cd;text-align:center;font-size:13px">${isUrgentProgram(o.programNo)?`<span style="display:inline-block;border:3px solid #cc0000;border-radius:3px;padding:0 3px">${o.programNo}</span>`:(o.programNo||'—')}</td>
         <td style="font-weight:bold">${o.orderNo||'—'}</td>
         <td>${o.customer||'—'}</td>
         <td style="font-weight:bold">${o.h||'—'}x${o.w||'—'}</td>
@@ -2467,8 +2473,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     </View>
                     {o.programNo ? (
                       <View style={{justifyContent:'center', alignItems:'center', paddingHorizontal:8, borderRightWidth:1, borderRightColor:'#e0e0e0', backgroundColor:'#fff8e1', minWidth:52, alignSelf:'stretch'}}>
-                        <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{o.programNo}</Text>
-                        <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+                        <View style={isUrgentProgram(o.programNo) ? {borderWidth:3, borderColor:'#e65100', borderRadius:4, paddingHorizontal:3, paddingVertical:1, alignItems:'center'} : {alignItems:'center'}}>
+                          <Text style={{fontSize:18, fontWeight:'900', color:'#e65100', letterSpacing:1}}>{o.programNo}</Text>
+                          <Text style={{fontSize:9, color:'#999', fontWeight:'bold'}}>ΠΡΟΓΡ.</Text>
+                        </View>
                       </View>
                     ) : null}
                     <View style={{justifyContent:'space-between', gap:6, marginLeft: o.programNo ? 0 : 8, paddingVertical:2}}>
