@@ -1941,6 +1941,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 {PHASES.map(ph=>{
                   const phase = order.phases[ph.key];
                   if(!phase||!phase.active) return null;
+                  // Για ΕΠΕΝΔΥΣΕΙΣ: το badge εμφανίζεται μόνο αν η παραγγελία έχει πραγματικά επενδύσεις
+                  if (ph.key === 'epend' && !(order.coatings && order.coatings.filter(c => c && String(c).trim()).length > 0)) return null;
+                  // Για ΜΟΝΤΑΡΙΣΜΑ: το badge εμφανίζεται μόνο αν η παραγγελία έχει installation='ΝΑΙ'
+                  if (ph.key === 'montDoor' && order.installation !== 'ΝΑΙ') return null;
                   const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',epend:'ΕΠΕΝ.',montDoor:'ΜΟΝΤ.'};
                   return (
                     <View key={ph.key} style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
@@ -2015,15 +2019,24 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   // Κάρτα πόρτας μέσα σε υποκαρτέλα παραγωγής
   const renderProdPhaseCard = (order, phaseKey, searchQuery='') => {
     // Backward compatibility: αν το phase δεν υπάρχει (παλιές παραγγελίες)
-    // Για 'epend': active μόνο αν η παραγγελία έχει coatings
-    const hasCoatings = !!(order.coatings && order.coatings.length > 0);
-    const defaultActive = phaseKey === 'epend' ? hasCoatings : true;
+    // Για 'epend': active μόνο αν η παραγγελία έχει coatings (μη κενά)
+    const hasCoatings = !!(order.coatings && order.coatings.filter(c => c && String(c).trim()).length > 0);
+    const hasInstallation = order.installation === 'ΝΑΙ';
+    const defaultActive =
+      phaseKey === 'epend'    ? hasCoatings :
+      phaseKey === 'montDoor' ? hasInstallation :
+      true;
     let phase = order.phases?.[phaseKey] ?? { active: defaultActive, printed: false, done: false };
     // Fix: αν epend υπάρχει αλλά active=false ενώ έχει coatings → διόρθωση
     if (phaseKey === 'epend' && hasCoatings && phase && !phase.active) {
       phase = { ...phase, active: true };
     }
     if (!phase.active) return null;
+    // Επιπλέον φίλτρο για backward compat:
+    // - epend: δεν εμφανίζεται αν δεν έχει πραγματικά coatings
+    // - montDoor: δεν εμφανίζεται αν installation !== 'ΝΑΙ'
+    if (phaseKey === 'epend'    && !hasCoatings)     return null;
+    if (phaseKey === 'montDoor' && !hasInstallation) return null;
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
     const isSelected = !!printSelected[order.id];
     return (
@@ -2509,8 +2522,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <Text style={[styles.phaseTabTxt, activeProdPhase===ph.key&&styles.phaseTabTxtActive]}>{ph.label}</Text>
                 <Text style={styles.phaseTabCount}>{(()=>{
                   const activeOrders = prodOrders.filter(o => {
-                    const hasCoatings = !!(o.coatings && o.coatings.length > 0);
-                    if (ph.key === 'epend') return hasCoatings;
+                    const hasCoatings = !!(o.coatings && o.coatings.filter(c => c && String(c).trim()).length > 0);
+                    const hasInstallation = o.installation === 'ΝΑΙ';
+                    if (ph.key === 'epend')    return hasCoatings;
+                    if (ph.key === 'montDoor') return hasInstallation;
                     if (o.phases?.[ph.key] !== undefined) return o.phases[ph.key].active;
                     return true;
                   });
@@ -2518,8 +2533,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   const pending = activeOrders.filter(o => {
                     const phase = o.phases?.[ph.key];
                     if (ph.key === 'epend') {
-                      const hasCoatings = !!(o.coatings && o.coatings.length > 0);
+                      const hasCoatings = !!(o.coatings && o.coatings.filter(c => c && String(c).trim()).length > 0);
                       if (!phase || (!phase.active && hasCoatings)) return true;
+                      return !phase.done;
+                    }
+                    if (ph.key === 'montDoor') {
+                      if (!phase) return true;
                       return !phase.done;
                     }
                     return !phase?.done;
@@ -2602,9 +2621,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {/* ΣΤΑΘΕΡΑ — τελευταίο page */}
             <View style={{width:pageWidth}}>
               <View style={{marginTop:6}}>
-                {staveraOrders.length===0?(
-                  <Text style={{textAlign:'center',color:'#999',padding:16}}>Δεν υπάρχουν παραγγελίες με σταθερά</Text>
-                ):staveraOrders.map(o=>{
+                {(()=>{
+                  const filteredStavera = staveraOrders.filter(o=>matchesSearch(o, prodSearch));
+                  if (staveraOrders.length===0) {
+                    return <Text style={{textAlign:'center',color:'#999',padding:16}}>Δεν υπάρχουν παραγγελίες με σταθερά</Text>;
+                  }
+                  if (filteredStavera.length===0) {
+                    return <Text style={{textAlign:'center',color:'#999',padding:16}}>Καμία παραγγελία δεν ταιριάζει με την αναζήτηση</Text>;
+                  }
+                  return filteredStavera.map(o=>{
                   const isSelected = !!printSelected[o.id];
                   return (
                   <View key={o.id} style={{backgroundColor:o.staveraDone?'#e8f5e9':o.staveraGiven?'#ede7f6':'#f3e5f5', borderRadius:8, padding:10, marginBottom:6, borderLeftWidth:4, borderLeftColor:o.staveraDone?'#00C851':o.staveraGiven?'#4a148c':'#7b1fa2', elevation:1, flexDirection:'row', alignItems:'flex-start'}}>
@@ -2660,7 +2685,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     </View>
                   </View>
                   );
-                })}
+                });
+                })()}
               </View>
             </View>
           </ScrollView>
