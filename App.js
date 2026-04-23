@@ -8,6 +8,7 @@ import CustomersScreen from './CustomersScreen';
 import CoatingsScreen from './CoatingsScreen';
 import LocksScreen from './LocksScreen';
 import ActivityScreen from './ActivityScreen';
+import { APP_VERSION } from './version';
 
 export const FIREBASE_URL = "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app";
 
@@ -194,6 +195,8 @@ export default function App() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>VAICON</Text>
         <Text style={styles.headerSubtitle}>ΕΙΔΙΚΕΣ ΠΑΡΑΓΓΕΛΙΕΣ</Text>
+        <Text style={styles.headerVersion}>{APP_VERSION}</Text>
+        <View style={{ flex: 1 }} />
         <TouchableOpacity style={styles.menuBtn} onPress={() => setMenuOpen(true)}>
           <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
@@ -304,7 +307,8 @@ const styles = StyleSheet.create({
     gap: 8
   },
   headerTitle: { color: 'white', fontSize: 15, fontWeight: '900', fontStyle: 'italic', letterSpacing: 2 },
-  headerSubtitle: { flex: 1, color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  headerSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  headerVersion: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.25)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, letterSpacing: 0.5 },
   menuBtn: { padding: 4 },
   menuIcon: { color: 'white', fontSize: 22 },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start', alignItems: 'flex-end' },
