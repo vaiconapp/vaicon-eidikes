@@ -278,9 +278,14 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
               style={{ paddingHorizontal:10, paddingVertical:6, borderRadius:6, backgroundColor: sortMode==='orders' ? '#8B0000' : '#ddd' }}>
               <Text style={{ color: sortMode==='orders' ? 'white' : '#555', fontWeight:'bold', fontSize:12 }}>🔢 #↓</Text>
             </TouchableOpacity>
+            <TextInput
+              style={{ marginLeft:10, backgroundColor:'#fff', paddingHorizontal:10, paddingVertical:6, borderRadius:8, borderWidth:1, borderColor:'#ddd', fontSize:13, width:180 }}
+              placeholder="🔍 Αναζήτηση"
+              value={search}
+              onChangeText={setSearch}
+            />
           </View>
           <Text style={styles.hint}>💡 Κράτα 3 δευτ. για επεξεργασία • Κράτα το ✕ 2 δευτ. για διαγραφή</Text>
-          <TextInput style={[styles.input, { backgroundColor:'#fff' }]} placeholder="🔍 Αναζήτηση" value={search} onChangeText={setSearch} />
 
           {filtered.map(c => (
             <TouchableOpacity

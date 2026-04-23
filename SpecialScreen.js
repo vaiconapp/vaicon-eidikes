@@ -168,6 +168,122 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const lockHtml     = (name) => name ? wrapHtml(name, findFormatItem(name, locks)) : '—';
   // Επείγων αριθμός προγράμματος: ξεκινά με γράμμα (ελληνικό ή λατινικό)
   const isUrgentProgram = (pNo) => !!pNo && /^[A-Za-zΑ-Ωα-ωΆ-Ώά-ώ]/.test(String(pNo).trim());
+
+  // Ετικέτα καρτέλας όπου βρίσκεται μια παραγγελία (για το modal αναζήτησης πελατών)
+  const getOrderTabInfo = (o) => {
+    if (!o) return { label: '—', color: '#999' };
+    if (o.status === 'SOLD')    return { label: 'ΑΡΧΕΙΟ',        color: '#555'    };
+    if (o.status === 'READY')   return { label: 'ΕΤΟΙΜΑ',        color: '#00C851' };
+    if (o.status === 'PROD')    return { label: 'ΠΑΡΑΓΩΓΗ',      color: '#2e7d32' };
+    if (o.status === 'PENDING') return { label: 'ΚΑΤΑΧΩΡΗΜΕΝΕΣ', color: '#ff4444' };
+    return { label: o.status || '—', color: '#999' };
+  };
+
+  // Εκτύπωση μίας σελίδας με όλα τα στοιχεία μιας παραγγελίας (read-only προβολή)
+  const buildSingleOrderHTML = (o) => {
+    if (!o) return '';
+    const createdFmt  = o.createdAt    ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
+    const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
+    const tab = getOrderTabInfo(o);
+    const coats = Array.isArray(o.coatings) ? o.coatings : [];
+    const exo   = coats.filter(c => /ΕΞΩ|εξω|έξω/i.test(c));
+    const mesa  = coats.filter(c => /ΜΕΣΑ|μεσα|ΕΣΩΤ/i.test(c));
+    const other = coats.filter(c => !exo.includes(c) && !mesa.includes(c));
+    const stav  = Array.isArray(o.stavera) ? o.stavera : [];
+    const notesHtml = (o.notes||'').replace(/\n/g, '<br>');
+    const pNoStyle = isUrgentProgram(o.programNo)
+      ? 'border:3px solid #cc3300; padding:1px 4px; border-radius:3px; color:#cc3300;'
+      : 'color:#cc3300;';
+    return `
+      <html><head><meta charset="utf-8"><style>
+        body { font-family: Arial, sans-serif; color:#1a1a1a; padding: 14px; }
+        h1 { font-size: 18px; text-align:center; margin-bottom: 6px; }
+        .meta { text-align:center; color:#555; font-size:11px; margin-bottom:14px; }
+        .sec { border:1px solid #ccc; border-radius:6px; padding:10px 12px; margin-bottom:10px; }
+        .secTitle { font-size:11px; color:#777; font-weight:bold; letter-spacing:1px; margin-bottom:6px; text-transform:uppercase; }
+        .row { display:flex; flex-wrap:wrap; gap:10px 24px; }
+        .kv { min-width:140px; font-size:13px; }
+        .kv b { color:#555; font-weight:normal; font-size:11px; display:block; }
+        .kv span { font-weight:bold; font-size:14px; }
+        table { width:100%; border-collapse:collapse; margin-top:4px; }
+        th, td { border:1px solid #ddd; padding:4px 6px; font-size:12px; text-align:left; }
+        th { background:#f5f5f5; font-weight:bold; }
+        .tag { display:inline-block; padding:2px 8px; border-radius:4px; color:#fff; font-size:11px; font-weight:bold; }
+        .notes { background:#fffdf5; border:1px solid #ffe082; padding:8px; border-radius:4px; font-size:13px; white-space:pre-wrap; }
+      </style></head><body>
+        <h1>VAICON — ΚΑΡΤΕΛΑ ΠΑΡΑΓΓΕΛΙΑΣ #${o.orderNo||'—'}${o.programNo?` &nbsp; <span style="${pNoStyle};font-size:16px;">Α.Π. ${o.programNo}</span>`:''}</h1>
+        <div class="meta">
+          <span class="tag" style="background:${tab.color};">${tab.label}</span>
+          &nbsp;·&nbsp; Καταχώρηση: <b>${createdFmt||'—'}</b>
+          &nbsp;·&nbsp; Παράδοση: <b>${deliveryFmt||'—'}</b>
+        </div>
+
+        <div class="sec">
+          <div class="secTitle">Πελάτης</div>
+          <div class="row">
+            <div class="kv"><b>Όνομα</b><span>${o.customer||'—'}</span></div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="secTitle">Διαστάσεις & Χαρακτηριστικά</div>
+          <div class="row">
+            <div class="kv"><b>Ύψος (Η)</b><span>${o.h||'—'}</span></div>
+            <div class="kv"><b>Πλάτος (W)</b><span>${o.w||'—'}</span></div>
+            <div class="kv"><b>Τεμάχια</b><span>${o.qty||'1'}</span></div>
+            <div class="kv"><b>Μεντεσέδες</b><span>${o.hinges||'—'}</span></div>
+            <div class="kv"><b>Πλευρά</b><span>${o.side||'—'}</span></div>
+            <div class="kv"><b>Θωράκιση</b><span>${o.armor||'—'}</span></div>
+            <div class="kv"><b>Τύπος Σασί</b><span>${o.sasiType||'—'}</span></div>
+            <div class="kv"><b>Τύπος Κάσας</b><span>${o.caseType||'—'}</span></div>
+            <div class="kv"><b>Υλικό Κάσας</b><span>${o.caseMaterial||'—'}</span></div>
+            <div class="kv"><b>Τοποθέτηση</b><span>${o.installation||'—'}</span></div>
+            ${o.heightReduction?`<div class="kv"><b>Μείωση Ύψους</b><span>${o.heightReduction}</span></div>`:''}
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="secTitle">Κλειδαριά / Τζάμι / Μηχανισμοί</div>
+          <div class="row">
+            <div class="kv" style="min-width:220px;"><b>Κλειδαριά</b><span>${lockHtml(o.lock)||'—'}</span></div>
+            <div class="kv"><b>Τζάμι (διαστ.)</b><span>${o.glassDim||'—'}</span></div>
+            <div class="kv" style="min-width:220px;"><b>Τζάμι (σημειώσεις)</b><span>${o.glassNotes||'—'}</span></div>
+            <div class="kv" style="min-width:220px;"><b>Μηχανισμοί / Εξαρτήματα</b><span>${o.hardware||'—'}</span></div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="secTitle">Επενδύσεις</div>
+          <div class="row">
+            <div class="kv" style="min-width:260px;"><b>ΕΞΩ</b><span>${exo.length?coatingsHtml(exo):'—'}</span></div>
+            <div class="kv" style="min-width:260px;"><b>ΜΕΣΑ</b><span>${mesa.length?coatingsHtml(mesa):'—'}</span></div>
+            ${other.length?`<div class="kv" style="min-width:260px;"><b>Άλλες</b><span>${coatingsHtml(other)}</span></div>`:''}
+          </div>
+        </div>
+
+        ${stav.length?`
+        <div class="sec">
+          <div class="secTitle">Σταθερά</div>
+          <table>
+            <tr><th>#</th><th>Ύψος</th><th>Πλάτος</th><th>Τεμ.</th><th>Σημ.</th></tr>
+            ${stav.map((s,i)=>`<tr><td>${i+1}</td><td>${s.h||s.dim||''}</td><td>${s.w||''}</td><td>${s.qty||''}</td><td>${s.note||''}</td></tr>`).join('')}
+          </table>
+        </div>`:''}
+
+        ${o.notes?`
+        <div class="sec">
+          <div class="secTitle">Σημειώσεις</div>
+          <div class="notes">${notesHtml}</div>
+        </div>`:''}
+      </body></html>
+    `;
+  };
+
+  const printSingleOrderFull = async (o) => {
+    if (!o) return;
+    const html = buildSingleOrderHTML(o);
+    await printHTML(html, `VAICON — Παραγγελία #${o.orderNo||''}`);
+  };
   const [activeSection, setActiveSection] = useState('pending'); // form | pending | prod | ready | archive
   const [pendingSort, setPendingSort] = useState('no');
   const [showHardwarePicker, setShowHardwarePicker] = useState(false);
@@ -209,6 +325,45 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [panPos, setPanPos] = useState({ x: 0, y: 0 });
   const isDragging = useRef(false);
   const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  // === Customer Lookup (🔍 ΠΕΛΑΤΕΣ) panel state ===
+  const [showCustomerLookup, setShowCustomerLookup] = useState(false);
+  const [customerLookupSearch, setCustomerLookupSearch] = useState('');
+  const [lookupCustomerId, setLookupCustomerId] = useState(null);
+  const [lookupOrderModal, setLookupOrderModal] = useState({ visible: false, order: null });
+  const [custPanPos, setCustPanPos] = useState({ x: 0, y: 0 });
+  const custIsDragging = useRef(false);
+  const custDragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  const handleCustDragStart = (e) => {
+    custIsDragging.current = true;
+    custDragStart.current = {
+      mx: e.clientX || e.touches?.[0]?.clientX || 0,
+      my: e.clientY || e.touches?.[0]?.clientY || 0,
+      px: custPanPos.x,
+      py: custPanPos.y,
+    };
+    const onMove = (ev) => {
+      if (!custIsDragging.current) return;
+      const cx = ev.clientX || ev.touches?.[0]?.clientX || 0;
+      const cy = ev.clientY || ev.touches?.[0]?.clientY || 0;
+      setCustPanPos({
+        x: custDragStart.current.px + (cx - custDragStart.current.mx),
+        y: custDragStart.current.py + (cy - custDragStart.current.my),
+      });
+    };
+    const onUp = () => {
+      custIsDragging.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove);
+    window.addEventListener('touchend', onUp);
+  };
 
   const handleDragStart = (e) => {
     isDragging.current = true;
@@ -2752,6 +2907,300 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </View>
       </Modal>
 
+      {/* 🔍 ΠΕΛΑΤΕΣ — draggable lookup panel (Modal 1) */}
+      {showCustomerLookup && (() => {
+        const q = (customerLookupSearch || '').trim().toLowerCase();
+        const filteredCustomers = q.length === 0
+          ? []
+          : (customers || []).filter(c =>
+              (c.name && c.name.toLowerCase().includes(q)) ||
+              (c.phone && String(c.phone).toLowerCase().includes(q))
+            ).slice(0, 40);
+        const selectedCust = lookupCustomerId ? (customers || []).find(c => c.id === lookupCustomerId) : null;
+        const allOrders = [...(specialOrders || []), ...(soldSpecialOrders || [])];
+        const customerOrders = selectedCust
+          ? allOrders
+              .filter(o => o.customer && selectedCust.name && o.customer.trim().toLowerCase() === selectedCust.name.trim().toLowerCase())
+              .sort((a,b) => (b.createdAt||0) - (a.createdAt||0))
+          : [];
+        return (
+          <View style={{
+            position:'absolute', top: 80 + custPanPos.y, left: `calc(50% - 220px + ${custPanPos.x}px)`,
+            width: 440, backgroundColor:'#ffffff', borderRadius:14, elevation:24, zIndex:1000,
+            shadowColor:'#000', shadowOffset:{width:0,height:6}, shadowOpacity:0.35, shadowRadius:12,
+            borderWidth:1, borderColor:'#ddd',
+          }}>
+            {/* Header — drag handle */}
+            <View
+              style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:12, backgroundColor:'#0d47a1', borderTopLeftRadius:14, borderTopRightRadius:14, cursor:'grab'}}
+              {...(Platform.OS==='web' ? { onMouseDown: handleCustDragStart, onTouchStart: handleCustDragStart } : {})}>
+              <Text style={{color:'white', fontWeight:'bold', fontSize:14, letterSpacing:1}}>☰ 🔍 ΠΕΛΑΤΕΣ</Text>
+              <TouchableOpacity onPress={()=>{ setShowCustomerLookup(false); setCustomerLookupSearch(''); setLookupCustomerId(null); }}>
+                <Text style={{color:'white', fontSize:18, fontWeight:'bold', paddingHorizontal:6}}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {/* Body */}
+            <View style={{padding:12}}>
+              {/* Search */}
+              <View style={{flexDirection:'row', alignItems:'center', backgroundColor:'#f5f5f5', borderRadius:10, borderWidth:1.5, borderColor:'#ddd', paddingHorizontal:10, paddingVertical:8, marginBottom:10}}>
+                <Text style={{fontSize:16, marginRight:6, color:'#888'}}>🔍</Text>
+                <TextInput
+                  style={{flex:1, fontSize:14, color:'#1a1a1a', padding:0, outlineStyle:'none'}}
+                  placeholder="Αναζήτηση πελάτη (όνομα ή τηλέφωνο)..."
+                  placeholderTextColor="#aaa"
+                  value={customerLookupSearch}
+                  onChangeText={v=>{ setCustomerLookupSearch(v); if (lookupCustomerId) setLookupCustomerId(null); }}
+                />
+                {customerLookupSearch.length > 0 && (
+                  <TouchableOpacity onPress={()=>{ setCustomerLookupSearch(''); setLookupCustomerId(null); }}>
+                    <Text style={{color:'#aaa', fontSize:16, fontWeight:'bold', paddingLeft:6}}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Selected customer header */}
+              {selectedCust && (
+                <View style={{backgroundColor:'#e3f2fd', borderRadius:8, padding:10, marginBottom:8, flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
+                  <View style={{flex:1}}>
+                    <Text style={{fontSize:15, fontWeight:'bold', color:'#0d47a1'}}>👤 {selectedCust.name}</Text>
+                    {selectedCust.phone ? <Text style={{fontSize:12, color:'#555'}}>📞 {selectedCust.phone}</Text> : null}
+                    <Text style={{fontSize:11, color:'#777', marginTop:2}}>{customerOrders.length} παραγγελ{customerOrders.length===1?'ία':'ίες'}</Text>
+                  </View>
+                  <TouchableOpacity onPress={()=>setLookupCustomerId(null)} style={{padding:6}}>
+                    <Text style={{color:'#0d47a1', fontWeight:'bold', fontSize:12}}>← Πίσω</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Lists area */}
+              <ScrollView style={{maxHeight:360}} keyboardShouldPersistTaps="handled">
+                {/* Αν δεν έχει γίνει επιλογή πελάτη → δείξε αποτελέσματα αναζήτησης πελατών */}
+                {!selectedCust && (
+                  <>
+                    {customerLookupSearch.trim().length === 0 && (
+                      <Text style={{color:'#999', fontSize:12, textAlign:'center', padding:20}}>
+                        Γράψε όνομα ή τηλέφωνο για αναζήτηση πελάτη.
+                      </Text>
+                    )}
+                    {customerLookupSearch.trim().length > 0 && filteredCustomers.length === 0 && (
+                      <Text style={{color:'#aaa', fontSize:12, textAlign:'center', padding:20}}>Δεν βρέθηκαν πελάτες.</Text>
+                    )}
+                    {filteredCustomers.map(c => {
+                      const orderCount = allOrders.filter(o => o.customer && c.name && o.customer.trim().toLowerCase() === c.name.trim().toLowerCase()).length;
+                      return (
+                        <TouchableOpacity key={c.id}
+                          onPress={()=>setLookupCustomerId(c.id)}
+                          style={{padding:10, borderBottomWidth:1, borderBottomColor:'#eee', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
+                          <View style={{flex:1}}>
+                            <Text style={{fontSize:14, fontWeight:'bold', color:'#1a1a1a'}}>{c.name}</Text>
+                            {c.phone ? <Text style={{fontSize:12, color:'#666'}}>📞 {c.phone}</Text> : null}
+                          </View>
+                          <View style={{backgroundColor:'#8B0000', borderRadius:10, paddingHorizontal:8, paddingVertical:3, minWidth:30, alignItems:'center', marginLeft:8}}>
+                            <Text style={{color:'white', fontWeight:'bold', fontSize:11}}>{orderCount}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* Αν έχει επιλεγεί πελάτης → δείξε τις παραγγελίες του περιληπτικά */}
+                {selectedCust && (
+                  <>
+                    {customerOrders.length === 0 && (
+                      <Text style={{color:'#aaa', fontSize:12, textAlign:'center', padding:20}}>Ο πελάτης δεν έχει παραγγελίες.</Text>
+                    )}
+                    {customerOrders.map(o => {
+                      const tab = getOrderTabInfo(o);
+                      const dims = `${o.h||'—'}×${o.w||'—'}`;
+                      const createdFmt = o.createdAt ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
+                      return (
+                        <TouchableOpacity key={o.id}
+                          onPress={()=>setLookupOrderModal({ visible:true, order:o })}
+                          style={{padding:10, borderBottomWidth:1, borderBottomColor:'#eee', backgroundColor:'#fff'}}>
+                          <View style={{flexDirection:'row', alignItems:'center', gap:8}}>
+                            <Text style={{fontSize:14, fontWeight:'900', color:'#1a1a1a', minWidth:54}}>#{o.orderNo||'—'}</Text>
+                            <Text style={{fontSize:12, color:'#1a1a1a', fontWeight:'bold'}}>{dims}</Text>
+                            <Text style={{fontSize:11, color:'#555'}}>{o.side||'—'}</Text>
+                            <Text style={{fontSize:11, color:'#555'}}>{o.armor||'—'}</Text>
+                            <View style={{backgroundColor:tab.color, borderRadius:4, paddingHorizontal:6, paddingVertical:1, marginLeft:'auto'}}>
+                              <Text style={{color:'white', fontWeight:'bold', fontSize:10}}>{tab.label}</Text>
+                            </View>
+                          </View>
+                          <View style={{flexDirection:'row', alignItems:'center', gap:10, marginTop:3}}>
+                            {o.programNo ? <Text style={{fontSize:11, color:'#cc3300', fontWeight:'bold'}}>Α.Π. {o.programNo}</Text> : null}
+                            {createdFmt ? <Text style={{fontSize:11, color:'#888'}}>📅 {createdFmt}</Text> : null}
+                            {o.lock ? <Text style={{fontSize:11, color:'#555'}} numberOfLines={1}>🔒 {o.lock}</Text> : null}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        );
+      })()}
+
+      {/* Modal 2 — λεπτομέρειες παραγγελίας (view-only) + εκτύπωση */}
+      <Modal visible={lookupOrderModal.visible} transparent animationType="fade" onRequestClose={()=>setLookupOrderModal({visible:false, order:null})}>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.55)', justifyContent:'center', alignItems:'center', padding:20}}>
+          <View style={{backgroundColor:'white', borderRadius:14, width:'92%', maxWidth:820, maxHeight:'92%', overflow:'hidden'}}>
+            {/* Header */}
+            <View style={{backgroundColor:'#0d47a1', padding:14, flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
+              <View style={{flex:1}}>
+                <Text style={{color:'white', fontSize:16, fontWeight:'900', letterSpacing:1}}>
+                  📄 ΚΑΡΤΕΛΑ ΠΑΡΑΓΓΕΛΙΑΣ #{lookupOrderModal.order?.orderNo || '—'}
+                </Text>
+                <Text style={{color:'rgba(255,255,255,0.75)', fontSize:11, marginTop:2}}>Μόνο προβολή</Text>
+              </View>
+              <TouchableOpacity
+                onPress={()=>printSingleOrderFull(lookupOrderModal.order)}
+                style={{backgroundColor:'white', paddingHorizontal:14, paddingVertical:8, borderRadius:8, marginRight:10}}>
+                <Text style={{color:'#0d47a1', fontWeight:'bold', fontSize:13}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={()=>setLookupOrderModal({visible:false, order:null})} style={{padding:6}}>
+                <Text style={{color:'white', fontSize:22, fontWeight:'bold'}}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {/* Body */}
+            <ScrollView style={{padding:16}} contentContainerStyle={{paddingBottom:24}}>
+              {lookupOrderModal.order && (() => {
+                const o = lookupOrderModal.order;
+                const createdFmt  = o.createdAt    ? new Date(o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—';
+                const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—';
+                const tab = getOrderTabInfo(o);
+                const coats = Array.isArray(o.coatings) ? o.coatings : [];
+                const exo   = coats.filter(c => /ΕΞΩ|εξω|έξω/i.test(c));
+                const mesa  = coats.filter(c => /ΜΕΣΑ|μεσα|ΕΣΩΤ/i.test(c));
+                const other = coats.filter(c => !exo.includes(c) && !mesa.includes(c));
+                const stav  = Array.isArray(o.stavera) ? o.stavera : [];
+                const K = ({label, value, flex=1})=>(
+                  <View style={{flex, minWidth:120, paddingVertical:4}}>
+                    <Text style={{fontSize:10, color:'#888', fontWeight:'bold', letterSpacing:0.5}}>{label}</Text>
+                    <Text style={{fontSize:14, color:'#1a1a1a', fontWeight:'600'}}>{value ?? '—'}</Text>
+                  </View>
+                );
+                return (
+                  <View>
+                    {/* Meta */}
+                    <View style={{flexDirection:'row', alignItems:'center', gap:10, marginBottom:12, flexWrap:'wrap'}}>
+                      <View style={{backgroundColor:tab.color, borderRadius:6, paddingHorizontal:10, paddingVertical:3}}>
+                        <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>{tab.label}</Text>
+                      </View>
+                      {o.programNo ? (
+                        <View style={isUrgentProgram(o.programNo) ? {borderWidth:3, borderColor:'#cc3300', borderRadius:4, paddingHorizontal:6, paddingVertical:2} : {}}>
+                          <Text style={{color:'#cc3300', fontWeight:'900', fontSize:14}}>Α.Π. {o.programNo}</Text>
+                        </View>
+                      ) : null}
+                      <Text style={{fontSize:12, color:'#555'}}>📅 Καταχώρηση: <Text style={{fontWeight:'bold'}}>{createdFmt}</Text></Text>
+                      <Text style={{fontSize:12, color:'#555'}}>🚚 Παράδοση: <Text style={{fontWeight:'bold'}}>{deliveryFmt}</Text></Text>
+                    </View>
+
+                    {/* Πελάτης */}
+                    <View style={{borderWidth:1, borderColor:'#ddd', borderRadius:8, padding:10, marginBottom:10}}>
+                      <Text style={{fontSize:11, fontWeight:'bold', color:'#0d47a1', letterSpacing:1, marginBottom:4}}>ΠΕΛΑΤΗΣ</Text>
+                      <Text style={{fontSize:15, fontWeight:'bold', color:'#1a1a1a'}}>{o.customer || '—'}</Text>
+                    </View>
+
+                    {/* Διαστάσεις */}
+                    <View style={{borderWidth:1, borderColor:'#ddd', borderRadius:8, padding:10, marginBottom:10}}>
+                      <Text style={{fontSize:11, fontWeight:'bold', color:'#0d47a1', letterSpacing:1, marginBottom:4}}>ΔΙΑΣΤΑΣΕΙΣ & ΧΑΡΑΚΤΗΡΙΣΤΙΚΑ</Text>
+                      <View style={{flexDirection:'row', flexWrap:'wrap'}}>
+                        <K label="ΥΨΟΣ (H)" value={o.h}/>
+                        <K label="ΠΛΑΤΟΣ (W)" value={o.w}/>
+                        <K label="ΤΕΜΑΧΙΑ" value={o.qty||'1'}/>
+                        <K label="ΜΕΝΤΕΣΕΔΕΣ" value={o.hinges}/>
+                        <K label="ΠΛΕΥΡΑ" value={o.side}/>
+                        <K label="ΘΩΡΑΚΙΣΗ" value={o.armor}/>
+                        <K label="ΤΥΠΟΣ ΣΑΣΙ" value={o.sasiType}/>
+                        <K label="ΤΥΠΟΣ ΚΑΣΑΣ" value={o.caseType}/>
+                        <K label="ΥΛΙΚΟ ΚΑΣΑΣ" value={o.caseMaterial}/>
+                        <K label="ΤΟΠΟΘΕΤΗΣΗ" value={o.installation}/>
+                        {o.heightReduction ? <K label="ΜΕΙΩΣΗ ΥΨΟΥΣ" value={o.heightReduction}/> : null}
+                      </View>
+                    </View>
+
+                    {/* Κλειδαριά / Τζάμι / Μηχανισμοί */}
+                    <View style={{borderWidth:1, borderColor:'#ddd', borderRadius:8, padding:10, marginBottom:10}}>
+                      <Text style={{fontSize:11, fontWeight:'bold', color:'#0d47a1', letterSpacing:1, marginBottom:4}}>ΚΛΕΙΔΑΡΙΑ · ΤΖΑΜΙ · ΜΗΧΑΝΙΣΜΟΙ</Text>
+                      <View style={{flexDirection:'row', flexWrap:'wrap'}}>
+                        <View style={{flex:1, minWidth:200, paddingVertical:4}}>
+                          <Text style={{fontSize:10, color:'#888', fontWeight:'bold', letterSpacing:0.5}}>ΚΛΕΙΔΑΡΙΑ</Text>
+                          <Text style={[{fontSize:14, color:'#1a1a1a', fontWeight:'600'}, lockStyle(o.lock, 14)]}>{o.lock || '—'}</Text>
+                        </View>
+                        <K label="ΤΖΑΜΙ (ΔΙΑΣΤ.)" value={o.glassDim}/>
+                        <K label="ΤΖΑΜΙ (ΣΗΜ.)" value={o.glassNotes} flex={2}/>
+                        <K label="ΜΗΧΑΝΙΣΜΟΙ" value={o.hardware} flex={2}/>
+                      </View>
+                    </View>
+
+                    {/* Επενδύσεις */}
+                    <View style={{borderWidth:1, borderColor:'#ddd', borderRadius:8, padding:10, marginBottom:10}}>
+                      <Text style={{fontSize:11, fontWeight:'bold', color:'#0d47a1', letterSpacing:1, marginBottom:4}}>ΕΠΕΝΔΥΣΕΙΣ</Text>
+                      <View style={{flexDirection:'row', flexWrap:'wrap', gap:10}}>
+                        <View style={{flex:1, minWidth:220}}>
+                          <Text style={{fontSize:10, color:'#888', fontWeight:'bold'}}>ΕΞΩ</Text>
+                          <Text style={{fontSize:14, color:'#1a1a1a'}}>
+                            {exo.length === 0 ? '—' : exo.map((n,i)=>(<Text key={i} style={coatingStyle(n,14)}>{i>0?', ':''}{n}</Text>))}
+                          </Text>
+                        </View>
+                        <View style={{flex:1, minWidth:220}}>
+                          <Text style={{fontSize:10, color:'#888', fontWeight:'bold'}}>ΜΕΣΑ</Text>
+                          <Text style={{fontSize:14, color:'#1a1a1a'}}>
+                            {mesa.length === 0 ? '—' : mesa.map((n,i)=>(<Text key={i} style={coatingStyle(n,14)}>{i>0?', ':''}{n}</Text>))}
+                          </Text>
+                        </View>
+                        {other.length > 0 && (
+                          <View style={{flex:1, minWidth:220}}>
+                            <Text style={{fontSize:10, color:'#888', fontWeight:'bold'}}>ΑΛΛΕΣ</Text>
+                            <Text style={{fontSize:14, color:'#1a1a1a'}}>
+                              {other.map((n,i)=>(<Text key={i} style={coatingStyle(n,14)}>{i>0?', ':''}{n}</Text>))}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Σταθερά */}
+                    {stav.length > 0 && (
+                      <View style={{borderWidth:1, borderColor:'#ddd', borderRadius:8, padding:10, marginBottom:10}}>
+                        <Text style={{fontSize:11, fontWeight:'bold', color:'#0d47a1', letterSpacing:1, marginBottom:4}}>📐 ΣΤΑΘΕΡΑ</Text>
+                        <View style={{flexDirection:'row', backgroundColor:'#f5f5f5', padding:6, borderRadius:4, marginBottom:4}}>
+                          <Text style={{flex:0.5, fontSize:11, fontWeight:'bold', color:'#555'}}>#</Text>
+                          <Text style={{flex:1, fontSize:11, fontWeight:'bold', color:'#555'}}>ΥΨΟΣ</Text>
+                          <Text style={{flex:1, fontSize:11, fontWeight:'bold', color:'#555'}}>ΠΛΑΤΟΣ</Text>
+                          <Text style={{flex:0.8, fontSize:11, fontWeight:'bold', color:'#555'}}>ΤΕΜ.</Text>
+                          <Text style={{flex:2, fontSize:11, fontWeight:'bold', color:'#555'}}>ΣΗΜ.</Text>
+                        </View>
+                        {stav.map((s,i)=>(
+                          <View key={i} style={{flexDirection:'row', paddingVertical:4, borderTopWidth:i>0?1:0, borderTopColor:'#eee'}}>
+                            <Text style={{flex:0.5, fontSize:12}}>{i+1}</Text>
+                            <Text style={{flex:1, fontSize:12}}>{s.h || s.dim || ''}</Text>
+                            <Text style={{flex:1, fontSize:12}}>{s.w || ''}</Text>
+                            <Text style={{flex:0.8, fontSize:12}}>{s.qty || ''}</Text>
+                            <Text style={{flex:2, fontSize:12}}>{s.note || ''}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Σημειώσεις */}
+                    {o.notes ? (
+                      <View style={{borderWidth:1, borderColor:'#ffe082', backgroundColor:'#fffdf5', borderRadius:8, padding:10, marginBottom:10}}>
+                        <Text style={{fontSize:11, fontWeight:'bold', color:'#b28704', letterSpacing:1, marginBottom:4}}>📝 ΣΗΜΕΙΩΣΕΙΣ</Text>
+                        <Text style={{fontSize:13, color:'#1a1a1a', lineHeight:18}}>{o.notes}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })()}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* ΚΑΛΑΘΙ ΑΛΛΑΓΩΝ — floating draggable panel */}
       {pendingChanges.length > 0 && (
         <View style={{
@@ -3273,6 +3722,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <Text style={{color:'white',fontSize:10,fontWeight:'bold',textAlign:'center',lineHeight:13}}>{item.label}</Text>
             </TouchableOpacity>
           ))}
+          {/* Spacer — σπρώχνει το κουμπί ΠΕΛΑΤΕΣ στο κάτω μέρος */}
+          <View style={{flex:1}} />
+          {/* Διαχωριστικό */}
+          <View style={{height:1, backgroundColor:'rgba(255,255,255,0.18)', marginVertical:2}} />
+          {/* 🔍 ΠΕΛΑΤΕΣ — αναζήτηση παραγγελιών ανά πελάτη */}
+          <TouchableOpacity
+            onPress={()=>setShowCustomerLookup(v=>!v)}
+            style={{backgroundColor: showCustomerLookup?'#1565c0':'#0d47a1', borderRadius:10, padding:12, alignItems:'center', gap:4, borderWidth:2, borderColor: showCustomerLookup?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.15)'}}>
+            <Text style={{fontSize:22}}>🔍</Text>
+            <Text style={{color:'white', fontSize:10, fontWeight:'bold', textAlign:'center', lineHeight:13}}>ΠΕΛΑΤΕΣ</Text>
+          </TouchableOpacity>
         </View>
         {/* CONTENT 80% — ΠΑΡΑΓΩΓΗ και ΚΑΤΑΧΩΡΗΜΕΝΕΣ βγαίνουν εκτός ScrollView για flex:1 */}
         {activeSection==='prod' ? (
