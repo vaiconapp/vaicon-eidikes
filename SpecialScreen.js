@@ -500,10 +500,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   // Μεταφορά PENDING → PROD: αρχικοποιεί τις φάσεις παραγωγής
   const moveToProd = async (id) => {
     const order = specialOrders.find(o=>o.id===id); if(!order) return;
+    const hasCoatings = !!(order.coatings && order.coatings.filter(c => c && String(c).trim()).length > 0);
     const phases = {};
     PHASES.forEach(ph => {
-      // Το ΜΟΝΤΑΡΙΣΜΑ/ΕΠΕΝΔΥΣΗ μπαίνει μόνο αν είναι τσεκαρισμένο ΝΑΙ
+      // ΜΟΝΤΑΡΙΣΜΑ: μόνο αν installation === 'ΝΑΙ'
+      // ΕΠΕΝΔΥΣΕΙΣ: μόνο αν υπάρχουν πραγματικά coatings
       if (ph.key==='montDoor' && order.installation!=='ΝΑΙ') {
+        phases[ph.key] = { active:false, printed:false, done:false };
+      } else if (ph.key==='epend' && !hasCoatings) {
         phases[ph.key] = { active:false, printed:false, done:false };
       } else {
         phases[ph.key] = { active:true, printed:false, done:false };
@@ -1677,7 +1681,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     }
     const newPhases = {...order.phases, [phaseKey]:{...order.phases[phaseKey], done:true}};
     const phaseLabel = PHASES.find(p=>p.key===phaseKey)?.label?.replace(/🔴|🟡|🔵|🟢|⚫/g,'').trim() || phaseKey;
-    const allDone = Object.keys(newPhases).every(k => !newPhases[k].active || newPhases[k].done);
+    // Backward compat για παλιές παραγγελίες με "phantom" active phases:
+    // - epend χωρίς coatings -> αγνόησε
+    // - montDoor χωρίς installation -> αγνόησε
+    const hasCoatingsCheck = !!(order.coatings && order.coatings.filter(c => c && String(c).trim()).length > 0);
+    const hasInstallationCheck = order.installation === 'ΝΑΙ';
+    const allDone = Object.keys(newPhases).every(k => {
+      if (k === 'epend'    && !hasCoatingsCheck)     return true;
+      if (k === 'montDoor' && !hasInstallationCheck) return true;
+      return !newPhases[k].active || newPhases[k].done;
+    });
     const hasStavera = order.stavera && order.stavera.filter(s=>s.dim).length > 0;
     const staveraPending = hasStavera && !order.staveraDone;
 
@@ -3280,12 +3293,154 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   confirmText: 'ΕΠΙΒΕΒΑΙΩΣΗ',
                   onConfirm: async () => {
                     const batch = [...pendingChanges];
+                    // Εφαρμόζουμε όλες τις αλλαγές σε ένα running snapshot.
+                    let workingOrders = specialOrders;
+                    const violations = [];
+                    const completedOrders = [];
+                    const activityLogs = [];
+
                     for (const c of batch) {
-                      if (c.action==='done') await handlePhaseDone(c.orderId, c.phaseKey);
-                      else await handlePhaseUndone(c.orderId, c.phaseKey);
+                      let order = workingOrders.find(o => o.id === c.orderId);
+                      if (!order || !order.phases) continue;
+
+                      // Backward compat: αν λείπει η φάση, την δημιουργούμε
+                      if (!order.phases[c.phaseKey]) {
+                        const defaultActive = c.phaseKey === 'epend'
+                          ? !!(order.coatings && order.coatings.length > 0)
+                          : true;
+                        if (!defaultActive && c.action === 'done') continue;
+                        order = { ...order, phases: { ...order.phases, [c.phaseKey]: { active: defaultActive, printed: false, done: false } } };
+                        workingOrders = workingOrders.map(o => o.id === c.orderId ? order : o);
+                      }
+
+                      if (c.action === 'undone') {
+                        const existingPhase = order.phases[c.phaseKey] || { active: true, printed: false, done: false };
+                        const forceActive = c.phaseKey === 'epend' && !!(order.coatings && order.coatings.length > 0);
+                        const updatedPhase = { ...existingPhase, done: false, active: forceActive ? true : existingPhase.active };
+                        const upd = { ...order, phases: { ...order.phases, [c.phaseKey]: updatedPhase } };
+                        workingOrders = workingOrders.map(o => o.id === c.orderId ? upd : o);
+                        continue;
+                      }
+
+                      // c.action === 'done': έλεγχοι κανόνων
+                      if (c.phaseKey === 'montDoor') {
+                        const prevPhases = ['laser','cases','montSasi','vafio'];
+                        const notDone = prevPhases.filter(k => order.phases?.[k]?.active && !order.phases?.[k]?.done);
+                        if (notDone.length > 0) {
+                          violations.push({ orderNo: order.orderNo, type: 'prevPhases', phases: notDone });
+                          continue;
+                        }
+                        if (order.coatings && order.coatings.length > 0) {
+                          const ependPhase = order.phases?.['epend'];
+                          if (!ependPhase || !ependPhase.done) {
+                            violations.push({ orderNo: order.orderNo, type: 'ependFirst' });
+                            continue;
+                          }
+                        }
+                      }
+
+                      const newPhases = { ...order.phases, [c.phaseKey]: { ...order.phases[c.phaseKey], done: true } };
+                      const upd = { ...order, phases: newPhases };
+                      workingOrders = workingOrders.map(o => o.id === c.orderId ? upd : o);
+
+                      activityLogs.push({ phaseKey: c.phaseKey, order: upd });
+
+                      // Έλεγχος: ολοκληρώθηκαν όλες οι φάσεις;
+                      if (order.status === 'PROD') {
+                        const hasCoatings = !!(order.coatings && order.coatings.filter(x => x && String(x).trim()).length > 0);
+                        const hasInstallation = order.installation === 'ΝΑΙ';
+                        const allDone = Object.keys(newPhases).every(k => {
+                          if (k === 'epend' && !hasCoatings) return true;
+                          if (k === 'montDoor' && !hasInstallation) return true;
+                          return !newPhases[k].active || newPhases[k].done;
+                        });
+                        if (allDone) {
+                          const hasStavera = order.stavera && order.stavera.filter(s => s.dim).length > 0;
+                          const staveraPending = hasStavera && !order.staveraDone;
+                          // Αν η ίδια παραγγελία ήδη υπάρχει στη λίστα, μην την ξαναπροσθέσεις
+                          if (!completedOrders.find(co => co.order.id === upd.id)) {
+                            completedOrders.push({ order: upd, staveraPending });
+                          }
+                        }
+                      }
                     }
-                    setLastChangedIds(batch.map(c=>({orderId:c.orderId, phaseKey:c.phaseKey})));
+
+                    // Εφαρμογή state ΜΙΑ ΦΟΡΑ
+                    setSpecialOrders(workingOrders);
+
+                    // Συγχρονισμός κάθε επηρεαζόμενης παραγγελίας στο Firebase (μία φορά ανά παραγγελία)
+                    const affectedIds = [...new Set(batch.map(c => c.orderId))];
+                    for (const id of affectedIds) {
+                      const o = workingOrders.find(x => x.id === id);
+                      if (o) await syncToCloud(o);
+                    }
+
+                    // Activity logs
+                    for (const log of activityLogs) {
+                      const phaseLabel = PHASES.find(p => p.key === log.phaseKey)?.label?.replace(/🔴|🟡|🔵|🟢|⚫/g, '').trim() || log.phaseKey;
+                      await logActivity('ΕΙΔΙΚΗ', `Φάση ✓ ${phaseLabel}`, { orderNo: log.order.orderNo, customer: log.order.customer, size: `${log.order.h}x${log.order.w}` });
+                    }
+
+                    setLastChangedIds(batch.map(c => ({ orderId: c.orderId, phaseKey: c.phaseKey })));
                     setPendingChanges([]);
+
+                    // Διαδοχικά popup για παραγγελίες που τελείωσαν
+                    const showCompletedChain = (idx) => {
+                      if (idx >= completedOrders.length) return;
+                      const { order: co, staveraPending } = completedOrders[idx];
+                      if (staveraPending) {
+                        setConfirmModal({
+                          visible: true,
+                          title: '⚠️ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ',
+                          message: `Παραγγελία #${co.orderNo}: Όλες οι φάσεις παραγωγής ολοκληρώθηκαν.\n\nΕκκρεμεί σταθερό — η παραγγελία θα κατέβει στην αποθήκη και το σταθερό θα παραμείνει σε εξέλιξη.`,
+                          confirmText: '📦 ΚΑΤΕΒΑΣΗ ΣΤΗΝ ΑΠΟΘΗΚΗ',
+                          onConfirm: async () => {
+                            const upd = { ...co, status: 'READY', readyAt: Date.now(), staveraPendingAtReady: true };
+                            setSpecialOrders(prev => prev.map(o => o.id === co.id ? upd : o));
+                            await syncToCloud(upd);
+                            await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (εκκρεμές σταθερό)', { orderNo: co.orderNo, customer: co.customer, size: `${co.h}x${co.w}` });
+                            showCompletedChain(idx + 1);
+                          }
+                        });
+                      } else {
+                        setConfirmModal({
+                          visible: true,
+                          title: '✅ ΟΛΟΚΛΗΡΩΣΗ ΠΑΡΑΓΩΓΗΣ',
+                          message: `Ολοκληρώνεται η διαδικασία παραγωγής.\nΗ παραγγελία #${co.orderNo} μεταφέρεται στην ΑΠΟΘΗΚΗ.`,
+                          confirmText: '📦 ΕΠΙΒΕΒΑΙΩΣΗ',
+                          onConfirm: async () => {
+                            const upd = { ...co, status: 'READY', readyAt: Date.now() };
+                            setSpecialOrders(prev => prev.map(o => o.id === co.id ? upd : o));
+                            await syncToCloud(upd);
+                            await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (όλες done)', { orderNo: co.orderNo, customer: co.customer, size: `${co.h}x${co.w}` });
+                            showCompletedChain(idx + 1);
+                          }
+                        });
+                      }
+                    };
+
+                    // Αν υπάρχουν παραβιάσεις, δείξε ένα συγκεντρωτικό popup πρώτα
+                    if (violations.length > 0) {
+                      const labels = { laser: 'LASER', cases: 'ΚΑΣΕΣ', montSasi: 'ΣΑΣΙ', vafio: 'ΒΑΦΕΙΟ' };
+                      const lines = violations.map(v => {
+                        if (v.type === 'prevPhases') {
+                          return `#${v.orderNo}: ΜΟΝΤΑΡΙΣΜΑ - λείπουν: ${v.phases.map(p => labels[p] || p).join(', ')}`;
+                        }
+                        if (v.type === 'ependFirst') {
+                          return `#${v.orderNo}: ΜΟΝΤΑΡΙΣΜΑ - πρώτα ΕΠΕΝΔΥΣΕΙΣ`;
+                        }
+                        return `#${v.orderNo}: άγνωστο σφάλμα`;
+                      });
+                      setConfirmModal({
+                        visible: true,
+                        title: '⚠️ Κάποιες αλλαγές δεν εφαρμόστηκαν',
+                        message: `${violations.length} αλλαγές δεν μπόρεσαν να γίνουν:\n\n${lines.join('\n')}`,
+                        confirmText: 'ΟΚ',
+                        onConfirm: () => showCompletedChain(0)
+                      });
+                    } else {
+                      showCompletedChain(0);
+                    }
                   }
                 });
               }}>
