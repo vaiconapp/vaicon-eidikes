@@ -1696,6 +1696,18 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     );
   };
 
+  // Οπτική σήμανση: tick για κάθε επένδυση (μέσα/έξω) — δεν επηρεάζει τη φάση
+  const toggleCoatingCheck = async (orderId, idx) => {
+    const order = specialOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const checks = { ...(order.coatingChecks || {}) };
+    const k = String(idx);
+    checks[k] = !checks[k];
+    const upd = { ...order, coatingChecks: checks };
+    setSpecialOrders(prev => prev.map(o => o.id === orderId ? upd : o));
+    await syncToCloud(upd);
+  };
+
   // Άμεση μεταφορά μιας PROD παραγγελίας στα ΕΤΟΙΜΑ (από το κίτρινο badge)
   const transferOrderToReady = (orderId) => {
     const order = specialOrders.find(o => o.id === orderId);
@@ -2045,9 +2057,25 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   // Για ΜΟΝΤΑΡΙΣΜΑ: το badge εμφανίζεται μόνο αν η παραγγελία έχει installation='ΝΑΙ'
                   if (ph.key === 'montDoor' && order.installation !== 'ΝΑΙ') return null;
                   const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',epend:'ΕΠΕΝ.',montDoor:'ΜΟΝΤ.'};
+                  const coatCount = (order.coatings||[]).filter(c=>c&&String(c).trim()).length;
+                  const showCoatTicks = ph.key === 'epend' && coatCount >= 2;
                   return (
-                    <View key={ph.key} style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
-                      <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[ph.key]||ph.key}</Text>
+                    <View key={ph.key} style={{alignItems:'center', gap:2}}>
+                      <View style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
+                        <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[ph.key]||ph.key}</Text>
+                      </View>
+                      {showCoatTicks && (
+                        <View style={{flexDirection:'row', gap:3}}>
+                          {[0,1].map(i => {
+                            const checked = phase.done || !!(order.coatingChecks && order.coatingChecks[String(i)]);
+                            return (
+                              <View key={i} style={{backgroundColor:checked?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:4,paddingVertical:1}}>
+                                <Text style={{color:'white',fontSize:11,fontWeight:'bold'}}>{checked?'✅':'☐'}{i+1}</Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
                     </View>
                   );
                 })}
@@ -2212,28 +2240,46 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             onPress={()=>{ if(Platform.OS==='web') window.alert('Κράτα πατημένο 2 δευτερόλεπτα για επεξεργασία'); }}>
             <Text style={{color:'white',fontWeight:'bold',fontSize:14}}>✏️</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.doneBtn, phase.done && styles.doneBtnActive,
-              pendingChanges.some(c=>c.orderId===order.id&&c.phaseKey===phaseKey) && {opacity:0.5, borderWidth:2, borderColor:'#FFD600'},
-              lastChangedIds.some(c=>c.orderId===order.id&&c.phaseKey===phaseKey) && {borderWidth:3, borderColor:'#E53935'}
-            ]}
-            onPress={()=>{
-              const exists = pendingChanges.find(c=>c.orderId===order.id&&c.phaseKey===phaseKey);
-              if (exists) {
-                // Αν υπάρχει ήδη στο καλάθι → αφαίρεσέ το (toggle)
-                setPendingChanges(prev=>prev.filter(c=>!(c.orderId===order.id&&c.phaseKey===phaseKey)));
-              } else {
-                // Πρόσθεσε στο καλάθι
-                setPendingChanges(prev=>[...prev, {
-                  orderId: order.id,
-                  orderNo: order.orderNo,
-                  phaseKey,
-                  action: phase.done ? 'undone' : 'done'
-                }]);
-              }
-            }}>
-            <Text style={[styles.doneBtnTxt,{fontSize:12}]}>{phase.done ? '↩️\nUNDO' : '✓\nDONE'}</Text>
-          </TouchableOpacity>
+          {/* DONE + οπτικά ticks επενδύσεων αριστερά (μόνο για ΕΠΕΝΔΥΣΕΙΣ με 2+ επενδύσεις) */}
+          <View style={{flexDirection:'row', alignItems:'stretch', gap:4}}>
+            {phaseKey === 'epend' && (order.coatings||[]).filter(c=>c&&String(c).trim()).length >= 2 && (
+              <View style={{flexDirection:'column', gap:3, justifyContent:'space-between'}}>
+                {[0,1].map(i => {
+                  const checked = phase.done || !!(order.coatingChecks && order.coatingChecks[String(i)]);
+                  return (
+                    <TouchableOpacity key={i}
+                      disabled={phase.done}
+                      onPress={()=>toggleCoatingCheck(order.id, i)}
+                      style={{flex:1, backgroundColor: checked?'#2e7d32':'#ff9800', borderRadius:6, paddingHorizontal:6, justifyContent:'center', alignItems:'center', minWidth:36, opacity: phase.done?0.6:1}}>
+                      <Text style={{color:'white', fontSize:13, fontWeight:'bold'}}>{checked?'✅':'☐'}{i+1}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+            <TouchableOpacity
+              style={[styles.doneBtn, phase.done && styles.doneBtnActive,
+                pendingChanges.some(c=>c.orderId===order.id&&c.phaseKey===phaseKey) && {opacity:0.5, borderWidth:2, borderColor:'#FFD600'},
+                lastChangedIds.some(c=>c.orderId===order.id&&c.phaseKey===phaseKey) && {borderWidth:3, borderColor:'#E53935'}
+              ]}
+              onPress={()=>{
+                const exists = pendingChanges.find(c=>c.orderId===order.id&&c.phaseKey===phaseKey);
+                if (exists) {
+                  // Αν υπάρχει ήδη στο καλάθι → αφαίρεσέ το (toggle)
+                  setPendingChanges(prev=>prev.filter(c=>!(c.orderId===order.id&&c.phaseKey===phaseKey)));
+                } else {
+                  // Πρόσθεσε στο καλάθι
+                  setPendingChanges(prev=>[...prev, {
+                    orderId: order.id,
+                    orderNo: order.orderNo,
+                    phaseKey,
+                    action: phase.done ? 'undone' : 'done'
+                  }]);
+                }
+              }}>
+              <Text style={[styles.doneBtnTxt,{fontSize:12}]}>{phase.done ? '↩️\nUNDO' : '✓\nDONE'}</Text>
+            </TouchableOpacity>
+          </View>
           {!phase.done && (
             <TouchableOpacity style={styles.removeBtn} onPress={()=>removeFromPhase(order.id,phaseKey)}>
               <Text style={styles.removeBtnTxt}>✕</Text>
