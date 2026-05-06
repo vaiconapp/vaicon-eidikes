@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, LayoutAnimation, Modal, Share, Dimensions, Platform, Keyboard, PanResponder } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, LayoutAnimation, Modal, Share, Dimensions, Platform, Keyboard, PanResponder, Animated } from 'react-native';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 import { FIREBASE_URL } from './App';
 import { logActivity } from './activityLog';
@@ -112,6 +112,28 @@ function ConfirmModal({ visible, title, message, confirmText, onConfirm, onCance
         </View>
       </View>
     </Modal>
+  );
+}
+
+// ── BlinkingReadyBadge — κίτρινο που αναβοσβήνει & μεταφέρει στα ΕΤΟΙΜΑ ──
+function BlinkingReadyBadge({ onPress }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.35, duration: 600, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(opacity, { toValue: 1.0,  duration: 600, useNativeDriver: Platform.OS !== 'web' }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <Animated.View style={{opacity, backgroundColor:'#ffd600', borderRadius:6, paddingHorizontal:10, paddingVertical:3, alignSelf:'flex-start', marginBottom:5, borderWidth:2, borderColor:'#f57f17'}}>
+        <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:14}}>🟡 ΕΤΟΙΜΗ ΓΙΑ ΜΕΤΑΦΟΡΑ — ΠΑΤΗΣΕ ΕΔΩ</Text>
+      </Animated.View>
+    </TouchableOpacity>
   );
 }
 
@@ -1637,6 +1659,32 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     );
   };
 
+  // Άμεση μεταφορά μιας PROD παραγγελίας στα ΕΤΟΙΜΑ (από το κίτρινο badge)
+  const transferOrderToReady = (orderId) => {
+    const order = specialOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const hasStavera = order.stavera && order.stavera.filter(s => s.dim).length > 0;
+    const staveraPending = hasStavera && !order.staveraDone;
+    setConfirmModal({
+      visible: true,
+      title: staveraPending ? '⚠️ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ' : '✅ ΟΛΟΚΛΗΡΩΣΗ ΠΑΡΑΓΩΓΗΣ',
+      message: staveraPending
+        ? `Παραγγελία #${order.orderNo}: Όλες οι φάσεις παραγωγής ολοκληρώθηκαν.\n\nΕκκρεμεί σταθερό — η πόρτα κατεβαίνει στην αποθήκη και το σταθερό μένει σε εξέλιξη.`
+        : `Η παραγγελία #${order.orderNo} μεταφέρεται στα ΕΤΟΙΜΑ.`,
+      confirmText: staveraPending ? '📦 ΚΑΤΕΒΑΣΗ ΣΤΗΝ ΑΠΟΘΗΚΗ' : '📦 ΕΠΙΒΕΒΑΙΩΣΗ',
+      onConfirm: async () => {
+        const upd = staveraPending
+          ? { ...order, status:'READY', readyAt:Date.now(), staveraPendingAtReady:true }
+          : { ...order, status:'READY', readyAt:Date.now() };
+        setSpecialOrders(prev => prev.map(o => o.id === orderId ? upd : o));
+        await syncToCloud(upd);
+        await logActivity('ΕΙΔΙΚΗ',
+          staveraPending ? 'Φάση → ΕΤΟΙΜΟ (εκκρεμές σταθερό)' : 'Φάση → ΕΤΟΙΜΟ (όλες done)',
+          { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
+      }
+    });
+  };
+
   // Τσεκάρισμα ολοκλήρωσης φάσης — αν όλες done → ΕΤΟΙΜΑ
   const handlePhaseDone = async (orderId, phaseKey) => {
     let order = specialOrders.find(o=>o.id===orderId); if(!order||!order.phases) return;
@@ -1895,6 +1943,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const btn  = isArchive?'ΔΙΑΓΡΑΦΗ':(order.status==='PENDING'?'ΕΝΑΡΞΗ':order.status==='PROD'?'ΕΤΟΙΜΗ':'ΠΩΛΗΣΗ');
     const btnC = isArchive?'#000':(order.status==='PENDING'?'#ffbb33':order.status==='PROD'?'#00C851':'#222');
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
+    const isReadyForTransfer = isProd && order.phases && (() => {
+      const hasCoatings = !!(order.coatings && order.coatings.filter(c => c && String(c).trim()).length > 0);
+      const hasInstallation = order.installation === 'ΝΑΙ';
+      return Object.keys(order.phases).every(k => {
+        if (k === 'epend' && !hasCoatings) return true;
+        if (k === 'montDoor' && !hasInstallation) return true;
+        return !order.phases[k].active || order.phases[k].done;
+      });
+    })();
     return (
         <TouchableOpacity key={order.id} onLongPress={()=>!isArchive&&order.status==='PENDING'&&editOrder(order)} delayLongPress={1000} activeOpacity={0.7} style={[styles.orderCard,{borderLeftColor:bc, backgroundColor: isProd?'#e8f5e9':'white', ...(searchQuery && {borderTopWidth:2, borderTopColor:'#007AFF', borderBottomWidth:2, borderBottomColor:'#007AFF', borderRightWidth:2, borderRightColor:'#007AFF'})}]}>
         <View style={[styles.cardContent, {flexDirection:'row'}]}>
@@ -1972,6 +2029,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 )}
               </View>
             )}
+            {isReadyForTransfer && <View style={{marginTop:8}}><BlinkingReadyBadge onPress={()=>transferOrderToReady(order.id)} /></View>}
           </View>
         </View>
         {(isArchive||order.status==='READY')&&(
@@ -3384,39 +3442,38 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     setLastChangedIds(batch.map(c => ({ orderId: c.orderId, phaseKey: c.phaseKey })));
                     setPendingChanges([]);
 
-                    // Διαδοχικά popup για παραγγελίες που τελείωσαν
-                    const showCompletedChain = (idx) => {
-                      if (idx >= completedOrders.length) return;
-                      const { order: co, staveraPending } = completedOrders[idx];
-                      if (staveraPending) {
-                        setConfirmModal({
-                          visible: true,
-                          title: '⚠️ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ',
-                          message: `Παραγγελία #${co.orderNo}: Όλες οι φάσεις παραγωγής ολοκληρώθηκαν.\n\nΕκκρεμεί σταθερό — η παραγγελία θα κατέβει στην αποθήκη και το σταθερό θα παραμείνει σε εξέλιξη.`,
-                          confirmText: '📦 ΚΑΤΕΒΑΣΗ ΣΤΗΝ ΑΠΟΘΗΚΗ',
-                          onConfirm: async () => {
-                            const upd = { ...co, status: 'READY', readyAt: Date.now(), staveraPendingAtReady: true };
-                            setSpecialOrders(prev => prev.map(o => o.id === co.id ? upd : o));
-                            await syncToCloud(upd);
-                            await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (εκκρεμές σταθερό)', { orderNo: co.orderNo, customer: co.customer, size: `${co.h}x${co.w}` });
-                            showCompletedChain(idx + 1);
-                          }
-                        });
-                      } else {
-                        setConfirmModal({
-                          visible: true,
-                          title: '✅ ΟΛΟΚΛΗΡΩΣΗ ΠΑΡΑΓΩΓΗΣ',
-                          message: `Ολοκληρώνεται η διαδικασία παραγωγής.\nΗ παραγγελία #${co.orderNo} μεταφέρεται στην ΑΠΟΘΗΚΗ.`,
-                          confirmText: '📦 ΕΠΙΒΕΒΑΙΩΣΗ',
-                          onConfirm: async () => {
-                            const upd = { ...co, status: 'READY', readyAt: Date.now() };
-                            setSpecialOrders(prev => prev.map(o => o.id === co.id ? upd : o));
-                            await syncToCloud(upd);
-                            await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (όλες done)', { orderNo: co.orderNo, customer: co.customer, size: `${co.h}x${co.w}` });
-                            showCompletedChain(idx + 1);
-                          }
-                        });
+                    // ΕΝΑ popup για ΟΛΕΣ τις παραγγελίες που τελείωσαν (αντί αλυσίδα)
+                    const showCompletionPopup = () => {
+                      if (completedOrders.length === 0) return;
+                      const normalOrders  = completedOrders.filter(c => !c.staveraPending);
+                      const staveraOrders = completedOrders.filter(c =>  c.staveraPending);
+                      const parts = [];
+                      if (normalOrders.length > 0) {
+                        parts.push(`Μεταφέρονται στα ΕΤΟΙΜΑ:\n${normalOrders.map(c => `#${c.order.orderNo}`).join(', ')}`);
                       }
+                      if (staveraOrders.length > 0) {
+                        parts.push(`⚠️ Με εκκρεμές σταθερό (η πόρτα κατεβαίνει, το σταθερό μένει σε εξέλιξη):\n${staveraOrders.map(c => `#${c.order.orderNo}`).join(', ')}`);
+                      }
+                      setConfirmModal({
+                        visible: true,
+                        title: '✅ ΟΛΟΚΛΗΡΩΘΗΚΑΝ ΟΙ ΦΑΣΕΙΣ ΠΑΡΑΓΩΓΗΣ',
+                        message: parts.join('\n\n'),
+                        confirmText: '📦 ΕΠΙΒΕΒΑΙΩΣΗ',
+                        onConfirm: async () => {
+                          const now = Date.now();
+                          const updsMap = new Map();
+                          for (const c of normalOrders)  updsMap.set(c.order.id, { ...c.order, status: 'READY', readyAt: now });
+                          for (const c of staveraOrders) updsMap.set(c.order.id, { ...c.order, status: 'READY', readyAt: now, staveraPendingAtReady: true });
+                          setSpecialOrders(prev => prev.map(o => updsMap.get(o.id) || o));
+                          for (const upd of updsMap.values()) await syncToCloud(upd);
+                          for (const c of normalOrders) {
+                            await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (όλες done)', { orderNo: c.order.orderNo, customer: c.order.customer, size: `${c.order.h}x${c.order.w}` });
+                          }
+                          for (const c of staveraOrders) {
+                            await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (εκκρεμές σταθερό)', { orderNo: c.order.orderNo, customer: c.order.customer, size: `${c.order.h}x${c.order.w}` });
+                          }
+                        }
+                      });
                     };
 
                     // Αν υπάρχουν παραβιάσεις, δείξε ένα συγκεντρωτικό popup πρώτα
@@ -3436,10 +3493,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                         title: '⚠️ Κάποιες αλλαγές δεν εφαρμόστηκαν',
                         message: `${violations.length} αλλαγές δεν μπόρεσαν να γίνουν:\n\n${lines.join('\n')}`,
                         confirmText: 'ΟΚ',
-                        onConfirm: () => showCompletedChain(0)
+                        onConfirm: () => showCompletionPopup()
                       });
                     } else {
-                      showCompletedChain(0);
+                      showCompletionPopup();
                     }
                   }
                 });
