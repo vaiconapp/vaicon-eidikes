@@ -486,6 +486,18 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   // Auto-focus πελάτη στο mount
   useEffect(()=>{ setTimeout(()=>customerRef.current?.focus(), 300); }, []);
 
+  // Συγχρονισμός: όταν επιστρέφουμε στην ΠΑΡΑΓΩΓΗ, σύρε το paged ScrollView στη φάση που είναι ενεργή
+  useEffect(()=>{
+    if (activeSection !== 'prod' || !pageWidth) return;
+    const keys = [...PHASES.map(p=>p.key), 'stavera'];
+    const idx = keys.indexOf(activeProdPhase);
+    if (idx < 0) return;
+    const t = setTimeout(()=>{
+      prodScrollRef.current?.scrollTo({ x: idx * pageWidth, animated: false });
+    }, 0);
+    return ()=>clearTimeout(t);
+  }, [activeSection, pageWidth]);
+
   const blurAll = () => {
     glassRef.current?.blur();
     glassNotesRef.current?.blur();
