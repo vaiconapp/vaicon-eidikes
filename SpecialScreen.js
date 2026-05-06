@@ -115,6 +115,18 @@ function ConfirmModal({ visible, title, message, confirmText, onConfirm, onCance
   );
 }
 
+// Helper: παραγγελία PROD με όλες τις ενεργές φάσεις done = έτοιμη για μεταφορά
+const isOrderReadyForTransfer = (order) => {
+  if (!order || order.status !== 'PROD' || !order.phases) return false;
+  const hasCoatings = !!(order.coatings && order.coatings.filter(c => c && String(c).trim()).length > 0);
+  const hasInstallation = order.installation === 'ΝΑΙ';
+  return Object.keys(order.phases).every(k => {
+    if (k === 'epend'    && !hasCoatings)     return true;
+    if (k === 'montDoor' && !hasInstallation) return true;
+    return !order.phases[k].active || order.phases[k].done;
+  });
+};
+
 // ── BlinkingReadyBadge — κίτρινο που αναβοσβήνει & μεταφέρει στα ΕΤΟΙΜΑ ──
 function BlinkingReadyBadge({ onPress }) {
   const opacity = useRef(new Animated.Value(1)).current;
@@ -132,6 +144,30 @@ function BlinkingReadyBadge({ onPress }) {
     <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
       <Animated.View style={{opacity, backgroundColor:'#ffd600', borderRadius:6, paddingHorizontal:10, paddingVertical:3, alignSelf:'flex-start', marginBottom:5, borderWidth:2, borderColor:'#f57f17'}}>
         <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:14}}>🟡 ΕΤΟΙΜΗ ΓΙΑ ΜΕΤΑΦΟΡΑ — ΠΑΤΗΣΕ ΕΔΩ</Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+// ── BlinkingStuckButton — κουμπί στη δεξιά μπάρα για παραγγελίες έτοιμες αλλά κολλημένες
+function BlinkingStuckButton({ count, active, onPress }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (active) { opacity.setValue(1); return; }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.4, duration: 600, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(opacity, { toValue: 1.0, duration: 600, useNativeDriver: Platform.OS !== 'web' }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity, active]);
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <Animated.View style={{opacity: active ? 1 : opacity, backgroundColor: active ? '#f57f17' : '#ffd600', borderRadius:8, padding:11, alignItems:'center', borderWidth:2, borderColor:'#f57f17'}}>
+        <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:14}}>🟡 ΕΤΟΙΜΕΣ ΓΙΑ ΜΕΤΑΦΟΡΑ ({count})</Text>
+        {active && <Text style={{color:'#1a1a1a', fontSize:11, marginTop:2, fontWeight:'bold'}}>✕ ΑΚΥΡΩΣΗ ΦΙΛΤΡΟΥ</Text>}
       </Animated.View>
     </TouchableOpacity>
   );
@@ -308,6 +344,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   };
   const [activeSection, setActiveSection] = useState('pending'); // form | pending | prod | ready | archive
   const [pendingSort, setPendingSort] = useState('no');
+  const [showOnlyStuck, setShowOnlyStuck] = useState(false); // φιλτράρισμα: μόνο "έτοιμες κολλημένες"
   const [showHardwarePicker, setShowHardwarePicker] = useState(false);
   const [showLockPicker, setShowLockPicker] = useState(false);
   const [showCoatingsPicker, setShowCoatingsPicker] = useState(false);
@@ -1943,15 +1980,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const btn  = isArchive?'ΔΙΑΓΡΑΦΗ':(order.status==='PENDING'?'ΕΝΑΡΞΗ':order.status==='PROD'?'ΕΤΟΙΜΗ':'ΠΩΛΗΣΗ');
     const btnC = isArchive?'#000':(order.status==='PENDING'?'#ffbb33':order.status==='PROD'?'#00C851':'#222');
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
-    const isReadyForTransfer = isProd && order.phases && (() => {
-      const hasCoatings = !!(order.coatings && order.coatings.filter(c => c && String(c).trim()).length > 0);
-      const hasInstallation = order.installation === 'ΝΑΙ';
-      return Object.keys(order.phases).every(k => {
-        if (k === 'epend' && !hasCoatings) return true;
-        if (k === 'montDoor' && !hasInstallation) return true;
-        return !order.phases[k].active || order.phases[k].done;
-      });
-    })();
+    const isReadyForTransfer = isOrderReadyForTransfer(order);
     return (
         <TouchableOpacity key={order.id} onLongPress={()=>!isArchive&&order.status==='PENDING'&&editOrder(order)} delayLongPress={1000} activeOpacity={0.7} style={[styles.orderCard,{borderLeftColor:bc, backgroundColor: isProd?'#e8f5e9':'white', ...(searchQuery && {borderTopWidth:2, borderTopColor:'#007AFF', borderBottomWidth:2, borderBottomColor:'#007AFF', borderRightWidth:2, borderRightColor:'#007AFF'})}]}>
         <View style={[styles.cardContent, {flexDirection:'row'}]}>
@@ -3982,7 +4011,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {/* ΑΡΙΣΤΕΡΑ: Scrollable λίστα καρτών */}
             <ScrollView style={{flex:1, padding:10}} keyboardShouldPersistTaps="handled">
               <View style={{paddingBottom:80}}>
-                {[...specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone))].sort((a,b)=>
+                {[...specialOrders.filter(o => showOnlyStuck
+                  ? isOrderReadyForTransfer(o)
+                  : (o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone))
+                )].sort((a,b)=>
                   pendingSort==='date' ? (b.createdAt||0)-(a.createdAt||0) : (parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)
                 ).filter(o=>matchesSearch(o, pendingSearch)).map(o=>renderOrderCard(o, false, true, pendingSearch))}
               </View>
@@ -4033,6 +4065,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   <Text style={{color:'white', fontWeight:'bold', fontSize:16}}>🖨️ ΟΛΕΣ</Text>
                 </TouchableOpacity>
               </View>
+              {/* Κουμπί ειδοποίησης: παραγγελίες έτοιμες αλλά κολλημένες σε PROD */}
+              {specialOrders.filter(isOrderReadyForTransfer).length > 0 && (
+                <View style={{marginTop:12}}>
+                  <BlinkingStuckButton
+                    count={specialOrders.filter(isOrderReadyForTransfer).length}
+                    active={showOnlyStuck}
+                    onPress={()=>setShowOnlyStuck(v=>!v)}
+                  />
+                </View>
+              )}
               {/* Αναζήτηση */}
               <View style={{gap:6, marginTop:'auto'}}>
                 <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
