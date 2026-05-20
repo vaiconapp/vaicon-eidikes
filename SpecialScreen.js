@@ -127,6 +127,10 @@ const isOrderReadyForTransfer = (order) => {
   });
 };
 
+// Helpers για ανοιγόμενο τζάμι (ίδια λογική με σταθερό αλλά ξεχωριστή διαδικασία)
+const hasGlass = (o) => !!(o && o.glassDim && String(o.glassDim).trim());
+const isGlassPending = (o) => hasGlass(o) && !o.glassDone;
+
 // ── BlinkingReadyBadge — κίτρινο που αναβοσβήνει & μεταφέρει στα ΕΤΟΙΜΑ ──
 function BlinkingReadyBadge({ onPress }) {
   const opacity = useRef(new Animated.Value(1)).current;
@@ -1126,12 +1130,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       else Alert.alert("Προσοχή","Επίλεξε τουλάχιστον μία παραγγελία.");
       return;
     }
-    // Για ΣΤΑΘΕΡΑ: ίδιο φίλτρο με αυτό που εμφανίζεται στο page
+    // Για ΣΤΑΘΕΡΑ: ίδιο φίλτρο με αυτό που εμφανίζεται στο page (περιλαμβάνει και τζάμι)
     const prodOrders = specialOrders.filter(o=>o.status==='PROD');
-    const staveraOrders = [
-      ...prodOrders.filter(o=>o.stavera&&o.stavera.length>0),
-      ...specialOrders.filter(o=>o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)
-    ];
+    const staveraSet = new Map();
+    prodOrders.filter(o=>(o.stavera&&o.stavera.length>0) || hasGlass(o)).forEach(o=>staveraSet.set(o.id,o));
+    specialOrders.filter(o=>o.status==='READY' && ((o.staveraPendingAtReady&&!o.staveraDone) || (o.glassPendingAtReady&&!o.glassDone))).forEach(o=>staveraSet.set(o.id,o));
+    const staveraOrders = [...staveraSet.values()];
     const orders = phaseKey==='stavera'
       ? staveraOrders.filter(o => selected.includes(o.id))
       : specialOrders.filter(o => {
@@ -1183,24 +1187,34 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         if (phaseKey==='stavera') {
           const rows = orders.flatMap(o=>{
             const staveraEntries = (o.stavera||[]).filter(s=>s&&(s.dim||s.note));
-            if (staveraEntries.length===0) {
+            const dateCell = o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'';
+            const staveraRows = staveraEntries.map(s=>`<tr>
+              <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
+              <td style="font-size:13px">${o.caseType||'—'}</td>
+              <td style="font-size:20px;font-weight:900">📐 ${s.dim||'—'}</td>
+              <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center">${s.qty||''}</td>
+              <td style="font-size:13px;min-width:180px">${s.note||''}</td>
+              <td style="font-size:12px;color:#444">${dateCell}</td>
+            </tr>`);
+            const glassRows = hasGlass(o) ? [`<tr>
+              <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
+              <td style="font-size:13px">${o.caseType||'—'}</td>
+              <td style="font-size:20px;font-weight:900;color:#0d47a1">🪟 ${o.glassDim||'—'}</td>
+              <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
+              <td style="font-size:13px;min-width:180px">${o.glassNotes||''}</td>
+              <td style="font-size:12px;color:#444">${dateCell}</td>
+            </tr>`] : [];
+            if (staveraRows.length===0 && glassRows.length===0) {
               return [`<tr>
                 <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
                 <td style="font-size:13px">${o.caseType||'—'}</td>
                 <td style="font-size:20px;font-weight:900">—</td>
                 <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
                 <td style="font-size:13px;min-width:180px"></td>
-                <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
+                <td style="font-size:12px;color:#444">${dateCell}</td>
               </tr>`];
             }
-            return staveraEntries.map(s=>`<tr>
-              <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
-              <td style="font-size:13px">${o.caseType||'—'}</td>
-              <td style="font-size:20px;font-weight:900">${s.dim||'—'}</td>
-              <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center">${s.qty||''}</td>
-              <td style="font-size:13px;min-width:180px">${s.note||''}</td>
-              <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
-            </tr>`);
+            return [...staveraRows, ...glassRows];
           }).join('');
           const html = `<html><head><meta charset="utf-8"><style>
             body{font-family:Arial,sans-serif;margin:8mm;}
@@ -1280,25 +1294,34 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const dateStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
         const rows = orders.flatMap(o=>{
           const staveraEntries = (o.stavera||[]).filter(s=>s&&(s.dim||s.note));
-          if (staveraEntries.length===0) {
-            // Εκτύπωσε την παραγγελία χωρίς διάσταση σταθερού
+          const dateCell = o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'';
+          const staveraRows = staveraEntries.map(s=>`<tr>
+            <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
+            <td style="font-size:13px">${o.caseType||'—'}</td>
+            <td style="font-size:20px;font-weight:900">📐 ${s.dim||'—'}</td>
+            <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center">${s.qty||''}</td>
+            <td style="font-size:13px;min-width:180px">${s.note||''}</td>
+            <td style="font-size:12px;color:#444">${dateCell}</td>
+          </tr>`);
+          const glassRows = hasGlass(o) ? [`<tr>
+            <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
+            <td style="font-size:13px">${o.caseType||'—'}</td>
+            <td style="font-size:20px;font-weight:900;color:#0d47a1">🪟 ${o.glassDim||'—'}</td>
+            <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
+            <td style="font-size:13px;min-width:180px">${o.glassNotes||''}</td>
+            <td style="font-size:12px;color:#444">${dateCell}</td>
+          </tr>`] : [];
+          if (staveraRows.length===0 && glassRows.length===0) {
             return [`<tr>
               <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
               <td style="font-size:13px">${o.caseType||'—'}</td>
               <td style="font-size:20px;font-weight:900">—</td>
               <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
               <td style="font-size:13px;min-width:180px"></td>
-              <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
+              <td style="font-size:12px;color:#444">${dateCell}</td>
             </tr>`];
           }
-          return staveraEntries.map(s=>`<tr>
-            <td style="font-weight:bold;font-size:17px">${o.orderNo||'—'}</td>
-            <td style="font-size:13px">${o.caseType||'—'}</td>
-            <td style="font-size:20px;font-weight:900">${s.dim||'—'}</td>
-            <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center">${s.qty||''}</td>
-            <td style="font-size:13px;min-width:180px">${s.note||''}</td>
-            <td style="font-size:12px;color:#444">${o.deliveryDate?new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}):''}</td>
-          </tr>`);
+          return [...staveraRows, ...glassRows];
         }).join('');
         const html = `<html><head><meta charset="utf-8"><style>
           body{font-family:Arial,sans-serif;margin:8mm;}
@@ -1424,7 +1447,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               {sortedOrders.flatMap((o,i)=>{
                 const entries = (o.stavera||[]).filter(s=>s&&(s.dim||s.note));
                 const deliveryFmt = o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
-                if (entries.length===0) {
+                const orderHasGlass = hasGlass(o);
+                if (entries.length===0 && !orderHasGlass) {
                   return [(
                     <View key={o.id+'-0'} style={[styles.previewTr,i%2===0?styles.previewTrEven:styles.previewTrOdd]}>
                       <Text style={[styles.previewTd,{width:50,fontWeight:'bold'}]}>{o.orderNo||'—'}</Text>
@@ -1435,15 +1459,25 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     </View>
                   )];
                 }
-                return entries.map((s,si)=>(
-                  <View key={o.id+'-'+si} style={[styles.previewTr,(i+si)%2===0?styles.previewTrEven:styles.previewTrOdd]}>
+                const staveraRows = entries.map((s,si)=>(
+                  <View key={o.id+'-s-'+si} style={[styles.previewTr,(i+si)%2===0?styles.previewTrEven:styles.previewTrOdd]}>
                     <Text style={[styles.previewTd,{width:50,fontWeight:'bold'}]}>{si===0?o.orderNo||'—':''}</Text>
                     <Text style={[styles.previewTd,{width:90,fontSize:12}]}>{si===0?o.caseType||'—':''}</Text>
-                    <Text style={[styles.previewTd,{width:130,fontWeight:'900',fontSize:15}]}>{s.dim||'—'}</Text>
+                    <Text style={[styles.previewTd,{width:130,fontWeight:'900',fontSize:15}]}>📐 {s.dim||'—'}</Text>
                     <Text style={[styles.previewTd,{width:220,fontSize:12}]}>{s.note||''}</Text>
                     <Text style={[styles.previewTd,{width:110,fontSize:11,color:'#555'}]}>{si===0?deliveryFmt:''}</Text>
                   </View>
                 ));
+                const glassRows = orderHasGlass ? [(
+                  <View key={o.id+'-g'} style={[styles.previewTr,(i+entries.length)%2===0?styles.previewTrEven:styles.previewTrOdd]}>
+                    <Text style={[styles.previewTd,{width:50,fontWeight:'bold'}]}>{entries.length===0?o.orderNo||'—':''}</Text>
+                    <Text style={[styles.previewTd,{width:90,fontSize:12}]}>{entries.length===0?o.caseType||'—':''}</Text>
+                    <Text style={[styles.previewTd,{width:130,fontWeight:'900',fontSize:15,color:'#0d47a1'}]}>🪟 {o.glassDim||'—'}</Text>
+                    <Text style={[styles.previewTd,{width:220,fontSize:12}]}>{o.glassNotes||''}</Text>
+                    <Text style={[styles.previewTd,{width:110,fontSize:11,color:'#555'}]}>{entries.length===0?deliveryFmt:''}</Text>
+                  </View>
+                )] : [];
+                return [...staveraRows, ...glassRows];
               })}
             </View>
           </ScrollView>
@@ -1724,23 +1758,27 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const transferOrderToReady = (orderId) => {
     const order = specialOrders.find(o => o.id === orderId);
     if (!order) return;
-    const hasStavera = order.stavera && order.stavera.filter(s => s.dim).length > 0;
-    const staveraPending = hasStavera && !order.staveraDone;
+    const hasStaveraItems = order.stavera && order.stavera.filter(s => s.dim).length > 0;
+    const staveraPending = hasStaveraItems && !order.staveraDone;
+    const glassPending = isGlassPending(order);
+    const anyPending = staveraPending || glassPending;
+    const pendingLabel = staveraPending && glassPending ? 'σταθερό και τζάμι'
+                       : staveraPending ? 'σταθερό' : 'τζάμι';
     setConfirmModal({
       visible: true,
-      title: staveraPending ? '⚠️ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ' : '✅ ΟΛΟΚΛΗΡΩΣΗ ΠΑΡΑΓΩΓΗΣ',
-      message: staveraPending
-        ? `Παραγγελία #${order.orderNo}: Όλες οι φάσεις παραγωγής ολοκληρώθηκαν.\n\nΕκκρεμεί σταθερό — η πόρτα κατεβαίνει στην αποθήκη και το σταθερό μένει σε εξέλιξη.`
+      title: anyPending ? `⚠️ ΕΚΚΡΕΜΕΙ ${pendingLabel.toUpperCase()}` : '✅ ΟΛΟΚΛΗΡΩΣΗ ΠΑΡΑΓΩΓΗΣ',
+      message: anyPending
+        ? `Παραγγελία #${order.orderNo}: Όλες οι φάσεις παραγωγής ολοκληρώθηκαν.\n\nΕκκρεμεί ${pendingLabel} — η πόρτα κατεβαίνει στην αποθήκη και το ${pendingLabel} μένει σε εξέλιξη.`
         : `Η παραγγελία #${order.orderNo} μεταφέρεται στα ΕΤΟΙΜΑ.`,
-      confirmText: staveraPending ? '📦 ΚΑΤΕΒΑΣΗ ΣΤΗΝ ΑΠΟΘΗΚΗ' : '📦 ΕΠΙΒΕΒΑΙΩΣΗ',
+      confirmText: anyPending ? '📦 ΚΑΤΕΒΑΣΗ ΣΤΗΝ ΑΠΟΘΗΚΗ' : '📦 ΕΠΙΒΕΒΑΙΩΣΗ',
       onConfirm: async () => {
-        const upd = staveraPending
-          ? { ...order, status:'READY', readyAt:Date.now(), staveraPendingAtReady:true }
-          : { ...order, status:'READY', readyAt:Date.now() };
+        const upd = { ...order, status:'READY', readyAt:Date.now(),
+          ...(staveraPending && { staveraPendingAtReady:true }),
+          ...(glassPending && { glassPendingAtReady:true }) };
         setSpecialOrders(prev => prev.map(o => o.id === orderId ? upd : o));
         await syncToCloud(upd);
         await logActivity('ΕΙΔΙΚΗ',
-          staveraPending ? 'Φάση → ΕΤΟΙΜΟ (εκκρεμές σταθερό)' : 'Φάση → ΕΤΟΙΜΟ (όλες done)',
+          anyPending ? `Φάση → ΕΤΟΙΜΟ (εκκρεμές ${pendingLabel})` : 'Φάση → ΕΤΟΙΜΟ (όλες done)',
           { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
       }
     });
@@ -1802,19 +1840,25 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     });
     const hasStavera = order.stavera && order.stavera.filter(s=>s.dim).length > 0;
     const staveraPending = hasStavera && !order.staveraDone;
+    const glassPending = isGlassPending(order);
+    const anyPending = staveraPending || glassPending;
+    const pendingLabel = staveraPending && glassPending ? 'σταθερό και τζάμι'
+                       : staveraPending ? 'σταθερό' : 'τζάμι';
 
     if (allDone) {
-      if (staveraPending) {
+      if (anyPending) {
         setConfirmModal({
           visible: true,
-          title: '⚠️ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ',
-          message: 'Όλες οι φάσεις παραγωγής ολοκληρώθηκαν.\n\nΕκκρεμεί σταθερό — η παραγγελία θα κατέβει στην αποθήκη και το σταθερό θα παραμείνει σε εξέλιξη.',
+          title: `⚠️ ΕΚΚΡΕΜΕΙ ${pendingLabel.toUpperCase()}`,
+          message: `Όλες οι φάσεις παραγωγής ολοκληρώθηκαν.\n\nΕκκρεμεί ${pendingLabel} — η παραγγελία θα κατέβει στην αποθήκη και το ${pendingLabel} θα παραμείνει σε εξέλιξη.`,
           confirmText: '📦 ΚΑΤΕΒΑΣΗ ΣΤΗΝ ΑΠΟΘΗΚΗ',
           onConfirm: async () => {
-            const upd = {...order, phases:newPhases, status:'READY', readyAt:Date.now(), staveraPendingAtReady:true};
+            const upd = {...order, phases:newPhases, status:'READY', readyAt:Date.now(),
+              ...(staveraPending && { staveraPendingAtReady:true }),
+              ...(glassPending && { glassPendingAtReady:true })};
             setSpecialOrders(specialOrders.map(o=>o.id===orderId?upd:o));
             await syncToCloud(upd);
-            await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (εκκρεμές σταθερό)', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
+            await logActivity('ΕΙΔΙΚΗ', `Φάση → ΕΤΟΙΜΟ (εκκρεμές ${pendingLabel})`, { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
           }
         });
       } else {
@@ -2092,8 +2136,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   );
                 })}
                 {order.stavera&&order.stavera.some(s=>s&&s.dim)&&(
-                  <View style={{backgroundColor:order.staveraDone?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
-                    <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{order.staveraDone?'✅':'⏳'} 📐 ΣΤΑΘ.</Text>
+                  <View style={{alignItems:'center', gap:2, marginLeft:6}}>
+                    <View style={{backgroundColor:order.staveraDone?'#2e7d32':'#ff9800',borderRadius:6,paddingHorizontal:10,paddingVertical:4,borderWidth:1.5,borderColor:'#1a1a1a'}}>
+                      <Text style={{color:'white',fontSize:13,fontWeight:'bold'}}>{order.staveraDone?'✅':'⏳'} 📐 ΣΤΑΘ.</Text>
+                    </View>
+                  </View>
+                )}
+                {hasGlass(order)&&(
+                  <View style={{alignItems:'center', gap:2}}>
+                    <View style={{backgroundColor:order.glassDone?'#2e7d32':'#ff9800',borderRadius:6,paddingHorizontal:10,paddingVertical:4,borderWidth:1.5,borderColor:'#1a1a1a'}}>
+                      <Text style={{color:'white',fontSize:13,fontWeight:'bold'}}>{order.glassDone?'✅':'⏳'} 🪟 ΤΖ.</Text>
+                    </View>
                   </View>
                 )}
               </View>
@@ -2458,11 +2511,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
     const phaseKeys = [...PHASES.map(p=>p.key), 'stavera'];
 
-    // Υπολογισμός staveraOrders για το ΣΤΑΘΕΡΑ tab
-    const staveraOrders = [
-      ...prodOrders.filter(o=>o.stavera&&o.stavera.some(s=>s&&s.dim)),
-      ...specialOrders.filter(o=>o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)
-    ];
+    // Υπολογισμός staveraOrders για το ΣΤΑΘΕΡΑ-ΤΖΑΜΙΑ tab (περιλαμβάνει σταθερά και τζάμια)
+    const staveraSetTab = new Map();
+    prodOrders.filter(o=>(o.stavera&&o.stavera.some(s=>s&&s.dim)) || hasGlass(o)).forEach(o=>staveraSetTab.set(o.id,o));
+    specialOrders.filter(o=>o.status==='READY' && ((o.staveraPendingAtReady&&!o.staveraDone) || (o.glassPendingAtReady&&!o.glassDone))).forEach(o=>staveraSetTab.set(o.id,o));
+    const staveraOrders = [...staveraSetTab.values()];
 
     const handleStaveraPrint = () => {
       const selected = Object.keys(printSelected).filter(id=>printSelected[id]);
@@ -2709,8 +2762,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <TouchableOpacity
               style={[styles.phaseTab, activeProdPhase==='stavera'&&styles.phaseTabActive, {backgroundColor: activeProdPhase==='stavera'?'#7b1fa2':'#f3e5f5', borderRadius:8, marginRight:0, flexDirection:'row', justifyContent:'space-between', alignItems:'center', minWidth:0, paddingVertical:8}]}
               onPress={()=>{ setActiveProdPhase('stavera'); prodScrollRef.current?.scrollTo({x: phaseKeys.indexOf('stavera') * pageWidth, animated:true}); }}>
-              <Text style={[styles.phaseTabTxt, activeProdPhase==='stavera'&&styles.phaseTabTxtActive]}>📐 ΣΤΑΘΕΡΑ</Text>
-              <Text style={styles.phaseTabCount}>{prodOrders.filter(o=>o.stavera&&o.stavera.some(s=>s&&s.dim)).length + specialOrders.filter(o=>o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone).length}</Text>
+              <Text style={[styles.phaseTabTxt, activeProdPhase==='stavera'&&styles.phaseTabTxtActive]}>📐 ΣΤΑΘΕΡΑ-ΤΖΑΜΙΑ</Text>
+              <Text style={styles.phaseTabCount}>{staveraOrders.length}</Text>
             </TouchableOpacity>
           </View>
 
@@ -2789,8 +2842,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   }
                   return filteredStavera.map(o=>{
                   const isSelected = !!printSelected[o.id];
+                  const hasStaveraItems = !!(o.stavera && o.stavera.some(s=>s&&s.dim));
+                  const orderHasGlass = hasGlass(o);
+                  const staveraDoneOrNA = !hasStaveraItems || o.staveraDone;
+                  const glassDoneOrNA   = !orderHasGlass   || o.glassDone;
+                  const allDone = staveraDoneOrNA && glassDoneOrNA;
                   return (
-                  <View key={o.id} style={{backgroundColor:o.staveraDone?'#e8f5e9':o.staveraGiven?'#ede7f6':'#f3e5f5', borderRadius:8, padding:10, marginBottom:6, borderLeftWidth:4, borderLeftColor:o.staveraDone?'#00C851':o.staveraGiven?'#4a148c':'#7b1fa2', elevation:1, flexDirection:'row', alignItems:'flex-start'}}>
+                  <View key={o.id} style={{backgroundColor:allDone?'#e8f5e9':'#f3e5f5', borderRadius:8, padding:10, marginBottom:6, borderLeftWidth:4, borderLeftColor:allDone?'#00C851':'#7b1fa2', elevation:1, flexDirection:'row', alignItems:'flex-start'}}>
                     <TouchableOpacity style={{marginRight:10, marginTop:2}} onPress={()=>setPrintSelected(p=>({...p,[o.id]:!p[o.id]}))}>
                       <View style={{width:28,height:28,borderRadius:6,borderWidth:2,borderColor:isSelected?'#1565c0':'#7b1fa2',backgroundColor:isSelected?'#1565c0':'white',alignItems:'center',justifyContent:'center'}}>
                         {isSelected&&<Text style={{color:'white',fontWeight:'bold',fontSize:14}}>✓</Text>}
@@ -2799,7 +2857,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <View style={{flex:1}}>
                       <Text style={{fontWeight:'bold', fontSize:13, marginBottom:4}}>#{o.orderNo} {o.customer?`— ${o.customer}`:''}</Text>
                       <Text style={{fontSize:12, color:'#555', marginBottom:6}}>{o.h}x{o.w} | {o.side}</Text>
-                      {(o.stavera||[]).map((s,idx)=>(
+                      {hasStaveraItems && (o.stavera||[]).map((s,idx)=>s&&s.dim?(
                         <View key={idx} style={{backgroundColor:'white', borderRadius:6, padding:8, marginBottom:4, borderLeftWidth:2, borderLeftColor:'#ce93d8'}}>
                           <View style={{flexDirection:'row', alignItems:'center', gap:6}}>
                             <Text style={{fontWeight:'bold', fontSize:13, color:'#4a148c'}}>📐 {s.dim||'—'}</Text>
@@ -2807,8 +2865,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                           </View>
                           {s.note?<Text style={{fontSize:12, color:'#555', marginTop:2}}>{s.note}</Text>:null}
                         </View>
-                      ))}
-                      {o.staveraDone&&<Text style={{fontSize:11,color:'#00796B',fontWeight:'bold',marginTop:2}}>✅ Ολοκληρώθηκαν</Text>}
+                      ):null)}
+                      {hasStaveraItems && o.staveraDone&&<Text style={{fontSize:11,color:'#00796B',fontWeight:'bold',marginTop:2}}>✅ Σταθερά ολοκληρώθηκαν</Text>}
+                      {orderHasGlass && (
+                        <View style={{backgroundColor:'white', borderRadius:6, padding:8, marginBottom:4, marginTop: hasStaveraItems?6:0, borderLeftWidth:2, borderLeftColor:'#90caf9'}}>
+                          <View style={{flexDirection:'row', alignItems:'center', gap:6}}>
+                            <Text style={{fontWeight:'bold', fontSize:13, color:'#0d47a1'}}>🪟 {o.glassDim||'—'}</Text>
+                          </View>
+                          {o.glassNotes?<Text style={{fontSize:12, color:'#555', marginTop:2}}>{o.glassNotes}</Text>:null}
+                          {o.glassDone&&<Text style={{fontSize:11,color:'#00796B',fontWeight:'bold',marginTop:2}}>✅ Τζάμι ολοκληρώθηκε</Text>}
+                        </View>
+                      )}
                     </View>
                     {o.programNo ? (
                       <View style={{justifyContent:'center', alignItems:'center', paddingHorizontal:8, borderRightWidth:1, borderRightColor:'#e0e0e0', backgroundColor:'#fff8e1', minWidth:52, alignSelf:'stretch'}}>
@@ -2819,16 +2886,30 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       </View>
                     ) : null}
                     <View style={{justifyContent:'space-between', gap:6, marginLeft: o.programNo ? 0 : 8, paddingVertical:2}}>
-                      <TouchableOpacity
-                        style={[styles.doneBtn, o.staveraDone&&styles.doneBtnActive]}
-                        onPress={async()=>{
-                          const newDone = !o.staveraDone;
-                          const upd={...o, staveraDone:newDone, ...(newDone && {staveraPendingAtReady:false})};
-                          setSpecialOrders(specialOrders.map(x=>x.id===o.id?upd:x));
-                          await syncToCloud(upd);
-                        }}>
-                        <Text style={styles.doneBtnTxt}>{o.staveraDone?'↩️ UNDO':'✓ DONE'}</Text>
-                      </TouchableOpacity>
+                      {hasStaveraItems && (
+                        <TouchableOpacity
+                          style={[styles.doneBtn, o.staveraDone&&styles.doneBtnActive]}
+                          onPress={async()=>{
+                            const newDone = !o.staveraDone;
+                            const upd={...o, staveraDone:newDone, ...(newDone && {staveraPendingAtReady:false})};
+                            setSpecialOrders(specialOrders.map(x=>x.id===o.id?upd:x));
+                            await syncToCloud(upd);
+                          }}>
+                          <Text style={styles.doneBtnTxt}>{o.staveraDone?'↩️ ΣΤΑΘ.':'✓ ΣΤΑΘ.'}</Text>
+                        </TouchableOpacity>
+                      )}
+                      {orderHasGlass && (
+                        <TouchableOpacity
+                          style={[styles.doneBtn, o.glassDone&&styles.doneBtnActive, {backgroundColor:o.glassDone?undefined:'#1976d2'}]}
+                          onPress={async()=>{
+                            const newDone = !o.glassDone;
+                            const upd={...o, glassDone:newDone, ...(newDone && {glassPendingAtReady:false})};
+                            setSpecialOrders(specialOrders.map(x=>x.id===o.id?upd:x));
+                            await syncToCloud(upd);
+                          }}>
+                          <Text style={styles.doneBtnTxt}>{o.glassDone?'↩️ ΤΖΑΜΙ':'✓ ΤΖΑΜΙ'}</Text>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
                         style={{backgroundColor:'#ff4444', paddingHorizontal:8, paddingVertical:3, borderRadius:5, alignSelf:'stretch', alignItems:'center'}}
                         onPress={()=>Alert.alert("⚠️ Διαγραφή",`Διαγραφή παραγγελίας #${o.orderNo};`,[
@@ -3500,11 +3581,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                           return !newPhases[k].active || newPhases[k].done;
                         });
                         if (allDone) {
-                          const hasStavera = order.stavera && order.stavera.filter(s => s.dim).length > 0;
-                          const staveraPending = hasStavera && !order.staveraDone;
+                          const hasStaveraItems = order.stavera && order.stavera.filter(s => s.dim).length > 0;
+                          const staveraPending = hasStaveraItems && !order.staveraDone;
+                          const glassPending = isGlassPending(order);
                           // Αν η ίδια παραγγελία ήδη υπάρχει στη λίστα, μην την ξαναπροσθέσεις
                           if (!completedOrders.find(co => co.order.id === upd.id)) {
-                            completedOrders.push({ order: upd, staveraPending });
+                            completedOrders.push({ order: upd, staveraPending, glassPending });
                           }
                         }
                       }
@@ -3532,14 +3614,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     // ΕΝΑ popup για ΟΛΕΣ τις παραγγελίες που τελείωσαν (αντί αλυσίδα)
                     const showCompletionPopup = () => {
                       if (completedOrders.length === 0) return;
-                      const normalOrders  = completedOrders.filter(c => !c.staveraPending);
-                      const staveraOrders = completedOrders.filter(c =>  c.staveraPending);
+                      const normalOrders  = completedOrders.filter(c => !c.staveraPending && !c.glassPending);
+                      const pendingOrders = completedOrders.filter(c =>  c.staveraPending ||  c.glassPending);
+                      const pendingLabelOf = c => c.staveraPending && c.glassPending ? 'σταθ.+τζάμι'
+                                              : c.staveraPending ? 'σταθερό' : 'τζάμι';
                       const parts = [];
                       if (normalOrders.length > 0) {
                         parts.push(`Μεταφέρονται στα ΕΤΟΙΜΑ:\n${normalOrders.map(c => `#${c.order.orderNo}`).join(', ')}`);
                       }
-                      if (staveraOrders.length > 0) {
-                        parts.push(`⚠️ Με εκκρεμές σταθερό (η πόρτα κατεβαίνει, το σταθερό μένει σε εξέλιξη):\n${staveraOrders.map(c => `#${c.order.orderNo}`).join(', ')}`);
+                      if (pendingOrders.length > 0) {
+                        parts.push(`⚠️ Με εκκρεμότητες (η πόρτα κατεβαίνει, η εκκρεμότητα μένει σε εξέλιξη):\n${pendingOrders.map(c => `#${c.order.orderNo} (${pendingLabelOf(c)})`).join(', ')}`);
                       }
                       setConfirmModal({
                         visible: true,
@@ -3550,14 +3634,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                           const now = Date.now();
                           const updsMap = new Map();
                           for (const c of normalOrders)  updsMap.set(c.order.id, { ...c.order, status: 'READY', readyAt: now });
-                          for (const c of staveraOrders) updsMap.set(c.order.id, { ...c.order, status: 'READY', readyAt: now, staveraPendingAtReady: true });
+                          for (const c of pendingOrders) updsMap.set(c.order.id, { ...c.order, status: 'READY', readyAt: now,
+                            ...(c.staveraPending && { staveraPendingAtReady: true }),
+                            ...(c.glassPending && { glassPendingAtReady: true }) });
                           setSpecialOrders(prev => prev.map(o => updsMap.get(o.id) || o));
                           for (const upd of updsMap.values()) await syncToCloud(upd);
                           for (const c of normalOrders) {
                             await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (όλες done)', { orderNo: c.order.orderNo, customer: c.order.customer, size: `${c.order.h}x${c.order.w}` });
                           }
-                          for (const c of staveraOrders) {
-                            await logActivity('ΕΙΔΙΚΗ', 'Φάση → ΕΤΟΙΜΟ (εκκρεμές σταθερό)', { orderNo: c.order.orderNo, customer: c.order.customer, size: `${c.order.h}x${c.order.w}` });
+                          for (const c of pendingOrders) {
+                            await logActivity('ΕΙΔΙΚΗ', `Φάση → ΕΤΟΙΜΟ (εκκρεμές ${pendingLabelOf(c)})`, { orderNo: c.order.orderNo, customer: c.order.customer, size: `${c.order.h}x${c.order.w}` });
                           }
                         }
                       });
