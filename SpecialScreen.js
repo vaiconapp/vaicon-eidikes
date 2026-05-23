@@ -131,6 +131,83 @@ const isOrderReadyForTransfer = (order) => {
 const hasGlass = (o) => !!(o && o.glassDim && String(o.glassDim).trim());
 const isGlassPending = (o) => hasGlass(o) && !o.glassDone;
 
+// Helpers ειδοποίησης πελάτη (Viber / WhatsApp / Email)
+const normalizePhone = (p) => {
+  const d = String(p||'').replace(/\D/g,'');
+  if (!d) return '';
+  return d.startsWith('30') ? d : '30' + d.replace(/^0+/,'');
+};
+const buildOrderMessage = (o) => {
+  const isStd = o.orderType === 'ΤΥΠΟΠΟΙΗΜΕΝΗ';
+  const coats = (o.coatings||[]).filter(c=>c&&String(c).trim()).join(', ');
+  const stav = (o.stavera||[]).filter(s=>s&&s.dim).map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(', ');
+  const tzami = (o.glassDim||'')+(o.glassNotes?' '+o.glassNotes:'');
+  return [
+    `Γεια σας ${o.customer||''},`,
+    '',
+    `Καταχωρήσαμε την παραγγελία σας Νο ${o.orderNo||'-'}`,
+    `${o.h||''}x${o.w||''} | ${o.side||''} | ${o.armor||'ΜΟΝΗ'} ΘΩΡΑΚΙΣΗ`,
+    !isStd ? `Κάσα: ${o.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | ${o.caseMaterial||'DKP'} Μεντ: ${o.hinges||'2'}` : null,
+    `Κλειδ: ${o.lock||'—'}`,
+    coats ? `Επενδύσεις: ${coats}` : null,
+    stav ? `Σταθερό: ${stav}` : null,
+    tzami ? `Τζάμι: ${tzami}` : null,
+    o.notes ? `Σημ: ${o.notes}` : null,
+    '',
+    'Παρακαλούμε ελέγξτε τα παραπάνω στοιχεία. Μετά την έναρξη παραγωγής δεν είναι δυνατές αλλαγές και η εταιρεία δεν φέρει ευθύνη για τυχόν διαφορές.',
+    '',
+    'Ευχαριστούμε — VAICON',
+  ].filter(v => v !== null).join('\n');
+};
+const buildReadyMessage = (o) => {
+  return [
+    `Γεια σας ${o.customer||''},`,
+    '',
+    `Η παραγγελία σας Νο ${o.orderNo||'-'} είναι έτοιμη.`,
+    'Μπορείτε να επικοινωνήσετε μαζί μας για την παραλαβή της ή τον χρόνο τοποθέτησης.',
+    'Ώρες παραλαβής: Εργάσιμες ημέρες 08:00–15:30.',
+    '',
+    'Ευχαριστούμε — VAICON',
+  ].join('\n');
+};
+const messageFor = (o) => o?.status === 'READY' ? buildReadyMessage(o) : buildOrderMessage(o);
+const openViber = (phone, msg) => {
+  const n = normalizePhone(phone); if (!n) return;
+  if (Platform.OS === 'web') {
+    navigator.clipboard.writeText(msg).catch(()=>{});
+    window.open(`viber://chat?number=%2B${n}`,'_blank');
+    Alert.alert('Viber', 'Το μήνυμα αντιγράφηκε. Πατήστε Ctrl+V στο Viber για επικόλληση.');
+  }
+};
+const openWhatsApp = (phone, msg) => {
+  const n = normalizePhone(phone); if (!n) return;
+  if (Platform.OS === 'web') window.open(`https://wa.me/${n}?text=${encodeURIComponent(msg)}`,'_blank');
+};
+const openEmail = (email, msg, orderNo) => {
+  if (!email) return;
+  if (Platform.OS === 'web') window.open(`mailto:${email}?subject=${encodeURIComponent('Παραγγελία Νο '+(orderNo||''))}&body=${encodeURIComponent(msg)}`,'_blank');
+};
+
+// Φάση 1: μόνο ελληνικά κινητά (ξεκινούν με 69 μετά την αφαίρεση 30/0030/0)
+const isGreekMobile = (p) => {
+  const d = String(p||'').replace(/\D/g,'');
+  if (!d) return false;
+  const stripped = d.replace(/^(0030|30)/, '').replace(/^0+/, '');
+  return /^69\d{8}$/.test(stripped);
+};
+const sendSmsViaYuboto = async (phone, message) => {
+  try {
+    const resp = await fetch('/.netlify/functions/send-sms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: normalizePhone(phone), message }),
+    });
+    return await resp.json();
+  } catch (e) {
+    return { success: false, error: 'Σφάλμα σύνδεσης: ' + (e?.message || e) };
+  }
+};
+
 // ── BlinkingReadyBadge — κίτρινο που αναβοσβήνει & μεταφέρει στα ΕΤΟΙΜΑ ──
 function BlinkingReadyBadge({ onPress }) {
   const opacity = useRef(new Animated.Value(1)).current;
@@ -356,8 +433,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [dupModal, setDupModal] = useState({ visible:false, base:'', suggested:'', onUse:null, onKeep:null, onCancel:null });
   const [confirmModal, setConfirmModal] = useState({ visible:false, title:'', message:'', confirmText:'', onConfirm:null });
   const [archiveDeleteModal, setArchiveDeleteModal] = useState({ visible:false, orderId:null, pwd:'', error:false });
+  const [smsToast, setSmsToast] = useState({ visible:false, text:'', kind:'ok' });
+  const showSmsToast = (text, kind='ok') => {
+    setSmsToast({ visible:true, text, kind });
+    setTimeout(()=>setSmsToast(t => t.text===text ? { visible:false, text:'', kind:'ok' } : t), 4500);
+  };
   const [archiveReturnModal, setArchiveReturnModal] = useState({ visible:false, orderId:null });
   const [editModal, setEditModal] = useState({ visible:false, order:null });
+  const [notifyModal, setNotifyModal] = useState({ visible:false, order:null });
   const [editForm, setEditForm] = useState({});
   const editGlassRef = useRef();
   const editGlassNotesRef = useRef();
@@ -475,6 +558,35 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const syncToCloud = async (o) => { try { await fetch(`${FIREBASE_URL}/special_orders/${o.id}.json`,{method:'PUT',body:JSON.stringify(o)}); } catch { Alert.alert("Σφάλμα","Δεν αποθηκεύτηκε."); } };
   const deleteFromCloud = async (id) => { try { await fetch(`${FIREBASE_URL}/special_orders/${id}.json`,{method:'DELETE'}); } catch(e){} };
 
+  // Πελάτης από όνομα παραγγελίας (για phone/email)
+  const findCustomerOf = (o) => (customers||[]).find(c => c.name && o.customer && c.name.trim().toLowerCase() === String(o.customer).trim().toLowerCase());
+  const markNotified = async (orderId, channel) => {
+    const order = specialOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const upd = { ...order, notified: { ...(order.notified||{}), [channel]: Date.now() } };
+    setSpecialOrders(prev => prev.map(o => o.id === orderId ? upd : o));
+    await syncToCloud(upd);
+  };
+  const pickViberPhone = (c) => c?.phoneViber || c?.phone || '';
+  const pickWhatsappPhone = (c) => c?.phoneWhatsapp || c?.phone || '';
+  const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phoneViber, c?.phoneWhatsapp].find(isGreekMobile) || '';
+  const notifyViber = (o) => { const c = findCustomerOf(o); const p = pickViberPhone(c); if (!p) return; openViber(p, messageFor(o)); markNotified(o.id, 'viber'); };
+  const notifyWhatsApp = (o) => { const c = findCustomerOf(o); const p = pickWhatsappPhone(c); if (!p) return; openWhatsApp(p, messageFor(o)); markNotified(o.id, 'whatsapp'); };
+  const notifyEmail = (o) => { const c = findCustomerOf(o); if (!c?.email) return; openEmail(c.email, messageFor(o), o.orderNo); markNotified(o.id, 'email'); };
+  const notifySms = async (o) => {
+    const c = findCustomerOf(o);
+    const p = pickSmsPhone(c);
+    if (!p) return showSmsToast('Δεν υπάρχει ελληνικό κινητό στον πελάτη.', 'err');
+    showSmsToast('Αποστολή SMS...', 'info');
+    const res = await sendSmsViaYuboto(p, messageFor(o));
+    if (res?.success) {
+      showSmsToast(res.test ? '✓ Test mode: σύνδεση ΟΚ (δεν στάλθηκε αληθινό SMS).' : '✓ SMS στάλθηκε στον πελάτη.', 'ok');
+      markNotified(o.id, 'sms');
+    } else {
+      showSmsToast('✕ Αποτυχία SMS: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
+    }
+  };
+
   const resetForm = () => { setCustomForm(INIT_FORM); setCustomerSearch(''); setSelectedCustomer(null); setShowCustomerList(false); setEditingOrder(null); };
 
   // Ακύρωση φόρμας: αν είμαστε σε επεξεργασία, επαναφέρει την παραγγελία
@@ -560,7 +672,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     await logActivity('ΕΙΔΙΚΗ', 'Νέα παραγγελία', { orderNo: newOrder.orderNo, customer: newOrder.customer, size: `${newOrder.h}x${newOrder.w}`, qty: newOrder.qty });
     resetForm();
 
-    Alert.alert("VAICON", "Η παραγγελία αποθηκεύτηκε!");
+    setNotifyModal({ visible:true, order:newOrder });
   };
 
   const editOrder = async (order) => {
@@ -2049,6 +2161,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const btnC = isArchive?'#000':(order.status==='PENDING'?'#ffbb33':order.status==='PROD'?'#00C851':'#222');
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
     const isReadyForTransfer = isOrderReadyForTransfer(order);
+    const cust = !isArchive ? findCustomerOf(order) : null;
+    const viberOk = !!pickViberPhone(cust);
+    const waOk = !!pickWhatsappPhone(cust);
+    const emailOk = !!cust?.email;
+    const smsOk = !!pickSmsPhone(cust);
+    const anyChannel = viberOk || waOk || emailOk || smsOk;
+    const notif = order.notified || {};
+    const shortDate = (ts) => ts ? `${String(new Date(ts).getDate()).padStart(2,'0')}/${String(new Date(ts).getMonth()+1).padStart(2,'0')}` : '';
     return (
         <TouchableOpacity key={order.id} onLongPress={()=>!isArchive&&order.status==='PENDING'&&editOrder(order)} delayLongPress={1000} activeOpacity={0.7} style={[styles.orderCard,{borderLeftColor:bc, backgroundColor: isProd?'#e8f5e9':'white', ...(searchQuery && {borderTopWidth:2, borderTopColor:'#007AFF', borderBottomWidth:2, borderBottomColor:'#007AFF', borderRightWidth:2, borderRightColor:'#007AFF'})}]}>
         <View style={[styles.cardContent, {flexDirection:'row'}]}>
@@ -2069,16 +2189,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               {!isStd?<Text style={[styles.cardDetails,{fontSize:14}]}>{(order.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ')?'Δ/Θ':'Μ/Θ'}</Text>:null}
               {order.hardware?highlightText(order.hardware, searchQuery, [styles.cardDetails,{fontSize:14,color:'#555'}]):null}
             </View>
-            {!isStd&&highlightText(`Μεντ: ${order.hinges}${(order.glassDim||order.glassNotes)?` | Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`:''}`  , searchQuery, [styles.cardSubDetails,{fontSize:13}])}
-            {!isStd&&(
-              <Text style={[styles.cardSubDetails,{fontSize:13}]}>Κλειδ: <Text style={lockStyle(order.lock,13)}>{order.lock||'—'}</Text></Text>
-            )}
-            {isStd&&(
-              <Text style={[styles.cardSubDetails,{fontSize:13}]}>
-                {order.lock?(<Text>Κλειδ: <Text style={lockStyle(order.lock,13)}>{order.lock}</Text> | </Text>):null}
-                {'  '}{order.hardware}
-              </Text>
-            )}
+            {!isStd&&highlightText(`Μεντ: ${order.hinges}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {isStd&&order.hardware?<Text style={[styles.cardSubDetails,{fontSize:13}]}>{order.hardware}</Text>:null}
             {(isStd||!isStd)&&order.installation==='ΝΑΙ'&&<View style={{flexDirection:'row',marginTop:2}}><View style={{backgroundColor:'#1565C0',borderRadius:5,paddingHorizontal:8,paddingVertical:2,alignSelf:'flex-start'}}><Text style={{color:'white',fontWeight:'bold',fontSize:16}}>🪛 ΜΟΝΤΑΡΙΣΜΑ</Text></View></View>}
           </View>
 
@@ -2087,8 +2199,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
           {/* ΣΤΗΛΗ 2 */}
           <View style={{flex:1}}>
+            <Text style={[styles.cardSubDetails,{fontSize:13}]}>Κλειδ: <Text style={lockStyle(order.lock,13)}>{order.lock||'—'}</Text></Text>
             {!isStd&&highlightText(`Κάσα: ${order.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | ${order.caseMaterial||'DKP'}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {!isStd&&order.stavera&&order.stavera.filter(s=>s.dim).length>0&&highlightText(`📐 Σταθ: ${order.stavera.filter(s=>s.dim).map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ')}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
+            {!isStd&&(order.glassDim||order.glassNotes)&&highlightText(`🪟 Τζ: ${order.glassDim||''}${order.glassNotes?' '+order.glassNotes:''}`, searchQuery, [styles.cardSubDetails,{fontSize:13}])}
             {isStd&&order.heightReduction?<Text style={[styles.cardSubDetails,{fontSize:13,color:'#b71c1c',fontWeight:'bold'}]}>📏 ΜΕΙΩΣΗ ΥΨΟΥΣ: {order.heightReduction} cm</Text>:null}
             {order.coatings&&order.coatings.length>0&&(
               <Text style={[styles.cardSubDetails,{fontSize:13,color:'#007AFF'}]}>
@@ -2154,6 +2268,22 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {isReadyForTransfer && <View style={{marginTop:8}}><BlinkingReadyBadge onPress={()=>transferOrderToReady(order.id)} /></View>}
           </View>
         </View>
+        {!isArchive && anyChannel && (
+          <View style={{justifyContent:'center', paddingHorizontal:6, paddingVertical:6, borderRightWidth:1, borderRightColor:'#e0e0e0', gap:4, minWidth:95}}>
+            <TouchableOpacity disabled={!viberOk} onPress={()=>notifyViber(order)} style={{backgroundColor: viberOk?'#7360f2':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.viber?'✓ ':'📞 '}Viber</Text>
+              {notif.viber && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.viber)}</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity disabled={!emailOk} onPress={()=>notifyEmail(order)} style={{backgroundColor: emailOk?'#0288d1':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.email?'✓ ':'✉️ '}Email</Text>
+              {notif.email && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.email)}</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity disabled={!smsOk} onPress={()=>notifySms(order)} style={{backgroundColor: smsOk?'#1565C0':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.sms?'✓ ':'📱 '}SMS</Text>
+              {notif.sms && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.sms)}</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
         {(isArchive||order.status==='READY')&&(
           <TextInput
             style={{flex:1, marginHorizontal:6, marginVertical:8, backgroundColor:'#fffde7', borderRadius:8, borderWidth:1, borderColor:'#ffe082', padding:8, fontSize:12, color:'#5d4037', minHeight:60, textAlignVertical:'top'}}
@@ -2940,6 +3070,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
   return (
     <View style={{flex:1}}>
+      {smsToast.visible && (
+        <View pointerEvents="none" style={{position:'absolute', top:14, alignSelf:'center', left:0, right:0, alignItems:'center', zIndex:9999}}>
+          <View style={{backgroundColor: smsToast.kind==='ok'?'#2e7d32':smsToast.kind==='err'?'#c62828':'#1565C0', paddingHorizontal:18, paddingVertical:11, borderRadius:10, shadowColor:'#000', shadowOpacity:0.25, shadowRadius:6, shadowOffset:{width:0,height:3}, elevation:6, maxWidth:'80%'}}>
+            <Text style={{color:'white', fontSize:14, fontWeight:'bold', textAlign:'center'}}>{smsToast.text}</Text>
+          </View>
+        </View>
+      )}
       {renderPrintPreview()}
       <Modal visible={showHardwarePicker} transparent animationType="slide" onRequestClose={()=>setShowHardwarePicker(false)}>
         <View style={{flex:1,backgroundColor:'rgba(0,0,0,0.5)',justifyContent:'flex-end'}}>
@@ -3179,7 +3316,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           ? []
           : (customers || []).filter(c =>
               (c.name && c.name.toLowerCase().includes(q)) ||
-              (c.phone && String(c.phone).toLowerCase().includes(q))
+              [c.phone, c.phone2, c.phoneViber, c.phoneWhatsapp].some(p => p && String(p).toLowerCase().includes(q))
             ).slice(0, 40);
         const selectedCust = lookupCustomerId ? (customers || []).find(c => c.id === lookupCustomerId) : null;
         const allOrders = [...(specialOrders || []), ...(soldSpecialOrders || [])];
@@ -4115,6 +4252,59 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </View>
         </View>
       </Modal>
+
+      {/* MODAL ΕΙΔΟΠΟΙΗΣΗΣ ΠΕΛΑΤΗ — μετά από καταχώρηση νέας παραγγελίας */}
+      <Modal visible={notifyModal.visible} transparent animationType="fade" onRequestClose={()=>setNotifyModal({visible:false, order:null})}>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.6)', justifyContent:'center', alignItems:'center'}}>
+          <View style={{backgroundColor:'#fff', borderRadius:16, padding:24, width:'85%', maxWidth:420}}>
+            <Text style={{fontSize:17, fontWeight:'bold', color:'#1a1a1a', marginBottom:6, textAlign:'center'}}>✅ Η παραγγελία αποθηκεύτηκε</Text>
+            <Text style={{fontSize:14, color:'#444', marginBottom:16, textAlign:'center'}}>Θέλεις να ειδοποιήσεις τον πελάτη;</Text>
+            {(()=>{
+              const o = notifyModal.order; if (!o) return null;
+              const cust = findCustomerOf(o);
+              const vP = pickViberPhone(cust);
+              const wP = pickWhatsappPhone(cust);
+              const sP = pickSmsPhone(cust);
+              const hasViber = !!vP;
+              const hasWa = !!wP;
+              const hasEmail = !!cust?.email;
+              const hasSms = !!sP;
+              const contactLine = [cust?.phone, cust?.phone2, cust?.phoneViber && `V:${cust.phoneViber}`, cust?.phoneWhatsapp && `W:${cust.phoneWhatsapp}`].filter(Boolean).join('  ');
+              return (
+                <>
+                  <View style={{backgroundColor:'#f5f5f5', padding:10, borderRadius:8, marginBottom:14}}>
+                    <Text style={{fontSize:13, color:'#333'}}>👤 {o.customer||'—'}</Text>
+                    <Text style={{fontSize:12, color:'#666', marginTop:2}}>📞 {contactLine||'—'}{cust?.email?`   ✉️ ${cust.email}`:''}</Text>
+                  </View>
+                  <View style={{flexDirection:'row', gap:8, marginBottom:8}}>
+                    <TouchableOpacity disabled={!hasViber} onPress={()=>{ notifyViber(o); setNotifyModal({visible:false,order:null}); }}
+                      style={{flex:1, backgroundColor: hasViber?'#7360f2':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
+                      <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>📞 Viber</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity disabled={!hasEmail} onPress={()=>{ notifyEmail(o); setNotifyModal({visible:false,order:null}); }}
+                      style={{flex:1, backgroundColor: hasEmail?'#0288d1':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
+                      <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>✉️ Email</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity disabled={!hasSms} onPress={()=>{ notifySms(o); setNotifyModal({visible:false,order:null}); }}
+                      style={{flex:1, backgroundColor: hasSms?'#1565C0':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
+                      <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>📱 SMS</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {(!hasViber||!hasEmail||!hasSms) && (
+                    <Text style={{fontSize:11, color:'#888', textAlign:'center', marginBottom:8}}>
+                      {!hasViber?'⚠️ Λείπει τηλέφωνο Viber. ':''}{!hasEmail?'⚠️ Λείπει email. ':''}{!hasSms?'⚠️ Λείπει κινητό (SMS).':''}
+                    </Text>
+                  )}
+                  <TouchableOpacity onPress={()=>setNotifyModal({visible:false,order:null})}
+                    style={{backgroundColor:'#f5f5f5', padding:12, borderRadius:10, alignItems:'center', borderWidth:1, borderColor:'#ddd'}}>
+                    <Text style={{color:'#555', fontWeight:'bold', fontSize:13}}>Όχι τώρα</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
       <View style={{flex:1, flexDirection:'row'}}>
         {/* SIDEBAR 20% */}
         <View style={{width:'20%', backgroundColor:'#1a1a1a', padding:8, gap:8}}>
@@ -4281,13 +4471,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 />
                 {showCustomerList&&customerSearch.length>0&&(customers||[]).filter(c=>
                   c.name?.toLowerCase().includes(customerSearch.toLowerCase())||
-                  c.phone?.includes(customerSearch)||
+                  [c.phone, c.phone2, c.phoneViber, c.phoneWhatsapp].some(p=>p&&String(p).includes(customerSearch))||
                   c.identifier?.toLowerCase().includes(customerSearch.toLowerCase())
                 ).slice(0,5).length>0&&(
                   <View style={styles.customerDropdown}>
                     {(customers||[]).filter(c=>
                       c.name?.toLowerCase().includes(customerSearch.toLowerCase())||
-                      c.phone?.includes(customerSearch)||
+                      [c.phone, c.phone2, c.phoneViber, c.phoneWhatsapp].some(p=>p&&String(p).includes(customerSearch))||
                       c.identifier?.toLowerCase().includes(customerSearch.toLowerCase())
                     ).slice(0,5).map(c=>(
                       <TouchableOpacity key={c.id} style={styles.customerOption}

@@ -60,10 +60,10 @@ const fmtDate = (ts) => {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
 };
 
-const INIT = { name: '', phone: '', identifier: '' };
+const INIT = { name: '', phone: '', phone2: '', phoneViber: '', phoneWhatsapp: '', email: '', identifier: '' };
 
 export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[] }) {
-  const [form, setForm] = useState(prefillName ? { name: prefillName, phone: '', identifier: '' } : INIT);
+  const [form, setForm] = useState(prefillName ? { ...INIT, name: prefillName } : INIT);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
   const [sortMode, setSortMode] = useState('name'); // 'name' | 'orders'
@@ -139,7 +139,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
   };
 
   const editCustomer = (c) => {
-    setForm({ name: c.name || '', phone: c.phone || '', identifier: c.identifier || '' });
+    setForm({ name: c.name || '', phone: c.phone || '', phone2: c.phone2 || '', phoneViber: c.phoneViber || '', phoneWhatsapp: c.phoneWhatsapp || '', email: c.email || '', identifier: c.identifier || '' });
     setEditingId(c.id);
   };
 
@@ -205,7 +205,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
       const q = search.toLowerCase();
       const isNumeric = /^\d+$/.test(search);
       if (isNumeric) {
-        return (c.phone || '').startsWith(search);
+        return [c.phone, c.phone2, c.phoneViber, c.phoneWhatsapp].some(p => p && String(p).startsWith(search));
       } else {
         const nameWords = (c.name || '').toLowerCase().split(' ').map(w => w.replace(/[()]/g, ''));
         const identWords = (c.identifier || '').toLowerCase().split(' ').map(w => w.replace(/[()]/g, ''));
@@ -250,7 +250,13 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
             </View>
           )}
           <TextInput style={styles.input} placeholder="Όνομα Πελάτη *" value={form.name} onChangeText={v => setForm({...form, name:v})} />
-          <TextInput style={styles.input} placeholder="Τηλέφωνο Επικοινωνίας" keyboardType="phone-pad" value={form.phone} onChangeText={v => setForm({...form, phone:v})} />
+          <View style={{flexDirection:'row', gap:6, marginBottom:8}}>
+            <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Τηλ #1" keyboardType="phone-pad" value={form.phone} onChangeText={v => setForm({...form, phone:v})} />
+            <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Τηλ #2" keyboardType="phone-pad" value={form.phone2} onChangeText={v => setForm({...form, phone2:v})} />
+            <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Viber" keyboardType="phone-pad" value={form.phoneViber} onChangeText={v => setForm({...form, phoneViber:v})} />
+            <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="WhatsApp" keyboardType="phone-pad" value={form.phoneWhatsapp} onChangeText={v => setForm({...form, phoneWhatsapp:v})} />
+          </View>
+          <TextInput style={styles.input} placeholder="Email (προαιρετικό)" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={v => setForm({...form, email:v})} />
           <TextInput style={styles.input} placeholder="Αναγνωριστικό (π.χ. Γιώργης Μαραθώνας)" value={form.identifier} onChangeText={v => setForm({...form, identifier:v})} />
 
           <View style={{ flexDirection:'row', gap:8, alignItems:'center' }}>
@@ -319,7 +325,16 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
                     );
                   })()}
                 </View>
-                {c.phone ? <Text style={styles.customerDetail}>📞 {c.phone}</Text> : null}
+                {(()=>{
+                  const items = [
+                    c.phone && `📞 ${c.phone}`,
+                    c.phone2 && `📞 ${c.phone2}`,
+                    c.phoneViber && `📱V ${c.phoneViber}`,
+                    c.phoneWhatsapp && `📱W ${c.phoneWhatsapp}`,
+                  ].filter(Boolean);
+                  return items.length ? <Text style={styles.customerDetail}>{items.join('   ')}</Text> : null;
+                })()}
+                {c.email ? <Text style={styles.customerDetail}>✉️ {c.email}</Text> : null}
                 {c.identifier ? <Text style={styles.customerDetail}>🏷 {c.identifier}</Text> : null}
                 <Text style={styles.customerDate}>📅 {fmtDate(c.createdAt)}</Text>
               </View>

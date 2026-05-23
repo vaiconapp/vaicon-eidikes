@@ -1,0 +1,7 @@
+[build]
+publish = "dist"
+command = "expo export --platform web"
+functions = "netlify/functions"
+
+[functions]
+node_bundler = "esbuild"
