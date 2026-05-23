@@ -1,9 +1,0 @@
-feat(sms): Yuboto SMS integration via Netlify Function
-
-- Add Netlify Function send-sms.js as Yuboto API proxy
-- Add isGreekMobile detection (69... prefix)
-- Add pickSmsPhone fallback chain across customer phone fields
-- Add SMS button in order cards and NotifyModal
-- Add toast notification system (replaces Alert.alert which Chrome suppresses)
-- Add Viber/WhatsApp phone fields in CustomersScreen
-- Remove WhatsApp buttons (keeping SMS + Viber + Email)
