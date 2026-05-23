@@ -185,7 +185,11 @@ const openWhatsApp = (phone, msg) => {
 };
 const openEmail = (email, msg, orderNo) => {
   if (!email) return;
-  if (Platform.OS === 'web') window.open(`mailto:${email}?subject=${encodeURIComponent('Παραγγελία Νο '+(orderNo||''))}&body=${encodeURIComponent(msg)}`,'_blank');
+  if (Platform.OS === 'web') {
+    const a = document.createElement('a');
+    a.href = `mailto:${email}?subject=${encodeURIComponent('Παραγγελία Νο '+(orderNo||''))}&body=${encodeURIComponent(msg)}`;
+    a.click();
+  }
 };
 
 // Φάση 1: μόνο ελληνικά κινητά (ξεκινούν με 69 μετά την αφαίρεση 30/0030/0)
@@ -207,6 +211,33 @@ const sendSmsViaYuboto = async (phone, message) => {
     return { success: false, error: 'Σφάλμα σύνδεσης: ' + (e?.message || e) };
   }
 };
+
+const stripAccents = (s) => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const PEEPHOLE_COATING_RE = /ΑΛΟΥΜΙΝ/;
+const PEEPHOLE_NOTES_RE = /ΚΥΠΡ/;
+const peepholeTriggers = (coatings=[], notes='') => {
+  const out = [];
+  (coatings||[]).forEach(c => {
+    if (c && PEEPHOLE_COATING_RE.test(stripAccents(c).toUpperCase())) out.push(c);
+  });
+  if (notes && PEEPHOLE_NOTES_RE.test(stripAccents(notes).toUpperCase())) {
+    out.push('Κυπρί (στις παρατηρήσεις)');
+  }
+  return out;
+};
+const needsPeepholeWarning = (coatings, notes) => peepholeTriggers(coatings, notes).length > 0;
+
+const PEEPHOLE_WARN_NOTE = 'ΠΡΟΣΟΧΗ ΟΧΙ ΤΡΥΠΗΜΑ ΓΙΑ ΜΑΤΙ';
+const withPeepholeNote = (notes) => {
+  const cur = String(notes||'').trim();
+  if (cur.includes(PEEPHOLE_WARN_NOTE)) return cur;
+  return cur ? `${cur}\n${PEEPHOLE_WARN_NOTE}` : PEEPHOLE_WARN_NOTE;
+};
+const formatNotesHtml = (notes) =>
+  String(notes||'').replace(/\n/g,'<br>').replace(
+    /ΠΡΟΣΟΧΗ ΟΧΙ ΤΡΥΠΗΜΑ ΓΙΑ ΜΑΤΙ/g,
+    '<span style="color:#c62828;font-weight:bold;font-size:1.3em">ΠΡΟΣΟΧΗ ΟΧΙ ΤΡΥΠΗΜΑ ΓΙΑ ΜΑΤΙ</span>'
+  );
 
 // ── BlinkingReadyBadge — κίτρινο που αναβοσβήνει & μεταφέρει στα ΕΤΟΙΜΑ ──
 function BlinkingReadyBadge({ onPress }) {
@@ -329,7 +360,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const mesa  = coats.filter(c => /ΜΕΣΑ|μεσα|ΕΣΩΤ/i.test(c));
     const other = coats.filter(c => !exo.includes(c) && !mesa.includes(c));
     const stav  = Array.isArray(o.stavera) ? o.stavera : [];
-    const notesHtml = (o.notes||'').replace(/\n/g, '<br>');
+    const notesHtml = formatNotesHtml(o.notes);
     const pNoStyle = isUrgentProgram(o.programNo)
       ? 'border:3px solid #cc3300; padding:1px 4px; border-radius:3px; color:#cc3300;'
       : 'color:#cc3300;';
@@ -429,11 +460,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [showHardwarePicker, setShowHardwarePicker] = useState(false);
   const [showLockPicker, setShowLockPicker] = useState(false);
   const [showCoatingsPicker, setShowCoatingsPicker] = useState(false);
+  const [pickerEditMode, setPickerEditMode] = useState(false);
   const [lockEditText, setLockEditText] = useState('');
   const [dupModal, setDupModal] = useState({ visible:false, base:'', suggested:'', onUse:null, onKeep:null, onCancel:null });
   const [confirmModal, setConfirmModal] = useState({ visible:false, title:'', message:'', confirmText:'', onConfirm:null });
   const [archiveDeleteModal, setArchiveDeleteModal] = useState({ visible:false, orderId:null, pwd:'', error:false });
   const [smsToast, setSmsToast] = useState({ visible:false, text:'', kind:'ok' });
+  const [peepholeWarn, setPeepholeWarn] = useState({ visible:false, coatings:[], onContinue:null, onAddNote:null });
   const showSmsToast = (text, kind='ok') => {
     setSmsToast({ visible:true, text, kind });
     setTimeout(()=>setSmsToast(t => t.text===text ? { visible:false, text:'', kind:'ok' } : t), 4500);
@@ -567,6 +600,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     setSpecialOrders(prev => prev.map(o => o.id === orderId ? upd : o));
     await syncToCloud(upd);
   };
+  const clearNotified = async (orderId, channel) => {
+    const order = specialOrders.find(o => o.id === orderId);
+    if (!order?.notified?.[channel]) return;
+    const newNotified = { ...order.notified };
+    delete newNotified[channel];
+    const upd = { ...order, notified: newNotified };
+    setSpecialOrders(prev => prev.map(o => o.id === orderId ? upd : o));
+    await syncToCloud(upd);
+    const labels = { viber:'Viber', email:'Email', sms:'SMS' };
+    showSmsToast(`Αφαιρέθηκε σημείωση ${labels[channel]||channel} από #${order.orderNo||'?'}`, 'info');
+  };
   const pickViberPhone = (c) => c?.phoneViber || c?.phone || '';
   const pickWhatsappPhone = (c) => c?.phoneWhatsapp || c?.phone || '';
   const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phoneViber, c?.phoneWhatsapp].find(isGreekMobile) || '';
@@ -633,7 +677,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   };
 
 
-  const saveOrder = async () => {
+  const saveOrder = async (overrides = {}) => {
     if (!customForm.orderNo) return Alert.alert("Προσοχή","Το Νούμερο Παραγγελίας είναι υποχρεωτικό.");
     if (!customForm.h||!customForm.w) return Alert.alert("Προσοχή","Βάλτε Ύψος και Πλάτος.");
     // Έλεγχος διπλότυπου αριθμού (failsafe κατά αποθήκευση)
@@ -666,7 +710,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         return;
       }
     }
-    const newOrder = {...customForm, orderType:'ΕΙΔΙΚΗ', id:Date.now().toString(), createdAt:Date.now(), status:'PENDING'};
+    const newOrder = {...customForm, ...overrides, orderType:'ΕΙΔΙΚΗ', id:Date.now().toString(), createdAt:Date.now(), status:'PENDING'};
     setSpecialOrders([newOrder,...specialOrders]);
     await syncToCloud(newOrder);
     await logActivity('ΕΙΔΙΚΗ', 'Νέα παραγγελία', { orderNo: newOrder.orderNo, customer: newOrder.customer, size: `${newOrder.h}x${newOrder.w}`, qty: newOrder.qty });
@@ -855,7 +899,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-size:15px;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;width:160px;max-width:160px">${kleidaria}</td>
           <td style="font-size:15px;text-align:center">${caseTypeVal}</td>
           <td style="font-size:15px">${o.caseMaterial||'DKP'}</td>
-          <td style="min-width:160px;font-size:13px;white-space:pre-wrap">${(o.notes||'').replace(/\n/g,'<br>')}</td>
+          <td style="min-width:160px;font-size:13px;white-space:pre-wrap">${formatNotesHtml(o.notes)}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
@@ -886,7 +930,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="${mentStyle}">${mentesedesVal}</td>
           <td style="font-size:15px;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;max-width:180px">${tzami}</td>
           <td style="font-size:15px;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;max-width:180px">${kleidaria}</td>
-          <td style="min-width:160px;font-size:13px;white-space:pre-wrap">${(o.notes||'').replace(/\n/g,'<br>')}</td>
+          <td style="min-width:160px;font-size:13px;white-space:pre-wrap">${formatNotesHtml(o.notes)}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
@@ -915,7 +959,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const staveraStr = staveraEntries.map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ');
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"";
         const notesLines = [];
-        if (o.notes) notesLines.push(`<span style="color:#000">${o.notes}</span>`);
+        if (o.notes) notesLines.push(`<span style="color:#000">${formatNotesHtml(o.notes)}</span>`);
         if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${coatingsHtml(exo)}</span>`);
         if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${coatingsHtml(mesa)}</span>`);
         if (staveraStr) notesLines.push(`<span style="color:#6a0dad;font-weight:bold">📐 ${staveraStr}</span>`);
@@ -965,7 +1009,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td style="font-size:13px">${mentesedesVal}</td>
           <td style="font-size:13px;text-align:center">${caseTypeVal}</td>
           <td style="font-size:13px">${o.caseMaterial||'DKP'}</td>
-          <td style="min-width:160px;font-size:13px;white-space:pre-wrap">${(o.notes||'').replace(/\n/g,'<br>')}</td>
+          <td style="min-width:160px;font-size:13px;white-space:pre-wrap">${formatNotesHtml(o.notes)}</td>
           <td style="font-size:12px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
@@ -1002,7 +1046,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentesedesVal}</td>
             <td class="col-lock" style="font-size:10px">${kleidaria}</td>
-            <td class="notes" style="font-size:10px">${o.notes||''}</td>
+            <td class="notes" style="font-size:10px">${formatNotesHtml(o.notes)}</td>
           </tr>`;
         }).join('');
         const total = totalQty(orders);
@@ -1037,7 +1081,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td class="col-lock" style="font-size:10px">${lockHtml(o.lock)}</td>
             <td class="col-type" style="font-size:10px;text-align:center">${caseTypeVal}</td>
             <td class="col-mat" style="font-size:10px;font-weight:bold">${mat}</td>
-            <td class="notes" style="font-size:10px">${o.notes||''}</td>
+            <td class="notes" style="font-size:10px">${formatNotesHtml(o.notes)}</td>
           </tr>`;
         }).join('');
         const total = totalQty(orders);
@@ -1070,7 +1114,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td class="col-ment" style="${mentStyle}">${mentVal}</td>
             <td class="col-glass" style="font-size:10px">${((o.glassDim||'')+(o.glassNotes?' '+o.glassNotes:''))||'—'}</td>
             <td class="col-lock" style="font-size:10px">${lockHtml(o.lock)}</td>
-            <td class="notes" style="font-size:10px">${o.notes||''}</td>
+            <td class="notes" style="font-size:10px">${formatNotesHtml(o.notes)}</td>
           </tr>`;
         }).join('');
         const total = totalQty(orders);
@@ -1101,7 +1145,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const staveraStr = staveraEntries.map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ');
         // Παρατηρήσεις — σύνθεση
         const notesLines = [];
-        if (o.notes) notesLines.push(`<span style="color:#000;font-size:12px">${o.notes.replace(/\n/g,'<br>')}</span>`);
+        if (o.notes) notesLines.push(`<span style="color:#000;font-size:12px">${formatNotesHtml(o.notes)}</span>`);
         if (o.hardware) notesLines.push(`<span style="color:#333;font-weight:bold">🔩 ${o.hardware}</span>`);
         if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${coatingsHtml(exo)}</span>`);
         if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${coatingsHtml(mesa)}</span>`);
@@ -1161,7 +1205,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <td>${o.caseMaterial||'DKP'}</td>
           <td>${o.installation==='ΝΑΙ'?'✓':''}</td>
           ${showCoatings?`<td>${coatingsHtml(o.coatings)}</td>`:''}
-          <td style="min-width:140px">${o.notes||''}</td>
+          <td style="min-width:140px">${formatNotesHtml(o.notes)}</td>
           <td style="font-size:10px;color:#444">${datesLine}</td>
         </tr>`;
       }).join('');
@@ -2131,6 +2175,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     );
   };
 
+  const renderNotesWithWarning = (notes, baseStyle, prefix='', searchQuery='') => {
+    if (!notes) return null;
+    const idx = String(notes).indexOf(PEEPHOLE_WARN_NOTE);
+    if (idx === -1) return highlightText(`${prefix}${notes}`, searchQuery, baseStyle);
+    return (
+      <Text style={baseStyle}>
+        {prefix}{notes.slice(0, idx)}
+        <Text style={{color:'#c62828', fontWeight:'bold', fontSize:17}}>{PEEPHOLE_WARN_NOTE}</Text>
+        {notes.slice(idx + PEEPHOLE_WARN_NOTE.length)}
+      </Text>
+    );
+  };
+
   // Helper: φιλτράρισμα παραγγελιών με contains, case-insensitive, σε όλα τα πεδία
   const matchesSearch = (order, query) => {
     if (!query || !query.trim()) return true;
@@ -2210,7 +2267,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 {order.coatings.map((n,i)=>(<Text key={i} style={[{fontSize:13,color:'#007AFF'}, coatingStyle(n,13)]}>{i>0?', ':''}{n}</Text>))}
               </Text>
             )}
-            {order.notes?highlightText(`Σημ: ${order.notes}`, searchQuery, [styles.cardSubDetails,{fontSize:13}]):null}
+            {renderNotesWithWarning(order.notes, [styles.cardSubDetails,{fontSize:13}], 'Σημ: ', searchQuery)}
             <View style={styles.datesRow}>
               {fmtDate(order.createdAt)&&<Text style={[styles.dateChip,{fontSize:12}]}>📅 {fmtDate(order.createdAt)}</Text>}
               {order.deliveryDate?<Text style={[styles.dateChip,{fontSize:12,backgroundColor:'#fff3e0',color:'#e65100'}]}>🚚 {order.deliveryDate}</Text>:null}
@@ -2270,15 +2327,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </View>
         {!isArchive && anyChannel && (
           <View style={{justifyContent:'center', paddingHorizontal:6, paddingVertical:6, borderRightWidth:1, borderRightColor:'#e0e0e0', gap:4, minWidth:95}}>
-            <TouchableOpacity disabled={!viberOk} onPress={()=>notifyViber(order)} style={{backgroundColor: viberOk?'#7360f2':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+            <TouchableOpacity disabled={!viberOk} onPress={()=>notifyViber(order)} onLongPress={()=>clearNotified(order.id,'viber')} delayLongPress={2000} style={{backgroundColor: viberOk?'#7360f2':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
               <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.viber?'✓ ':'📞 '}Viber</Text>
               {notif.viber && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.viber)}</Text>}
             </TouchableOpacity>
-            <TouchableOpacity disabled={!emailOk} onPress={()=>notifyEmail(order)} style={{backgroundColor: emailOk?'#0288d1':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+            <TouchableOpacity disabled={!emailOk} onPress={()=>notifyEmail(order)} onLongPress={()=>clearNotified(order.id,'email')} delayLongPress={2000} style={{backgroundColor: emailOk?'#0288d1':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
               <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.email?'✓ ':'✉️ '}Email</Text>
               {notif.email && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.email)}</Text>}
             </TouchableOpacity>
-            <TouchableOpacity disabled={!smsOk} onPress={()=>notifySms(order)} style={{backgroundColor: smsOk?'#1565C0':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+            <TouchableOpacity disabled={!smsOk} onPress={()=>notifySms(order)} onLongPress={()=>clearNotified(order.id,'sms')} delayLongPress={2000} style={{backgroundColor: smsOk?'#1565C0':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
               <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.sms?'✓ ':'📱 '}SMS</Text>
               {notif.sms && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.sms)}</Text>}
             </TouchableOpacity>
@@ -2409,7 +2466,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 {order.coatings.map((n,i)=>(<Text key={i} style={[{fontSize:13,color:'#007AFF'}, coatingStyle(n,13)]}>{i>0?', ':''}{n}</Text>))}
               </Text>
             )}
-            {order.notes?highlightText(`📝 ${order.notes}`, searchQuery, [styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold',fontSize:13}]):null}
+            {renderNotesWithWarning(order.notes, [styles.cardSubDetails,{color:'#b71c1c',fontWeight:'bold',fontSize:13}], '📝 ', searchQuery)}
             {phase.done&&<Text style={[styles.doneTxt,{fontSize:15, color:'#00C851', fontWeight:'900'}]}>✅ Ολοκληρώθηκε</Text>}
             {order.prodAt&&<Text style={{fontSize:12,color:'#666',marginTop:4}}>📥 Είσοδος: {fmtDateTime(order.prodAt)}</Text>}
             {order.deliveryDate?<Text style={{fontSize:12,color:'#e65100',fontWeight:'bold'}}>🚚 Παράδοση: {order.deliveryDate}</Text>:null}
@@ -2536,7 +2593,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         <td style="text-align:center;font-weight:bold">${montStatus}</td>
         ${isMounting?`<td>${coatingsHtml(o.coatings)}</td>`:''}
         <td>${o.deliveryDate||'—'}</td>
-        <td style="min-width:140px">${o.notes||''}</td>
+        <td style="min-width:140px">${formatNotesHtml(o.notes)}</td>
       </tr>`;
     }).join('');
 
@@ -3077,6 +3134,42 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </View>
         </View>
       )}
+      <Modal visible={peepholeWarn.visible} transparent animationType="fade" onRequestClose={()=>{}}>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.7)', justifyContent:'center', alignItems:'center', padding:20}}>
+          <View style={{backgroundColor:'#fff', borderRadius:22, borderWidth:5, borderColor:'#c62828', padding:34, maxWidth:680, width:'100%', shadowColor:'#000', shadowOpacity:0.3, shadowRadius:14, elevation:10}}>
+            <Text style={{fontSize:84, textAlign:'center'}}>⚠️</Text>
+            <Text style={{fontSize:32, fontWeight:'bold', color:'#c62828', textAlign:'center', marginTop:8, marginBottom:18, lineHeight:40}}>
+              ΠΡΟΣΟΧΗ... ΕΡΩΤΗΣΗ ΠΕΛΑΤΗ.{'\n'}ΤΡΥΠΗΜΑ ΕΠΕΝΔΥΣΗΣ ΓΙΑ ΜΑΤΙ
+            </Text>
+            <View style={{backgroundColor:'#fff3e0', borderRadius:12, padding:16, marginBottom:24}}>
+              <Text style={{fontSize:18, color:'#444', textAlign:'center', marginBottom:8}}>Επένδυση στην παραγγελία:</Text>
+              <Text style={{fontSize:21, fontWeight:'bold', color:'#bf360c', textAlign:'center'}}>
+                {peepholeWarn.coatings.join(' • ')}
+              </Text>
+            </View>
+            <View style={{flexDirection:'row', gap:12}}>
+              <TouchableOpacity
+                style={{flex:1, backgroundColor:'#2e7d32', paddingVertical:21, borderRadius:14, alignItems:'center'}}
+                onPress={()=>{
+                  const cb = peepholeWarn.onContinue;
+                  setPeepholeWarn({ visible:false, coatings:[], onContinue:null, onAddNote:null });
+                  cb && cb();
+                }}>
+                <Text style={{color:'white', fontSize:18, fontWeight:'bold', textAlign:'center'}}>ΧΩΡΙΣ ΑΛΛΑΓΗ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{flex:1, backgroundColor:'#c62828', paddingVertical:21, borderRadius:14, alignItems:'center'}}
+                onPress={()=>{
+                  const cb = peepholeWarn.onAddNote;
+                  setPeepholeWarn({ visible:false, coatings:[], onContinue:null, onAddNote:null });
+                  cb && cb();
+                }}>
+                <Text style={{color:'white', fontSize:18, fontWeight:'bold', textAlign:'center'}}>ΔΙΟΡΘΩΣΕ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       {renderPrintPreview()}
       <Modal visible={showHardwarePicker} transparent animationType="slide" onRequestClose={()=>setShowHardwarePicker(false)}>
         <View style={{flex:1,backgroundColor:'rgba(0,0,0,0.5)',justifyContent:'flex-end'}}>
@@ -3087,7 +3180,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <Text style={{color:'white',fontSize:20,fontWeight:'bold'}}>✕</Text>
               </TouchableOpacity>
             </View>
-            {['Nikel','Bronze','Nikel Best','Bronze Best','Best Παραγγελία',''].map((c,i)=>(
+            {['Nikel','Bronze','Nikel Best','Bronze Best','Best Παραγγελία',''].map((c,i)=>{
+              const curHardware = pickerEditMode ? editForm.hardware : customForm.hardware;
+              const setHardware = (v) => pickerEditMode
+                ? setEditForm(f=>({...f,hardware:v}))
+                : setCustomForm({...customForm,hardware:v});
+              return (
               <TouchableOpacity key={i}
                 style={{padding:16,borderBottomWidth:1,borderBottomColor:'#eee',flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}
                 onPress={()=>{
@@ -3095,15 +3193,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     setShowCustomHardwareInput(true);
                     setCustomHardwareText('');
                   } else {
-                    setCustomForm({...customForm,hardware:c});
+                    setHardware(c);
                     setShowCustomHardwareInput(false);
                     setShowHardwarePicker(false);
                   }
                 }}>
                 <Text style={{fontSize:15,color:c?'#000':'#888'}}>{c||'Άλλο (γράψτε εδώ)...'}</Text>
-                {customForm.hardware===c&&c!==''&&<Text style={{color:'#00C851',fontSize:18}}>✓</Text>}
+                {curHardware===c&&c!==''&&<Text style={{color:'#00C851',fontSize:18}}>✓</Text>}
               </TouchableOpacity>
-            ))}
+              );
+            })}
             {showCustomHardwareInput&&(
               <View style={{padding:12}}>
                 <TextInput
@@ -3118,7 +3217,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   style={{backgroundColor:'#8B0000',padding:12,borderRadius:8,alignItems:'center',marginTop:8}}
                   onPress={()=>{
                     if(customHardwareText.trim()){
-                      setCustomForm({...customForm,hardware:customHardwareText.trim()});
+                      if (pickerEditMode) setEditForm(f=>({...f,hardware:customHardwareText.trim()}));
+                      else setCustomForm({...customForm,hardware:customHardwareText.trim()});
                     }
                     setShowCustomHardwareInput(false);
                     setShowHardwarePicker(false);
@@ -3893,16 +3993,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 if (gA !== gB) return gA - gB;
                 return (a.name||'').localeCompare(b.name||'', 'el');
               }).map(c=>{
-                const selected = (customForm.coatings||[]).includes(c.name);
+                const curCoatings = pickerEditMode ? (editForm.coatings||[]) : (customForm.coatings||[]);
+                const selected = curCoatings.includes(c.name);
                 const n = c.name?.toLowerCase()||'';
                 const bg = n.includes('μέσα')||n.includes('μεσα') ? '#E8F4FD' : n.includes('έξω')||n.includes('εξω') ? '#FFF3E0' : '#fff';
                 return (
                   <TouchableOpacity key={c.id}
                     style={{padding:16,borderBottomWidth:1,borderBottomColor:'#eee',flexDirection:'row',alignItems:'center',justifyContent:'space-between', backgroundColor: bg}}
                     onPress={()=>{
-                      const current = customForm.coatings||[];
-                      const updated = selected ? current.filter(x=>x!==c.name) : [...current,c.name];
-                      setCustomForm({...customForm,coatings:updated});
+                      const updated = selected ? curCoatings.filter(x=>x!==c.name) : [...curCoatings,c.name];
+                      if (pickerEditMode) setEditForm(f=>({...f,coatings:updated}));
+                      else setCustomForm({...customForm,coatings:updated});
                       if (!selected && updated.length >= 2) {
                         setTimeout(()=>setShowCoatingsPicker(false), 150);
                       }
@@ -3913,10 +4014,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 );
               })}
               {/* Κουμπί εκκαθάρισης */}
-              {(customForm.coatings||[]).length>0&&(
+              {((pickerEditMode?editForm.coatings:customForm.coatings)||[]).length>0&&(
                 <TouchableOpacity
                   style={{margin:12,padding:12,backgroundColor:'#ff4444',borderRadius:8,alignItems:'center'}}
-                  onPress={()=>setCustomForm({...customForm,coatings:[]})}>
+                  onPress={()=>{
+                    if (pickerEditMode) setEditForm(f=>({...f,coatings:[]}));
+                    else setCustomForm({...customForm,coatings:[]});
+                  }}>
                   <Text style={{color:'white',fontWeight:'bold'}}>ΕΚΚΑΘΑΡΙΣΗ ΕΠΙΛΟΓΩΝ</Text>
                 </TouchableOpacity>
               )}
@@ -4048,7 +4152,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       </Modal>
 
       {/* MODAL ΕΠΕΞΕΡΓΑΣΙΑΣ ΠΑΡΑΓΓΕΛΙΑΣ */}
-      <Modal visible={editModal.visible} transparent animationType="slide" onRequestClose={()=>setEditModal({visible:false,order:null})}>
+      <Modal visible={editModal.visible && !showHardwarePicker && !showCoatingsPicker && !peepholeWarn.visible} transparent animationType="slide" onRequestClose={()=>setEditModal({visible:false,order:null})}>
         <View style={{flex:1,backgroundColor:'rgba(0,0,0,0.5)',justifyContent:'flex-end'}}>
           <View style={{backgroundColor:'#fff',borderTopLeftRadius:16,borderTopRightRadius:16,maxHeight:'85%'}}>
             <View style={{backgroundColor:'#007AFF',padding:16,borderTopLeftRadius:16,borderTopRightRadius:16,flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
@@ -4107,20 +4211,22 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               </View>
               {/* Χρώμα Εξαρτημάτων */}
               <Text style={{fontWeight:'bold',color:'#555',marginBottom:4,fontSize:12}}>🎨 ΧΡΩΜΑ ΕΞΑΡΤΗΜΑΤΩΝ</Text>
-              <TextInput
-                style={{backgroundColor:'#f5f5f5',borderWidth:1,borderColor:'#ddd',borderRadius:8,padding:10,fontSize:14,marginBottom:12}}
-                placeholder="π.χ. Nikel, Bronze..."
-                value={editForm.hardware||''}
-                onChangeText={v=>setEditForm(f=>({...f,hardware:v}))}
-              />
+              <TouchableOpacity
+                style={{backgroundColor:'#f5f5f5',borderWidth:1,borderColor:'#ddd',borderRadius:8,padding:12,marginBottom:12,flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}
+                onPress={()=>{ setPickerEditMode(true); setShowHardwarePicker(true); }}>
+                <Text style={{fontSize:14,color:editForm.hardware?'#1a1a1a':'#aaa',flex:1}} numberOfLines={1}>{editForm.hardware||'Επιλέξτε...'}</Text>
+                <Text style={{color:'#aaa',fontSize:11}}>▼</Text>
+              </TouchableOpacity>
               {/* Επένδυση */}
               <Text style={{fontWeight:'bold',color:'#555',marginBottom:4,fontSize:12}}>🎨 ΕΠΕΝΔΥΣΗ</Text>
-              <TextInput
-                style={{backgroundColor:'#f5f5f5',borderWidth:1,borderColor:'#ddd',borderRadius:8,padding:10,fontSize:14,marginBottom:12}}
-                placeholder="π.χ. ΑΛΟΥΜΙΝΙΟ ΕΞΩ, LAMINATE ΜΕΣΑ..."
-                value={(editForm.coatings||[]).join(', ')}
-                onChangeText={v=>setEditForm(f=>({...f,coatings:v.split(',').map(x=>x.trim()).filter(Boolean)}))}
-              />
+              <TouchableOpacity
+                style={{backgroundColor:'#f5f5f5',borderWidth:1,borderColor:'#ddd',borderRadius:8,padding:12,marginBottom:12,flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}
+                onPress={()=>{ setPickerEditMode(true); setShowCoatingsPicker(true); }}>
+                <Text style={{fontSize:14,color:(editForm.coatings&&editForm.coatings.length>0)?'#1a1a1a':'#aaa',flex:1}} numberOfLines={2}>
+                  {(editForm.coatings&&editForm.coatings.length>0)?editForm.coatings.join(', '):'Επιλέξτε...'}
+                </Text>
+                <Text style={{color:'#aaa',fontSize:11}}>▼</Text>
+              </TouchableOpacity>
               {/* Σταθερά */}
               <Text style={{fontWeight:'bold',color:'#555',marginBottom:4,fontSize:12}}>📐 ΣΤΑΘΕΡΑ</Text>
               {[0,1,2,3].map(i=>{
@@ -4219,9 +4325,22 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   stavera: editForm.stavera||[],
                   notes: editForm.notes||'',
                 };
-                setSpecialOrders(prev=>prev.map(o=>o.id===order.id?upd:o));
-                await syncToCloud(upd);
-                setEditModal({visible:false,order:null});
+                const persist = async (finalUpd) => {
+                  setSpecialOrders(prev=>prev.map(o=>o.id===order.id?finalUpd:o));
+                  await syncToCloud(finalUpd);
+                  setEditModal({visible:false,order:null});
+                };
+                const trigs = peepholeTriggers(upd.coatings, upd.notes);
+                if (trigs.length > 0) {
+                  setPeepholeWarn({
+                    visible:true,
+                    coatings: trigs,
+                    onContinue: () => persist(upd),
+                    onAddNote: () => persist({ ...upd, notes: withPeepholeNote(upd.notes) }),
+                  });
+                } else {
+                  await persist(upd);
+                }
               }}>
                 <Text style={{fontWeight:'bold',color:'white',fontSize:15}}>💾 ΑΠΟΘΗΚΕΥΣΗ</Text>
               </TouchableOpacity>
@@ -4796,13 +4915,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 </View>
                 {/* Χρώμα Εξαρτημάτων */}
                 <Text style={vstyles.fieldLabelDark}>Χρώμα Εξαρτημάτων</Text>
-                <TouchableOpacity style={[vstyles.selectBtn,{marginTop:2,marginBottom:8}]} onPress={()=>{blurAll();setShowHardwarePicker(true);}}>
+                <TouchableOpacity style={[vstyles.selectBtn,{marginTop:2,marginBottom:8}]} onPress={()=>{blurAll();setPickerEditMode(false);setShowHardwarePicker(true);}}>
                   <Text style={{fontSize:13,color:customForm.hardware?'#1a1a1a':'#aaa',flex:1}} numberOfLines={1}>{customForm.hardware||'Επιλέξτε...'}</Text>
                   <Text style={{color:'#aaa',fontSize:11}}>▼</Text>
                 </TouchableOpacity>
                 {/* Επένδυση */}
                 <Text style={vstyles.fieldLabelDark}>Επένδυση</Text>
-                <TouchableOpacity style={[vstyles.selectBtn,{marginTop:2,marginBottom:8}]} onPress={()=>{blurAll();setShowCoatingsPicker(true);}}>
+                <TouchableOpacity style={[vstyles.selectBtn,{marginTop:2,marginBottom:8}]} onPress={()=>{blurAll();setPickerEditMode(false);setShowCoatingsPicker(true);}}>
                   <Text style={{fontSize:13,color:(customForm.coatings&&customForm.coatings.length>0)?'#1a1a1a':'#aaa',flex:1}} numberOfLines={1}>
                     {(customForm.coatings&&customForm.coatings.length>0)?customForm.coatings.join(', '):'Επιλέξτε...'}
                   </Text>
@@ -4840,12 +4959,31 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             ) : null}
             <TouchableOpacity style={[styles.saveBtn,{backgroundColor:'#007AFF', flex:2}]} onPress={()=>{
               Keyboard.dismiss();
+              const doSave = () => { saveOrder(); setTimeout(()=>customerRef.current?.focus(), 400); };
+              const proceed = () => {
+                const trigs = peepholeTriggers(customForm.coatings, customForm.notes);
+                if (trigs.length > 0) {
+                  setPeepholeWarn({
+                    visible:true,
+                    coatings: trigs,
+                    onContinue: () => { saveOrder(); setTimeout(()=>customerRef.current?.focus(), 400); },
+                    onAddNote: () => {
+                      const newNotes = withPeepholeNote(customForm.notes);
+                      setCustomForm(f => ({ ...f, notes: newNotes }));
+                      saveOrder({ notes: newNotes });
+                      setTimeout(()=>customerRef.current?.focus(), 400);
+                    },
+                  });
+                } else {
+                  doSave();
+                }
+              };
               if(Platform.OS==='web'){
-                if(window.confirm('Αποθήκευση παραγγελίας προς παραγωγή;')){ saveOrder(); setTimeout(()=>customerRef.current?.focus(), 400); }
+                if(window.confirm('Αποθήκευση παραγγελίας προς παραγωγή;')) proceed();
               } else {
                 Alert.alert("Επιβεβαίωση", "Αποθήκευση παραγγελίας προς παραγωγή;", [
                   {text:"ΟΧΙ", style:"cancel"},
-                  {text:"ΝΑΙ", onPress:()=>{ saveOrder(); setTimeout(()=>customerRef.current?.focus(), 400); }}
+                  {text:"ΝΑΙ", onPress: proceed}
                 ]);
               }
             }}>
