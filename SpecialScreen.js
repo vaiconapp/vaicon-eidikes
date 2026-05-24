@@ -131,7 +131,7 @@ const isOrderReadyForTransfer = (order) => {
 const hasGlass = (o) => !!(o && o.glassDim && String(o.glassDim).trim());
 const isGlassPending = (o) => hasGlass(o) && !o.glassDone;
 
-// Helpers ειδοποίησης πελάτη (Viber / WhatsApp / Email)
+// Helpers ειδοποίησης πελάτη (Viber / Email / SMS)
 const normalizePhone = (p) => {
   const d = String(p||'').replace(/\D/g,'');
   if (!d) return '';
@@ -160,28 +160,24 @@ const buildOrderMessage = (o) => {
   ].filter(v => v !== null).join('\n');
 };
 const buildReadyMessage = (o) => {
-  return [
-    `Γεια σας ${o.customer||''},`,
-    '',
-    `Η παραγγελία σας Νο ${o.orderNo||'-'} είναι έτοιμη.`,
-    'Μπορείτε να επικοινωνήσετε μαζί μας για την παραλαβή της ή τον χρόνο τοποθέτησης.',
-    'Ώρες παραλαβής: Εργάσιμες ημέρες 08:00–15:30.',
-    '',
-    'Ευχαριστούμε — VAICON',
-  ].join('\n');
+  return `VAICON: Η ΠΑΡΑΓΓΕΛΙΑ ΝΟ ${o.orderNo||'-'} ΕΙΝΑΙ ΕΤΟΙΜΗ. ΩΡΕΣ ΠΑΡΑΛΑΒΗΣ: ΕΡΓΑΣΙΜΕΣ 08:00-15:30.`;
+};
+const buildSmsOrderMessage = (o) => {
+  const d = new Date(o?.createdAt || Date.now());
+  const dt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  return `VAICON: ΚΑΤΑΧΩΡΗΘΗΚΕ Η ΠΑΡΑΓΓΕΛΙΑ ΝΟ ${o.orderNo||'-'} (${dt}). ΤΑ ΣΤΟΙΧΕΙΑ ΣΤΑΛΘΗΚΑΝ ΑΝΑΛΥΤΙΚΑ ΣΕ VIBER/EMAIL. ΜΕΤΑ ΤΗΝ ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ ΔΕΝ ΓΙΝΟΝΤΑΙ ΑΛΛΑΓΕΣ.`;
 };
 const messageFor = (o) => o?.status === 'READY' ? buildReadyMessage(o) : buildOrderMessage(o);
-const openViber = (phone, msg) => {
-  const n = normalizePhone(phone); if (!n) return;
+const smsMessageFor = (o) => o?.status === 'READY' ? buildReadyMessage(o) : buildSmsOrderMessage(o);
+const openViber = async (phone, msg) => {
+  const n = normalizePhone(phone); if (!n) return false;
   if (Platform.OS === 'web') {
-    navigator.clipboard.writeText(msg).catch(()=>{});
+    let copied = false;
+    try { await navigator.clipboard.writeText(msg); copied = true; } catch {}
     window.open(`viber://chat?number=%2B${n}`,'_blank');
-    Alert.alert('Viber', 'Το μήνυμα αντιγράφηκε. Πατήστε Ctrl+V στο Viber για επικόλληση.');
+    return copied;
   }
-};
-const openWhatsApp = (phone, msg) => {
-  const n = normalizePhone(phone); if (!n) return;
-  if (Platform.OS === 'web') window.open(`https://wa.me/${n}?text=${encodeURIComponent(msg)}`,'_blank');
+  return false;
 };
 const openEmail = (email, msg, orderNo) => {
   if (!email) return;
@@ -592,7 +588,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const deleteFromCloud = async (id) => { try { await fetch(`${FIREBASE_URL}/special_orders/${id}.json`,{method:'DELETE'}); } catch(e){} };
 
   // Πελάτης από όνομα παραγγελίας (για phone/email)
-  const findCustomerOf = (o) => (customers||[]).find(c => c.name && o.customer && c.name.trim().toLowerCase() === String(o.customer).trim().toLowerCase());
+  const findCustomerOf = (o) => {
+    if (!o) return null;
+    if (o.customerId) {
+      const byId = (customers||[]).find(c => c.id === o.customerId);
+      if (byId) return byId;
+    }
+    if (!o.customer) return null;
+    const target = stripAccents(String(o.customer).trim().toLowerCase());
+    return (customers||[]).find(c => c.name && stripAccents(c.name.trim().toLowerCase()) === target);
+  };
   const markNotified = async (orderId, channel) => {
     const order = specialOrders.find(o => o.id === orderId);
     if (!order) return;
@@ -611,24 +616,44 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const labels = { viber:'Viber', email:'Email', sms:'SMS' };
     showSmsToast(`Αφαιρέθηκε σημείωση ${labels[channel]||channel} από #${order.orderNo||'?'}`, 'info');
   };
-  const pickViberPhone = (c) => c?.phoneViber || c?.phone || '';
-  const pickWhatsappPhone = (c) => c?.phoneWhatsapp || c?.phone || '';
-  const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phoneViber, c?.phoneWhatsapp].find(isGreekMobile) || '';
-  const notifyViber = (o) => { const c = findCustomerOf(o); const p = pickViberPhone(c); if (!p) return; openViber(p, messageFor(o)); markNotified(o.id, 'viber'); };
-  const notifyWhatsApp = (o) => { const c = findCustomerOf(o); const p = pickWhatsappPhone(c); if (!p) return; openWhatsApp(p, messageFor(o)); markNotified(o.id, 'whatsapp'); };
+  const pickViberPhone = (c) => c?.phoneViber || '';
+  const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phone3].find(isGreekMobile) || '';
+  const notifyViber = async (o) => {
+    const c = findCustomerOf(o);
+    const p = pickViberPhone(c);
+    if (!p) return;
+    const copied = await openViber(p, messageFor(o));
+    markNotified(o.id, 'viber');
+    showSmsToast(copied ? '✓ Viber: μήνυμα αντιγράφηκε. Paste με Ctrl+V' : '⚠ Άνοιξε Viber — δεν αντιγράφηκε το μήνυμα', copied ? 'ok' : 'info');
+  };
   const notifyEmail = (o) => { const c = findCustomerOf(o); if (!c?.email) return; openEmail(c.email, messageFor(o), o.orderNo); markNotified(o.id, 'email'); };
   const notifySms = async (o) => {
     const c = findCustomerOf(o);
     const p = pickSmsPhone(c);
     if (!p) return showSmsToast('Δεν υπάρχει ελληνικό κινητό στον πελάτη.', 'err');
-    showSmsToast('Αποστολή SMS...', 'info');
-    const res = await sendSmsViaYuboto(p, messageFor(o));
-    if (res?.success) {
-      showSmsToast(res.test ? '✓ Test mode: σύνδεση ΟΚ (δεν στάλθηκε αληθινό SMS).' : '✓ SMS στάλθηκε στον πελάτη.', 'ok');
-      markNotified(o.id, 'sms');
-    } else {
-      showSmsToast('✕ Αποτυχία SMS: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
+    const viberP = pickViberPhone(c);
+    let viberCopied = false;
+    if (viberP && Platform.OS === 'web') {
+      try { await navigator.clipboard.writeText(messageFor(o)); viberCopied = true; } catch {}
     }
+    showSmsToast('Αποστολή SMS...', 'info');
+    const res = await sendSmsViaYuboto(p, smsMessageFor(o));
+    if (!res?.success) {
+      showSmsToast('✕ Αποτυχία SMS: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
+      return;
+    }
+    markNotified(o.id, 'sms');
+    if (!viberP) {
+      showSmsToast(res.test ? '✓ Test mode: SMS OK (χωρίς Viber).' : '✓ SMS στάλθηκε. Δεν υπάρχει τηλέφωνο Viber.', 'ok');
+      return;
+    }
+    if (Platform.OS === 'web') {
+      const n = normalizePhone(viberP);
+      if (n) window.open(`viber://chat?number=%2B${n}`, '_blank');
+    }
+    markNotified(o.id, 'viber');
+    const tag = res.test ? '✓ Test SMS OK + Viber: ' : '✓ SMS στάλθηκε. Viber: ';
+    showSmsToast(tag + (viberCopied ? 'μήνυμα αντιγράφηκε — paste με Ctrl+V' : 'άνοιξε — αντιγράψτε το μήνυμα χειροκίνητα'), 'ok');
   };
 
   const resetForm = () => { setCustomForm(INIT_FORM); setCustomerSearch(''); setSelectedCustomer(null); setShowCustomerList(false); setEditingOrder(null); };
@@ -2220,10 +2245,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const isReadyForTransfer = isOrderReadyForTransfer(order);
     const cust = !isArchive ? findCustomerOf(order) : null;
     const viberOk = !!pickViberPhone(cust);
-    const waOk = !!pickWhatsappPhone(cust);
     const emailOk = !!cust?.email;
     const smsOk = !!pickSmsPhone(cust);
-    const anyChannel = viberOk || waOk || emailOk || smsOk;
+    const anyChannel = viberOk || emailOk || smsOk;
     const notif = order.notified || {};
     const shortDate = (ts) => ts ? `${String(new Date(ts).getDate()).padStart(2,'0')}/${String(new Date(ts).getMonth()+1).padStart(2,'0')}` : '';
     return (
@@ -3416,7 +3440,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           ? []
           : (customers || []).filter(c =>
               (c.name && c.name.toLowerCase().includes(q)) ||
-              [c.phone, c.phone2, c.phoneViber, c.phoneWhatsapp].some(p => p && String(p).toLowerCase().includes(q))
+              [c.phone, c.phone2, c.phone3, c.phoneViber].some(p => p && String(p).toLowerCase().includes(q))
             ).slice(0, 40);
         const selectedCust = lookupCustomerId ? (customers || []).find(c => c.id === lookupCustomerId) : null;
         const allOrders = [...(specialOrders || []), ...(soldSpecialOrders || [])];
@@ -4382,13 +4406,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               const o = notifyModal.order; if (!o) return null;
               const cust = findCustomerOf(o);
               const vP = pickViberPhone(cust);
-              const wP = pickWhatsappPhone(cust);
               const sP = pickSmsPhone(cust);
               const hasViber = !!vP;
-              const hasWa = !!wP;
               const hasEmail = !!cust?.email;
               const hasSms = !!sP;
-              const contactLine = [cust?.phone, cust?.phone2, cust?.phoneViber && `V:${cust.phoneViber}`, cust?.phoneWhatsapp && `W:${cust.phoneWhatsapp}`].filter(Boolean).join('  ');
+              const contactLine = [cust?.phone, cust?.phone2, cust?.phone3, cust?.phoneViber && `V:${cust.phoneViber}`].filter(Boolean).join('  ');
               return (
                 <>
                   <View style={{backgroundColor:'#f5f5f5', padding:10, borderRadius:8, marginBottom:14}}>
@@ -4590,13 +4612,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 />
                 {showCustomerList&&customerSearch.length>0&&(customers||[]).filter(c=>
                   c.name?.toLowerCase().includes(customerSearch.toLowerCase())||
-                  [c.phone, c.phone2, c.phoneViber, c.phoneWhatsapp].some(p=>p&&String(p).includes(customerSearch))||
+                  [c.phone, c.phone2, c.phone3, c.phoneViber].some(p=>p&&String(p).includes(customerSearch))||
                   c.identifier?.toLowerCase().includes(customerSearch.toLowerCase())
                 ).slice(0,5).length>0&&(
                   <View style={styles.customerDropdown}>
                     {(customers||[]).filter(c=>
                       c.name?.toLowerCase().includes(customerSearch.toLowerCase())||
-                      [c.phone, c.phone2, c.phoneViber, c.phoneWhatsapp].some(p=>p&&String(p).includes(customerSearch))||
+                      [c.phone, c.phone2, c.phone3, c.phoneViber].some(p=>p&&String(p).includes(customerSearch))||
                       c.identifier?.toLowerCase().includes(customerSearch.toLowerCase())
                     ).slice(0,5).map(c=>(
                       <TouchableOpacity key={c.id} style={styles.customerOption}
