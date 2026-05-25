@@ -51,6 +51,37 @@ export const cleanOldLogs = async () => {
   } catch(e) {}
 };
 
+// Συνδυασμένη φόρτωση + καθαρισμός με ΜΙΑ μόνο διαδρομή στη βάση.
+// Επιστρέφει τις πρόσφατες κινήσεις (≤7 ημέρες) και σβήνει τις παλιές
+// μαζικά στο background με ΜΙΑ PATCH (αντί για 1 DELETE ανά εγγραφή).
+export const loadAndClean = async () => {
+  try {
+    const res = await fetch(`${FIREBASE_URL}/activity_log.json`);
+    const data = await res.json();
+    if (!data) return [];
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const fresh = [];
+    const oldKeys = [];
+    for (const key of Object.keys(data)) {
+      const entry = { id: key, ...data[key] };
+      if (entry.ts >= cutoff) fresh.push(entry);
+      else oldKeys.push(key);
+    }
+    fresh.sort((a, b) => b.ts - a.ts);
+    if (oldKeys.length) {
+      const patch = {};
+      for (const k of oldKeys) patch[k] = null;
+      fetch(`${FIREBASE_URL}/activity_log.json`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }).catch(() => {});
+    }
+    return fresh;
+  } catch(e) {
+    return [];
+  }
+};
+
 // Format ημερομηνίας/ώρας
 export const fmtDateTime = (ts) => {
   if (!ts) return '';

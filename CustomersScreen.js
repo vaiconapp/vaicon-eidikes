@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Platform } from 'react-native';
 import { FIREBASE_URL } from './App';
 
@@ -60,7 +60,7 @@ const fmtDate = (ts) => {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
 };
 
-const INIT = { name: '', phone: '', phone2: '', phone3: '', phoneViber: '', email: '', identifier: '' };
+const INIT = { name: '', phone: '', phone2: '', phone3: '', phoneViber: '', email: '', identifier: '', city: '', profession: '' };
 
 export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[] }) {
   const [form, setForm] = useState(prefillName ? { ...INIT, name: prefillName } : INIT);
@@ -69,6 +69,26 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
   const [sortMode, setSortMode] = useState('name'); // 'name' | 'orders'
   const [selectedCustomerOrders, setSelectedCustomerOrders] = useState(null); // πελάτης για εμφάνιση παραγγελιών
   const [deleteCustomerModal, setDeleteCustomerModal] = useState({ visible:false, customerId:null, customerName:'' });
+  const scrollRef = useRef(null);
+
+  const uniqueCities = useMemo(() => {
+    const set = new Set();
+    customers.forEach(c => { const v = (c.city || '').trim(); if (v) set.add(v); });
+    return [...set].sort((a, b) => a.localeCompare(b, 'el'));
+  }, [customers]);
+  const uniqueProfessions = useMemo(() => {
+    const set = new Set();
+    customers.forEach(c => { const v = (c.profession || '').trim(); if (v) set.add(v); });
+    return [...set].sort((a, b) => a.localeCompare(b, 'el'));
+  }, [customers]);
+
+  const suggest = (list, q) => {
+    const s = (q || '').trim().toLowerCase();
+    if (!s) return [];
+    return list.filter(v => v.toLowerCase().includes(s) && v.toLowerCase() !== s).slice(0, 5);
+  };
+  const citySuggestions = suggest(uniqueCities, form.city);
+  const professionSuggestions = suggest(uniqueProfessions, form.profession);
 
   const getStatusLabel = (order) => {
     if (order.status==='PENDING') return { label:'📋 Καταχωρημένη', color:'#ff4444' };
@@ -139,8 +159,13 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
   };
 
   const editCustomer = (c) => {
-    setForm({ name: c.name || '', phone: c.phone || '', phone2: c.phone2 || '', phone3: c.phone3 || '', phoneViber: c.phoneViber || '', email: c.email || '', identifier: c.identifier || '' });
+    setForm({
+      name: c.name || '', phone: c.phone || '', phone2: c.phone2 || '', phone3: c.phone3 || '',
+      phoneViber: c.phoneViber || '', email: c.email || '', identifier: c.identifier || '',
+      city: c.city || '', profession: c.profession || '',
+    });
     setEditingId(c.id);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   const deleteCustomer = (id) => {
@@ -164,34 +189,34 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
     const sorted = [...customers].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'el'));
     const rows = sorted.map(c => {
       const orderCount = allOrders.filter(o => o.customer === c.name).length;
+      const phones = [c.phone, c.phone2, c.phone3].filter(Boolean).join('<br>');
       return `<tr>
         <td>${c.name || ''}</td>
         <td>${c.identifier || ''}</td>
-        <td class="col-phone">${c.phone || ''}</td>
+        <td>${c.city || ''}</td>
+        <td>${c.profession || ''}</td>
+        <td>${phones}</td>
+        <td>${c.phoneViber || ''}</td>
+        <td>${c.email || ''}</td>
         <td class="col-orders">${orderCount > 0 ? orderCount : ''}</td>
       </tr>`;
     }).join('');
     const html = `<html><head><meta charset="utf-8"><style>
-      body { font-family: Arial, sans-serif; margin: 10mm; color: #000; }
-      h1 { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
-      h2 { font-size: 12px; color: #555; margin-bottom: 10px; }
-      table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
-      th { padding: 6px 8px; text-align: left; border: 1px solid #000; font-weight: bold; background: #ddd; font-size: 11px; }
-      td { padding: 6px 8px; border: 1px solid #ccc; vertical-align: top; word-wrap: break-word; }
+      body { font-family: Arial, sans-serif; margin: 8mm; color: #000; }
+      h1 { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+      h2 { font-size: 11px; color: #555; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: auto; }
+      th { padding: 4px 6px; text-align: left; border: 1px solid #000; font-weight: bold; background: #ddd; font-size: 10px; white-space: nowrap; }
+      td { padding: 4px 6px; border: 1px solid #ccc; vertical-align: top; word-wrap: break-word; }
       tr:nth-child(even) td { background: #f9f9f9; }
-      .col-phone { width: 110px; }
-      .col-orders { width: 70px; text-align: center; }
-      .col-ident { width: 28%; }
-      @media print { @page { size: A4 portrait; margin: 10mm; } }
+      .col-orders { width: 40px; text-align: center; }
+      @media print { @page { size: A4 landscape; margin: 8mm; } }
     </style></head><body>
-      <h1>👥 ΠΕΛΑΤΕΣ</h1>
+      <h1>ΠΕΛΑΤΕΣ</h1>
       <h2>Σύνολο: ${sorted.length} πελάτες</h2>
       <table>
-        <colgroup>
-          <col><col class="col-ident"><col style="width:110px"><col style="width:70px">
-        </colgroup>
         <thead><tr>
-          <th>Όνομα</th><th>Αναγνωριστικό</th><th>Τηλέφωνο</th><th>Παρ.</th>
+          <th>Όνομα</th><th>Αναγνωριστικό</th><th>Πόλη/Περιοχή</th><th>Επάγγελμα</th><th>Τηλέφωνα</th><th>Viber</th><th>Email</th><th>Παρ.</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -209,9 +234,13 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
       } else {
         const nameWords = (c.name || '').toLowerCase().split(' ').map(w => w.replace(/[()]/g, ''));
         const identWords = (c.identifier || '').toLowerCase().split(' ').map(w => w.replace(/[()]/g, ''));
+        const cityWords = (c.city || '').toLowerCase().split(' ').map(w => w.replace(/[()]/g, ''));
+        const profWords = (c.profession || '').toLowerCase().split(' ').map(w => w.replace(/[()]/g, ''));
         return (
           nameWords.some(w => w.startsWith(q)) ||
-          identWords.some(w => w.startsWith(q))
+          identWords.some(w => w.startsWith(q)) ||
+          cityWords.some(w => w.startsWith(q)) ||
+          profWords.some(w => w.startsWith(q))
         );
       }
     })
@@ -238,7 +267,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ padding: 12 }}>
+      <ScrollView ref={scrollRef} style={{ padding: 12 }}>
         <View style={{ paddingBottom: 40 }}>
 
           <Text style={styles.sectionTitle}>
@@ -258,6 +287,33 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
           </View>
           <TextInput style={styles.input} placeholder="Email (προαιρετικό)" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={v => setForm({...form, email:v})} />
           <TextInput style={styles.input} placeholder="Αναγνωριστικό (π.χ. Γιώργης Μαραθώνας)" value={form.identifier} onChangeText={v => setForm({...form, identifier:v})} />
+
+          <View style={{ flexDirection:'row', gap:6, marginBottom: citySuggestions.length || professionSuggestions.length ? 0 : 0 }}>
+            <View style={{ flex:1 }}>
+              <TextInput style={[styles.input, { marginBottom: citySuggestions.length ? 0 : 8 }]} placeholder="Πόλη / Περιοχή" value={form.city} onChangeText={v => setForm({...form, city:v})} />
+              {citySuggestions.length > 0 && (
+                <View style={styles.suggestBox}>
+                  {citySuggestions.map(s => (
+                    <TouchableOpacity key={s} style={styles.suggestChip} onPress={() => setForm(f => ({ ...f, city: s }))}>
+                      <Text style={styles.suggestTxt}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+            <View style={{ flex:1 }}>
+              <TextInput style={[styles.input, { marginBottom: professionSuggestions.length ? 0 : 8 }]} placeholder="Επάγγελμα" value={form.profession} onChangeText={v => setForm({...form, profession:v})} />
+              {professionSuggestions.length > 0 && (
+                <View style={styles.suggestBox}>
+                  {professionSuggestions.map(s => (
+                    <TouchableOpacity key={s} style={styles.suggestChip} onPress={() => setForm(f => ({ ...f, profession: s }))}>
+                      <Text style={styles.suggestTxt}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
 
           <View style={{ flexDirection:'row', gap:8, alignItems:'center' }}>
             {editingId && (
@@ -336,6 +392,11 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
                 })()}
                 {c.email ? <Text style={styles.customerDetail}>✉️ {c.email}</Text> : null}
                 {c.identifier ? <Text style={styles.customerDetail}>🏷 {c.identifier}</Text> : null}
+                {(c.city || c.profession) ? (
+                  <Text style={styles.customerDetail}>
+                    {c.city ? `📍 ${c.city}` : ''}{c.city && c.profession ? '   ' : ''}{c.profession ? `💼 ${c.profession}` : ''}
+                  </Text>
+                ) : null}
                 <Text style={styles.customerDate}>📅 {fmtDate(c.createdAt)}</Text>
               </View>
               <View style={{gap:6}}>
@@ -468,4 +529,7 @@ const styles = StyleSheet.create({
   deleteTxt: { color:'white', fontWeight:'bold', fontSize:16 },
   printBtn: { padding:6, marginLeft:12 },
   printTxt: { fontSize:22 },
+  suggestBox: { flexDirection:'row', flexWrap:'wrap', gap:4, backgroundColor:'#fff8e1', padding:6, borderRadius:6, marginBottom:8, borderWidth:1, borderColor:'#ffe082' },
+  suggestChip: { backgroundColor:'#fff', paddingHorizontal:10, paddingVertical:4, borderRadius:12, borderWidth:1, borderColor:'#ffc107' },
+  suggestTxt: { fontSize:12, color:'#856404', fontWeight:'600' },
 });

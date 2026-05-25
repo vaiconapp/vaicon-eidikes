@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
-import { loadActivityLog, cleanOldLogs, fmtDateTime } from './activityLog';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, Text, View, ScrollView, FlatList, TouchableOpacity, Alert, Platform } from 'react-native';
+import { loadAndClean, fmtDateTime } from './activityLog';
 import { FIREBASE_URL as FB_URL } from './App';
 
 const SECTION_COLORS = {
@@ -33,8 +33,7 @@ export default function ActivityScreen({ onClose }) {
 
   const loadData = async () => {
     setLoading(true);
-    await cleanOldLogs();
-    const data = await loadActivityLog();
+    const data = await loadAndClean();
     setEntries(data);
     setLoading(false);
   };
@@ -74,6 +73,30 @@ export default function ActivityScreen({ onClose }) {
     return '📋';
   };
 
+  const renderItem = useCallback(({ item: entry }) => {
+    const sectionColor = SECTION_COLORS[entry.section] || '#555';
+    return (
+      <View style={styles.card}>
+        <View style={[styles.sectionBar, { backgroundColor: sectionColor }]} />
+        <View style={styles.cardBody}>
+          <View style={styles.cardTop}>
+            <Text style={styles.actionTxt}>{getIcon(entry.action)} {entry.action}</Text>
+            <Text style={styles.timeTxt}>{fmtDateTime(entry.ts)}</Text>
+          </View>
+          <View style={[styles.sectionBadge, { backgroundColor: sectionColor }]}>
+            <Text style={styles.sectionBadgeTxt}>{entry.section}</Text>
+          </View>
+          {entry.orderNo && <Text style={styles.detailTxt}>🔢 #{entry.orderNo}</Text>}
+          {entry.customer && <Text style={styles.detailTxt}>👤 {entry.customer}</Text>}
+          {entry.size && <Text style={styles.detailTxt}>📐 {entry.size}</Text>}
+          {entry.model && <Text style={styles.detailTxt}>🚪 {entry.model}</Text>}
+          {entry.qty && <Text style={styles.detailTxt}>📦 {entry.qty} τεμ.</Text>}
+          {entry.extra && <Text style={styles.extraTxt}>{entry.extra}</Text>}
+        </View>
+      </View>
+    );
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -99,34 +122,22 @@ export default function ActivityScreen({ onClose }) {
       <Text style={styles.count}>{filtered.length} κινήσεις (τελευταίες 7 μέρες)</Text>
 
       {/* LIST */}
-      <ScrollView style={{flex:1}}>
-        {loading && <Text style={styles.empty}>Φόρτωση...</Text>}
-        {!loading && filtered.length === 0 && <Text style={styles.empty}>Δεν υπάρχουν κινήσεις.</Text>}
-        {!loading && filtered.map(entry => {
-          const sectionColor = SECTION_COLORS[entry.section] || '#555';
-          return (
-            <View key={entry.id} style={styles.card}>
-              <View style={[styles.sectionBar, { backgroundColor: sectionColor }]} />
-              <View style={styles.cardBody}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.actionTxt}>{getIcon(entry.action)} {entry.action}</Text>
-                  <Text style={styles.timeTxt}>{fmtDateTime(entry.ts)}</Text>
-                </View>
-                <View style={[styles.sectionBadge, { backgroundColor: sectionColor }]}>
-                  <Text style={styles.sectionBadgeTxt}>{entry.section}</Text>
-                </View>
-                {entry.orderNo && <Text style={styles.detailTxt}>🔢 #{entry.orderNo}</Text>}
-                {entry.customer && <Text style={styles.detailTxt}>👤 {entry.customer}</Text>}
-                {entry.size && <Text style={styles.detailTxt}>📐 {entry.size}</Text>}
-                {entry.model && <Text style={styles.detailTxt}>🚪 {entry.model}</Text>}
-                {entry.qty && <Text style={styles.detailTxt}>📦 {entry.qty} τεμ.</Text>}
-                {entry.extra && <Text style={styles.extraTxt}>{entry.extra}</Text>}
-              </View>
-            </View>
-          );
-        })}
-        <View style={{height:40}}/>
-      </ScrollView>
+      {loading ? (
+        <Text style={styles.empty}>Φόρτωση...</Text>
+      ) : filtered.length === 0 ? (
+        <Text style={styles.empty}>Δεν υπάρχουν κινήσεις.</Text>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={item => item.id}
+          renderItem={renderItem}
+          initialNumToRender={15}
+          maxToRenderPerBatch={20}
+          windowSize={10}
+          removeClippedSubviews
+          ListFooterComponent={<View style={{height:40}}/>}
+        />
+      )}
     </View>
   );
 }

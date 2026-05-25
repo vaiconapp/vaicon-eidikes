@@ -8,6 +8,7 @@ import CustomersScreen from './CustomersScreen';
 import CoatingsScreen from './CoatingsScreen';
 import LocksScreen from './LocksScreen';
 import ActivityScreen from './ActivityScreen';
+import StatsScreen from './StatsScreen';
 import { APP_VERSION } from './version';
 
 export const FIREBASE_URL = "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app";
@@ -110,6 +111,10 @@ export default function App() {
   const [showCoatings, setShowCoatings] = useState(false);
   const [showLocks, setShowLocks] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [statsAuthOpen, setStatsAuthOpen] = useState(false);
+  const [statsAuthPwd, setStatsAuthPwd] = useState('');
+  const [statsAuthError, setStatsAuthError] = useState(false);
   const [pendingCustomer, setPendingCustomer] = useState(null);
   const [pendingCustomerCallback, setPendingCustomerCallback] = useState(null);
 
@@ -129,6 +134,8 @@ export default function App() {
     if (Platform.OS !== 'android') return;
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
       if (menuOpen) { setMenuOpen(false); return true; }
+      if (statsAuthOpen) { setStatsAuthOpen(false); return true; }
+      if (showStats) { setShowStats(false); return true; }
       if (showActivity) { setShowActivity(false); return true; }
       if (showCoatings) { setShowCoatings(false); return true; }
       if (showLocks) { setShowLocks(false); return true; }
@@ -136,7 +143,7 @@ export default function App() {
       return false;
     });
     return () => handler.remove();
-  }, [menuOpen, showActivity, showCoatings, showLocks, showCustomers]);
+  }, [menuOpen, showActivity, showCoatings, showLocks, showCustomers, showStats, statsAuthOpen]);
 
   const fetchData = async (silent=false) => {
     if (!silent) setLoading(true);
@@ -239,6 +246,9 @@ export default function App() {
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowLocks(true); }}>
               <Text style={styles.menuItemText}>🔒 ΚΛΕΙΔΑΡΙΕΣ</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setStatsAuthOpen(true); }}>
+              <Text style={styles.menuItemText}>📊 ΣΤΑΤΙΣΤΙΚΑ</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowActivity(true); }}>
               <Text style={styles.menuItemText}>📜 ΙΣΤΟΡΙΚΟ ΚΙΝΗΣΕΩΝ</Text>
             </TouchableOpacity>
@@ -259,6 +269,57 @@ export default function App() {
 
       <Modal visible={showActivity} animationType="slide" onRequestClose={() => setShowActivity(false)}>
         <ActivityScreen onClose={() => setShowActivity(false)} />
+      </Modal>
+
+      <Modal visible={statsAuthOpen} transparent animationType="fade" onRequestClose={() => setStatsAuthOpen(false)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={statsAuthStyles.box}>
+            <Text style={statsAuthStyles.title}>🔐 Πρόσβαση Στατιστικών</Text>
+            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό εφαρμογής</Text>
+            <TextInput
+              style={[statsAuthStyles.input, statsAuthError && statsAuthStyles.inputError]}
+              secureTextEntry
+              value={statsAuthPwd}
+              onChangeText={setStatsAuthPwd}
+              placeholder="Κωδικός..."
+              autoFocus
+              onSubmitEditing={() => {
+                if (statsAuthPwd === VAICON_PASSWORD) {
+                  setStatsAuthOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setShowStats(true);
+                } else {
+                  setStatsAuthError(true); setStatsAuthPwd('');
+                  setTimeout(() => setStatsAuthError(false), 2000);
+                }
+              }}
+            />
+            {statsAuthError && <Text style={statsAuthStyles.errorTxt}>❌ Λάθος κωδικός</Text>}
+            <View style={statsAuthStyles.btnRow}>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666' }]} onPress={() => { setStatsAuthOpen(false); setStatsAuthPwd(''); }}>
+                <Text style={statsAuthStyles.btnTxt}>ΑΚΥΡΟ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000' }]} onPress={() => {
+                if (statsAuthPwd === VAICON_PASSWORD) {
+                  setStatsAuthOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setShowStats(true);
+                } else {
+                  setStatsAuthError(true); setStatsAuthPwd('');
+                  setTimeout(() => setStatsAuthError(false), 2000);
+                }
+              }}>
+                <Text style={statsAuthStyles.btnTxt}>ΕΙΣΟΔΟΣ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showStats} animationType="slide" onRequestClose={() => setShowStats(false)}>
+        <StatsScreen
+          specialOrders={specialOrders}
+          soldSpecialOrders={soldSpecialOrders}
+          setSoldSpecialOrders={setSoldSpecialOrders}
+          FIREBASE_URL={FIREBASE_URL}
+          onClose={() => setShowStats(false)}
+        />
       </Modal>
 
       <Modal visible={showCoatings} animationType="slide" onRequestClose={() => setShowCoatings(false)}>
@@ -316,4 +377,17 @@ const styles = StyleSheet.create({
   menuTitle: { fontSize: 12, fontWeight: 'bold', color: '#999', marginBottom: 12, letterSpacing: 2 },
   menuItem: { padding: 14, borderRadius: 8, backgroundColor: '#f5f5f5', marginBottom: 8 },
   menuItemText: { fontSize: 15, fontWeight: 'bold', color: '#1a1a1a' },
+});
+
+const statsAuthStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  box: { backgroundColor: 'white', borderRadius: 16, padding: 24, width: '100%', maxWidth: 380, elevation: 10 },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#8B0000', textAlign: 'center', marginBottom: 6 },
+  subtitle: { fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 16 },
+  input: { borderWidth: 2, borderColor: '#ddd', borderRadius: 10, padding: 14, fontSize: 18, letterSpacing: 2, textAlign: 'center' },
+  inputError: { borderColor: '#ff4444' },
+  errorTxt: { color: '#ff4444', fontSize: 13, marginTop: 8, textAlign: 'center', fontWeight: 'bold' },
+  btnRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  btn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
+  btnTxt: { color: 'white', fontWeight: 'bold', fontSize: 14 },
 });
