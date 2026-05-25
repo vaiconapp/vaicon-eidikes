@@ -618,6 +618,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   };
   const pickViberPhone = (c) => c?.phoneViber || '';
   const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phone3].find(isGreekMobile) || '';
+  const confirmSend = (channel, order, action) => {
+    const labels = { viber: 'Viber', email: 'Email', sms: 'SMS + Viber' };
+    setConfirmModal({
+      visible: true,
+      title: `Αποστολή ${labels[channel] || channel}`,
+      message: `Αποστολή ${labels[channel] || channel} στον πελάτη #${order.orderNo || '?'} (${order.customer || '—'});`,
+      confirmText: 'ΑΠΟΣΤΟΛΗ',
+      onConfirm: () => action(),
+    });
+  };
   const notifyViber = async (o) => {
     const c = findCustomerOf(o);
     const p = pickViberPhone(c);
@@ -2351,15 +2361,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </View>
         {!isArchive && anyChannel && (
           <View style={{justifyContent:'center', paddingHorizontal:6, paddingVertical:6, borderRightWidth:1, borderRightColor:'#e0e0e0', gap:4, minWidth:95}}>
-            <TouchableOpacity disabled={!viberOk} onPress={()=>notifyViber(order)} onLongPress={()=>clearNotified(order.id,'viber')} delayLongPress={2000} style={{backgroundColor: viberOk?'#7360f2':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+            <TouchableOpacity disabled={!viberOk} onPress={()=>confirmSend('viber',order,()=>notifyViber(order))} onLongPress={()=>clearNotified(order.id,'viber')} delayLongPress={2000} style={{backgroundColor: viberOk?'#7360f2':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
               <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.viber?'✓ ':'📞 '}Viber</Text>
               {notif.viber && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.viber)}</Text>}
             </TouchableOpacity>
-            <TouchableOpacity disabled={!emailOk} onPress={()=>notifyEmail(order)} onLongPress={()=>clearNotified(order.id,'email')} delayLongPress={2000} style={{backgroundColor: emailOk?'#0288d1':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+            <TouchableOpacity disabled={!emailOk} onPress={()=>confirmSend('email',order,()=>notifyEmail(order))} onLongPress={()=>clearNotified(order.id,'email')} delayLongPress={2000} style={{backgroundColor: emailOk?'#0288d1':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
               <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.email?'✓ ':'✉️ '}Email</Text>
               {notif.email && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.email)}</Text>}
             </TouchableOpacity>
-            <TouchableOpacity disabled={!smsOk} onPress={()=>notifySms(order)} onLongPress={()=>clearNotified(order.id,'sms')} delayLongPress={2000} style={{backgroundColor: smsOk?'#1565C0':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+            <TouchableOpacity disabled={!smsOk} onPress={()=>confirmSend('sms',order,()=>notifySms(order))} onLongPress={()=>clearNotified(order.id,'sms')} delayLongPress={2000} style={{backgroundColor: smsOk?'#1565C0':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
               <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.sms?'✓ ':'📱 '}SMS</Text>
               {notif.sms && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.sms)}</Text>}
             </TouchableOpacity>
@@ -4418,15 +4428,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <Text style={{fontSize:12, color:'#666', marginTop:2}}>📞 {contactLine||'—'}{cust?.email?`   ✉️ ${cust.email}`:''}</Text>
                   </View>
                   <View style={{flexDirection:'row', gap:8, marginBottom:8}}>
-                    <TouchableOpacity disabled={!hasViber} onPress={()=>{ notifyViber(o); setNotifyModal({visible:false,order:null}); }}
+                    <TouchableOpacity disabled={!hasViber} onPress={()=>{ setNotifyModal({visible:false,order:null}); confirmSend('viber',o,()=>notifyViber(o)); }}
                       style={{flex:1, backgroundColor: hasViber?'#7360f2':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
                       <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>📞 Viber</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity disabled={!hasEmail} onPress={()=>{ notifyEmail(o); setNotifyModal({visible:false,order:null}); }}
+                    <TouchableOpacity disabled={!hasEmail} onPress={()=>{ setNotifyModal({visible:false,order:null}); confirmSend('email',o,()=>notifyEmail(o)); }}
                       style={{flex:1, backgroundColor: hasEmail?'#0288d1':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
                       <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>✉️ Email</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity disabled={!hasSms} onPress={()=>{ notifySms(o); setNotifyModal({visible:false,order:null}); }}
+                    <TouchableOpacity disabled={!hasSms} onPress={()=>{ setNotifyModal({visible:false,order:null}); confirmSend('sms',o,()=>notifySms(o)); }}
                       style={{flex:1, backgroundColor: hasSms?'#1565C0':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
                       <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>📱 SMS</Text>
                     </TouchableOpacity>
