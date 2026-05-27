@@ -96,6 +96,26 @@ const loginStyles = StyleSheet.create({
   hint: { color: '#aaa', fontSize: 11, textAlign: 'center', marginTop: 16 },
 });
 
+function PwdInput({ value, onChangeText, error, onSubmit, autoFocus = true }) {
+  const [show, setShow] = useState(false);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <TextInput
+        style={[statsAuthStyles.input, error && statsAuthStyles.inputError, { flex: 1 }]}
+        secureTextEntry={!show}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder="Κωδικός..."
+        autoFocus={autoFocus}
+        onSubmitEditing={onSubmit}
+      />
+      <TouchableOpacity onPress={() => setShow(v => !v)} style={{ padding: 10, marginLeft: 4 }}>
+        <Text style={{ fontSize: 22 }}>{show ? '🙈' : '👁️'}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(isRemembered());
   const [loading, setLoading] = useState(true);
@@ -115,6 +135,16 @@ export default function App() {
   const [statsAuthOpen, setStatsAuthOpen] = useState(false);
   const [statsAuthPwd, setStatsAuthPwd] = useState('');
   const [statsAuthError, setStatsAuthError] = useState(false);
+  const [backupAuthOpen, setBackupAuthOpen] = useState(false);
+  const [restoreAuthOpen, setRestoreAuthOpen] = useState(false);
+  const [brAuthPwd, setBrAuthPwd] = useState('');
+  const [brAuthError, setBrAuthError] = useState(false);
+  const [backupRunning, setBackupRunning] = useState(false);
+  const [backupSuccess, setBackupSuccess] = useState(null);
+  const [restorePayload, setRestorePayload] = useState(null);
+  const [restoreFileError, setRestoreFileError] = useState(null);
+  const [restoreConfirmText, setRestoreConfirmText] = useState('');
+  const [restoreRunning, setRestoreRunning] = useState(false);
   const [pendingCustomer, setPendingCustomer] = useState(null);
   const [pendingCustomerCallback, setPendingCustomerCallback] = useState(null);
 
@@ -135,6 +165,10 @@ export default function App() {
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
       if (menuOpen) { setMenuOpen(false); return true; }
       if (statsAuthOpen) { setStatsAuthOpen(false); return true; }
+      if (backupAuthOpen) { setBackupAuthOpen(false); return true; }
+      if (restoreAuthOpen) { setRestoreAuthOpen(false); return true; }
+      if (backupSuccess) { setBackupSuccess(null); return true; }
+      if (restorePayload || restoreFileError) { setRestorePayload(null); setRestoreFileError(null); setRestoreConfirmText(''); return true; }
       if (showStats) { setShowStats(false); return true; }
       if (showActivity) { setShowActivity(false); return true; }
       if (showCoatings) { setShowCoatings(false); return true; }
@@ -143,7 +177,118 @@ export default function App() {
       return false;
     });
     return () => handler.remove();
-  }, [menuOpen, showActivity, showCoatings, showLocks, showCustomers, showStats, statsAuthOpen]);
+  }, [menuOpen, showActivity, showCoatings, showLocks, showCustomers, showStats, statsAuthOpen, backupAuthOpen, restoreAuthOpen, backupSuccess, restorePayload, restoreFileError]);
+
+  const downloadBlob = (text, filename) => {
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const doBackup = async () => {
+    setBackupRunning(true);
+    try {
+      const res = await fetch(`${FIREBASE_URL}/.json`);
+      if (!res.ok) throw new Error('Σφάλμα ανάγνωσης βάσης');
+      const fullData = (await res.json()) || {};
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const createdAtStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const payload = { createdAt: now.getTime(), createdAtStr, version: APP_VERSION, data: fullData };
+      const json = JSON.stringify(payload, null, 2);
+      const filename = 'vaicon-eidikes-backup.json';
+
+      if (Platform.OS !== 'web') {
+        Alert.alert('Μη διαθέσιμο', 'Το backup είναι διαθέσιμο μόνο από browser.');
+        setBackupRunning(false);
+        return;
+      }
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(json);
+          await writable.close();
+        } catch (e) {
+          if (e.name === 'AbortError') { setBackupRunning(false); return; }
+          downloadBlob(json, filename);
+        }
+      } else {
+        downloadBlob(json, filename);
+      }
+      setBackupSuccess(createdAtStr);
+    } catch (e) {
+      Alert.alert('Σφάλμα', 'Το backup απέτυχε: ' + (e.message || String(e)));
+    } finally {
+      setBackupRunning(false);
+    }
+  };
+
+  const validateBackup = (parsed) => {
+    if (!parsed || typeof parsed !== 'object') return 'Το αρχείο δεν είναι έγκυρο.';
+    if (typeof parsed.createdAt !== 'number' || !parsed.data || typeof parsed.data !== 'object') {
+      return 'Το αρχείο δεν είναι έγκυρο backup του VAICON.';
+    }
+    const expected = ['special_orders', 'customers', 'coatings', 'locks'];
+    const present = expected.filter(k => k in parsed.data);
+    if (present.length === 0) return 'Το backup δεν περιέχει δεδομένα της εφαρμογής.';
+    return null;
+  };
+
+  const openRestoreFilePicker = () => {
+    if (Platform.OS !== 'web') {
+      Alert.alert('Μη διαθέσιμο', 'Η επαναφορά είναι διαθέσιμη μόνο από browser.');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const err = validateBackup(parsed);
+        if (err) { setRestoreFileError(err); return; }
+        setRestorePayload(parsed);
+        setRestoreConfirmText('');
+      } catch {
+        setRestoreFileError('Το αρχείο δεν διαβάζεται ως JSON.');
+      }
+    };
+    input.click();
+  };
+
+  const doRestore = async () => {
+    if (!restorePayload?.data) return;
+    setRestoreRunning(true);
+    try {
+      const knownPaths = ['special_orders', 'customers', 'coatings', 'locks', 'activity_log'];
+      for (const p of knownPaths) {
+        if (!(p in restorePayload.data)) continue;
+        await fetch(`${FIREBASE_URL}/${p}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(restorePayload.data[p]),
+        });
+      }
+      if (Platform.OS === 'web') window.location.reload();
+      else Alert.alert('Επαναφορά', 'Ολοκληρώθηκε. Επανεκκινήστε την εφαρμογή.');
+    } catch (e) {
+      setRestoreRunning(false);
+      Alert.alert('Σφάλμα', 'Η επαναφορά απέτυχε: ' + (e.message || String(e)));
+    }
+  };
 
   const fetchData = async (silent=false) => {
     if (!silent) setLoading(true);
@@ -252,6 +397,12 @@ export default function App() {
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowActivity(true); }}>
               <Text style={styles.menuItemText}>📜 ΙΣΤΟΡΙΚΟ ΚΙΝΗΣΕΩΝ</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setBrAuthPwd(''); setBrAuthError(false); setBackupAuthOpen(true); }}>
+              <Text style={styles.menuItemText}>💾 BACKUP</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setBrAuthPwd(''); setBrAuthError(false); setRestoreAuthOpen(true); }}>
+              <Text style={styles.menuItemText}>♻️ ΕΠΑΝΑΦΟΡΑ</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); fetchData(); Alert.alert("VAICON", "Ανανέωση δεδομένων..."); }}>
               <Text style={styles.menuItemText}>🔄 ΑΝΑΝΕΩΣΗ</Text>
             </TouchableOpacity>
@@ -276,14 +427,11 @@ export default function App() {
           <View style={statsAuthStyles.box}>
             <Text style={statsAuthStyles.title}>🔐 Πρόσβαση Στατιστικών</Text>
             <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό εφαρμογής</Text>
-            <TextInput
-              style={[statsAuthStyles.input, statsAuthError && statsAuthStyles.inputError]}
-              secureTextEntry
+            <PwdInput
               value={statsAuthPwd}
               onChangeText={setStatsAuthPwd}
-              placeholder="Κωδικός..."
-              autoFocus
-              onSubmitEditing={() => {
+              error={statsAuthError}
+              onSubmit={() => {
                 if (statsAuthPwd === VAICON_PASSWORD) {
                   setStatsAuthOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setShowStats(true);
                 } else {
@@ -320,6 +468,130 @@ export default function App() {
           FIREBASE_URL={FIREBASE_URL}
           onClose={() => setShowStats(false)}
         />
+      </Modal>
+
+      <Modal visible={backupAuthOpen} transparent animationType="fade" onRequestClose={() => setBackupAuthOpen(false)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={statsAuthStyles.box}>
+            <Text style={statsAuthStyles.title}>💾 Δημιουργία Backup</Text>
+            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό εφαρμογής</Text>
+            <PwdInput
+              value={brAuthPwd} onChangeText={setBrAuthPwd} error={brAuthError}
+              onSubmit={() => {
+                if (brAuthPwd === VAICON_PASSWORD) { setBackupAuthOpen(false); setBrAuthPwd(''); doBackup(); }
+                else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
+              }}
+            />
+            {brAuthError && <Text style={statsAuthStyles.errorTxt}>❌ Λάθος κωδικός</Text>}
+            <View style={statsAuthStyles.btnRow}>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666' }]} onPress={() => { setBackupAuthOpen(false); setBrAuthPwd(''); }}>
+                <Text style={statsAuthStyles.btnTxt}>ΑΚΥΡΟ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#2e7d32' }]} onPress={() => {
+                if (brAuthPwd === VAICON_PASSWORD) { setBackupAuthOpen(false); setBrAuthPwd(''); doBackup(); }
+                else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
+              }}>
+                <Text style={statsAuthStyles.btnTxt}>ΣΥΝΕΧΕΙΑ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={backupRunning} transparent animationType="fade">
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { alignItems: 'center' }]}>
+            <ActivityIndicator size="large" color="#2e7d32" />
+            <Text style={{ marginTop: 14, fontWeight: 'bold', color: '#2e7d32', fontSize: 15 }}>Δημιουργία αντιγράφου...</Text>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!backupSuccess} transparent animationType="fade" onRequestClose={() => setBackupSuccess(null)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={statsAuthStyles.box}>
+            <Text style={[statsAuthStyles.title, { color: '#2e7d32' }]}>✅ Backup Ολοκληρώθηκε</Text>
+            <Text style={statsAuthStyles.subtitle}>
+              Αποθηκεύτηκε στον υπολογιστή σου.{"\n"}Ημερομηνία: {backupSuccess}
+            </Text>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#2e7d32', marginTop: 8 }]} onPress={() => setBackupSuccess(null)}>
+              <Text style={statsAuthStyles.btnTxt}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={restoreAuthOpen} transparent animationType="fade" onRequestClose={() => setRestoreAuthOpen(false)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={statsAuthStyles.box}>
+            <Text style={statsAuthStyles.title}>♻️ Επαναφορά από Backup</Text>
+            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό εφαρμογής</Text>
+            <PwdInput
+              value={brAuthPwd} onChangeText={setBrAuthPwd} error={brAuthError}
+              onSubmit={() => {
+                if (brAuthPwd === VAICON_PASSWORD) { setRestoreAuthOpen(false); setBrAuthPwd(''); openRestoreFilePicker(); }
+                else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
+              }}
+            />
+            {brAuthError && <Text style={statsAuthStyles.errorTxt}>❌ Λάθος κωδικός</Text>}
+            <View style={statsAuthStyles.btnRow}>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666' }]} onPress={() => { setRestoreAuthOpen(false); setBrAuthPwd(''); }}>
+                <Text style={statsAuthStyles.btnTxt}>ΑΚΥΡΟ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000' }]} onPress={() => {
+                if (brAuthPwd === VAICON_PASSWORD) { setRestoreAuthOpen(false); setBrAuthPwd(''); openRestoreFilePicker(); }
+                else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
+              }}>
+                <Text style={statsAuthStyles.btnTxt}>ΣΥΝΕΧΕΙΑ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!restoreFileError} transparent animationType="fade" onRequestClose={() => setRestoreFileError(null)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={statsAuthStyles.box}>
+            <Text style={[statsAuthStyles.title, { color: '#8B0000' }]}>⚠️ Μη έγκυρο αρχείο</Text>
+            <Text style={statsAuthStyles.subtitle}>{restoreFileError}</Text>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000', marginTop: 8 }]} onPress={() => setRestoreFileError(null)}>
+              <Text style={statsAuthStyles.btnTxt}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!restorePayload} transparent animationType="fade" onRequestClose={() => { if (!restoreRunning) { setRestorePayload(null); setRestoreConfirmText(''); } }}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { maxWidth: 460 }]}>
+            <Text style={[statsAuthStyles.title, { color: '#8B0000', fontSize: 20 }]}>⚠️ ΠΡΟΣΟΧΗ</Text>
+            <View style={{ backgroundColor: '#fff0f0', borderLeftWidth: 4, borderLeftColor: '#8B0000', padding: 12, borderRadius: 6, marginBottom: 12 }}>
+              <Text style={{ color: '#8B0000', fontWeight: 'bold', fontSize: 14, lineHeight: 20 }}>
+                Θα αντικατασταθούν ΟΛΑ τα τρέχοντα δεδομένα από το backup της:{"\n"}
+                <Text style={{ fontSize: 16 }}>{restorePayload?.createdAtStr || '—'}</Text>{"\n\n"}
+                Όλες οι αλλαγές μετά από αυτή την ημερομηνία θα χαθούν οριστικά.
+              </Text>
+            </View>
+            <Text style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>Πληκτρολογήστε <Text style={{ fontWeight: 'bold', color: '#8B0000' }}>ΕΠΑΝΑΦΟΡΑ</Text> για επιβεβαίωση:</Text>
+            <TextInput
+              style={[statsAuthStyles.input, { textAlign: 'left' }]}
+              value={restoreConfirmText} onChangeText={setRestoreConfirmText}
+              placeholder="ΕΠΑΝΑΦΟΡΑ" autoCapitalize="characters" editable={!restoreRunning}
+            />
+            <View style={statsAuthStyles.btnRow}>
+              <TouchableOpacity disabled={restoreRunning} style={[statsAuthStyles.btn, { backgroundColor: '#666', opacity: restoreRunning ? 0.5 : 1 }]} onPress={() => { setRestorePayload(null); setRestoreConfirmText(''); }}>
+                <Text style={statsAuthStyles.btnTxt}>ΑΚΥΡΟ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={restoreRunning || restoreConfirmText.trim().toUpperCase() !== 'ΕΠΑΝΑΦΟΡΑ'}
+                style={[statsAuthStyles.btn, { backgroundColor: '#8B0000', opacity: (restoreRunning || restoreConfirmText.trim().toUpperCase() !== 'ΕΠΑΝΑΦΟΡΑ') ? 0.4 : 1 }]}
+                onPress={doRestore}
+              >
+                <Text style={statsAuthStyles.btnTxt}>{restoreRunning ? 'ΕΠΑΝΑΦΟΡΑ...' : 'ΕΠΑΝΑΦΟΡΑ'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <Modal visible={showCoatings} animationType="slide" onRequestClose={() => setShowCoatings(false)}>

@@ -4155,14 +4155,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <View style={{backgroundColor:'#fff', borderRadius:16, padding:24, width:'85%', maxWidth:380}}>
             <Text style={{fontSize:17, fontWeight:'bold', color:'#b71c1c', marginBottom:8, textAlign:'center'}}>🗑️ Διαγραφή από Αρχείο</Text>
             <Text style={{fontSize:13, color:'#555', marginBottom:16, textAlign:'center'}}>Εισάγετε τον κωδικό διαγραφής για να συνεχίσετε.</Text>
-            <TextInput
-              style={{borderWidth:2, borderColor: archiveDeleteModal.error?'#ff4444':'#ddd', borderRadius:8, padding:12, fontSize:16, letterSpacing:4, textAlign:'center', marginBottom:8}}
-              placeholder="Κωδικός..."
-              secureTextEntry
-              value={archiveDeleteModal.pwd}
-              onChangeText={v=>setArchiveDeleteModal(m=>({...m, pwd:v, error:false}))}
-              autoFocus
-            />
+            <View style={{flexDirection:'row', alignItems:'center', marginBottom:8}}>
+              <TextInput
+                style={{flex:1, borderWidth:2, borderColor: archiveDeleteModal.error?'#ff4444':'#ddd', borderRadius:8, padding:12, fontSize:16, letterSpacing:4, textAlign:'center'}}
+                placeholder="Κωδικός..."
+                secureTextEntry={!archiveDeleteModal.showPwd}
+                value={archiveDeleteModal.pwd}
+                onChangeText={v=>setArchiveDeleteModal(m=>({...m, pwd:v, error:false}))}
+                autoFocus
+              />
+              <TouchableOpacity onPress={()=>setArchiveDeleteModal(m=>({...m, showPwd:!m.showPwd}))} style={{padding:10, marginLeft:4}}>
+                <Text style={{fontSize:22}}>{archiveDeleteModal.showPwd?'🙈':'👁️'}</Text>
+              </TouchableOpacity>
+            </View>
             {archiveDeleteModal.error&&<Text style={{color:'#ff4444', fontSize:12, textAlign:'center', marginBottom:8}}>❌ Λάθος κωδικός</Text>}
             <TouchableOpacity
               style={{backgroundColor:'#b71c1c', padding:14, borderRadius:10, alignItems:'center', marginBottom:8}}
