@@ -127,6 +127,14 @@ const isOrderReadyForTransfer = (order) => {
   });
 };
 
+// Helper: παραγγελία έτοιμη προς μοντάρισμα (προηγούμενες φάσεις done, επένδυση δεν μετράει)
+const isReadyForMont = (o) => {
+  if (!o || o.installation !== 'ΝΑΙ') return false;
+  const m = o.phases?.montDoor;
+  if (!m?.active || m.done) return false;
+  return ['laser','cases','montSasi','vafio'].every(k => !o.phases?.[k]?.active || o.phases?.[k]?.done);
+};
+
 // Helpers για ανοιγόμενο τζάμι (ίδια λογική με σταθερό αλλά ξεχωριστή διαδικασία)
 const hasGlass = (o) => !!(o && o.glassDim && String(o.glassDim).trim());
 const isGlassPending = (o) => hasGlass(o) && !o.glassDone;
@@ -169,16 +177,6 @@ const buildSmsOrderMessage = (o) => {
 };
 const messageFor = (o) => o?.status === 'READY' ? buildReadyMessage(o) : buildOrderMessage(o);
 const smsMessageFor = (o) => o?.status === 'READY' ? buildReadyMessage(o) : buildSmsOrderMessage(o);
-const openViber = async (phone, msg) => {
-  const n = normalizePhone(phone); if (!n) return false;
-  if (Platform.OS === 'web') {
-    let copied = false;
-    try { await navigator.clipboard.writeText(msg); copied = true; } catch {}
-    window.open(`viber://chat?number=%2B${n}`,'_blank');
-    return copied;
-  }
-  return false;
-};
 const openEmail = (email, msg, orderNo) => {
   if (!email) return;
   if (Platform.OS === 'web') {
@@ -195,12 +193,24 @@ const isGreekMobile = (p) => {
   const stripped = d.replace(/^(0030|30)/, '').replace(/^0+/, '');
   return /^69\d{8}$/.test(stripped);
 };
-const sendSmsViaYuboto = async (phone, message) => {
+const sendSmsViaYuboto = async (phone, message, orderId=null) => {
   try {
     const resp = await fetch('/.netlify/functions/send-sms', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: normalizePhone(phone), message }),
+      body: JSON.stringify({ phone: normalizePhone(phone), message, orderId }),
+    });
+    return await resp.json();
+  } catch (e) {
+    return { success: false, error: 'Σφάλμα σύνδεσης: ' + (e?.message || e) };
+  }
+};
+const sendViberViaYuboto = async (phone, message, orderId=null, customerId=null) => {
+  try {
+    const resp = await fetch('/.netlify/functions/send-viber', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: normalizePhone(phone), message, orderId, customerId }),
     });
     return await resp.json();
   } catch (e) {
@@ -254,6 +264,57 @@ function BlinkingReadyBadge({ onPress }) {
         <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:14}}>🟡 ΕΤΟΙΜΗ ΓΙΑ ΜΕΤΑΦΟΡΑ — ΠΑΤΗΣΕ ΕΔΩ</Text>
       </Animated.View>
     </TouchableOpacity>
+  );
+}
+
+// ── PhaseBadges — badges σταδίων παραγωγής (κοινό για καρτέλα, αναζήτηση, modal) ──
+function PhaseBadges({ order }) {
+  if (!order || order.status !== 'PROD' || !order.phases) return null;
+  const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',epend:'ΕΠΕΝ.',montDoor:'ΜΟΝΤ.'};
+  const coatCount = (order.coatings||[]).filter(c=>c&&String(c).trim()).length;
+  return (
+    <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:4}}>
+      {PHASES.map(ph=>{
+        const phase = order.phases[ph.key];
+        if(!phase||!phase.active) return null;
+        if (ph.key === 'epend' && coatCount === 0) return null;
+        if (ph.key === 'montDoor' && order.installation !== 'ΝΑΙ') return null;
+        const showCoatTicks = ph.key === 'epend' && coatCount >= 2;
+        return (
+          <View key={ph.key} style={{alignItems:'center', gap:2}}>
+            <View style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
+              <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[ph.key]||ph.key}</Text>
+            </View>
+            {showCoatTicks && (
+              <View style={{flexDirection:'row', gap:3}}>
+                {[0,1].map(i => {
+                  const checked = phase.done || !!(order.coatingChecks && order.coatingChecks[String(i)]);
+                  return (
+                    <View key={i} style={{backgroundColor:checked?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:4,paddingVertical:1}}>
+                      <Text style={{color:'white',fontSize:11,fontWeight:'bold'}}>{checked?'✅':'☐'}{i+1}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        );
+      })}
+      {order.stavera&&order.stavera.some(s=>s&&s.dim)&&(
+        <View style={{alignItems:'center', gap:2, marginLeft:6}}>
+          <View style={{backgroundColor:order.staveraDone?'#2e7d32':'#ff9800',borderRadius:6,paddingHorizontal:10,paddingVertical:4,borderWidth:1.5,borderColor:'#1a1a1a'}}>
+            <Text style={{color:'white',fontSize:13,fontWeight:'bold'}}>{order.staveraDone?'✅':'⏳'} 📐 ΣΤΑΘ.</Text>
+          </View>
+        </View>
+      )}
+      {hasGlass(order)&&(
+        <View style={{alignItems:'center', gap:2}}>
+          <View style={{backgroundColor:order.glassDone?'#2e7d32':'#ff9800',borderRadius:6,paddingHorizontal:10,paddingVertical:4,borderWidth:1.5,borderColor:'#1a1a1a'}}>
+            <Text style={{color:'white',fontSize:13,fontWeight:'bold'}}>{order.glassDone?'✅':'⏳'} 🪟 ΤΖ.</Text>
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -490,12 +551,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [readySearch, setReadySearch] = useState('');
 
   const [printSelected, setPrintSelected] = useState({});
+  const [montReadyFilter, setMontReadyFilter] = useState(false);
   const [printPreview, setPrintPreview] = useState({ visible:false, phaseKey:null, orders:[], copies:1 });
   const [pendingChanges, setPendingChanges] = useState([]); // καλάθι αλλαγών done/undone
   const [lastChangedIds, setLastChangedIds] = useState([]); // τελευταία παρτίδα αλλαγών
   const [prodBatch, setProdBatch] = useState([]); // καλάθι παραγγελιών για ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ
   const [programModal, setProgramModal] = useState({ visible: false, programNo: '' }); // modal αριθμού προγράμματος
-  const [printProgramModal, setPrintProgramModal] = useState({ visible: false, programs: [], selected: null, phaseKey: null }); // modal επιλογής programNo για εκτύπωση ΠΡΟΓΡΑΜΜΑ / φάσεων
+  const [printProgramModal, setPrintProgramModal] = useState({ visible: false, programs: [], selected: null, phaseKey: null, readyOnly: false }); // modal επιλογής programNo για εκτύπωση ΠΡΟΓΡΑΜΜΑ / φάσεων
   const panPosition = useRef({ x: 0, y: 0 });
   const [panPos, setPanPos] = useState({ x: 0, y: 0 });
   const isDragging = useRef(false);
@@ -505,6 +567,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [showCustomerLookup, setShowCustomerLookup] = useState(false);
   const [customerLookupSearch, setCustomerLookupSearch] = useState('');
   const [lookupCustomerId, setLookupCustomerId] = useState(null);
+  const [lookupCustInfo, setLookupCustInfo] = useState(false);
   const [lookupOrderModal, setLookupOrderModal] = useState({ visible: false, order: null });
   const [custPanPos, setCustPanPos] = useState({ x: 0, y: 0 });
   const custIsDragging = useRef(false);
@@ -617,9 +680,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     showSmsToast(`Αφαιρέθηκε σημείωση ${labels[channel]||channel} από #${order.orderNo||'?'}`, 'info');
   };
   const pickViberPhone = (c) => c?.phoneViber || '';
-  const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phone3].find(isGreekMobile) || '';
+  const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phone3, c?.phoneViber].find(isGreekMobile) || '';
   const confirmSend = (channel, order, action) => {
-    const labels = { viber: 'Viber', email: 'Email', sms: 'SMS + Viber' };
+    const labels = { viber: 'Viber', email: 'Email', sms: 'SMS' };
     setConfirmModal({
       visible: true,
       title: `Αποστολή ${labels[channel] || channel}`,
@@ -632,38 +695,29 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const c = findCustomerOf(o);
     const p = pickViberPhone(c);
     if (!p) return;
-    const copied = await openViber(p, messageFor(o));
+    if (c?.viberOptOut) return showSmsToast('Ο πελάτης έχει απεγγραφεί από Viber.', 'err');
+    showSmsToast('Αποστολή Viber...', 'info');
+    const res = await sendViberViaYuboto(p, messageFor(o), o.id, c?.id);
+    if (!res?.success) {
+      showSmsToast('✕ Αποτυχία Viber: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
+      return;
+    }
     markNotified(o.id, 'viber');
-    showSmsToast(copied ? '✓ Viber: μήνυμα αντιγράφηκε. Paste με Ctrl+V' : '⚠ Άνοιξε Viber — δεν αντιγράφηκε το μήνυμα', copied ? 'ok' : 'info');
+    showSmsToast(res.test ? '✓ Test mode: Viber OK.' : '✓ Viber στάλθηκε.', 'ok');
   };
   const notifyEmail = (o) => { const c = findCustomerOf(o); if (!c?.email) return; openEmail(c.email, messageFor(o), o.orderNo); markNotified(o.id, 'email'); };
   const notifySms = async (o) => {
     const c = findCustomerOf(o);
     const p = pickSmsPhone(c);
     if (!p) return showSmsToast('Δεν υπάρχει ελληνικό κινητό στον πελάτη.', 'err');
-    const viberP = pickViberPhone(c);
-    let viberCopied = false;
-    if (viberP && Platform.OS === 'web') {
-      try { await navigator.clipboard.writeText(messageFor(o)); viberCopied = true; } catch {}
-    }
     showSmsToast('Αποστολή SMS...', 'info');
-    const res = await sendSmsViaYuboto(p, smsMessageFor(o));
+    const res = await sendSmsViaYuboto(p, smsMessageFor(o), o.id);
     if (!res?.success) {
       showSmsToast('✕ Αποτυχία SMS: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
       return;
     }
     markNotified(o.id, 'sms');
-    if (!viberP) {
-      showSmsToast(res.test ? '✓ Test mode: SMS OK (χωρίς Viber).' : '✓ SMS στάλθηκε. Δεν υπάρχει τηλέφωνο Viber.', 'ok');
-      return;
-    }
-    if (Platform.OS === 'web') {
-      const n = normalizePhone(viberP);
-      if (n) window.open(`viber://chat?number=%2B${n}`, '_blank');
-    }
-    markNotified(o.id, 'viber');
-    const tag = res.test ? '✓ Test SMS OK + Viber: ' : '✓ SMS στάλθηκε. Viber: ';
-    showSmsToast(tag + (viberCopied ? 'μήνυμα αντιγράφηκε — paste με Ctrl+V' : 'άνοιξε — αντιγράψτε το μήνυμα χειροκίνητα'), 'ok');
+    showSmsToast(res.test ? '✓ Test mode: SMS OK.' : '✓ SMS στάλθηκε.', 'ok');
   };
 
   const resetForm = () => { setCustomForm(INIT_FORM); setCustomerSearch(''); setSelectedCustomer(null); setShowCustomerList(false); setEditingOrder(null); };
@@ -993,10 +1047,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const staveraEntries = (o.stavera||[]).filter(s=>s&&s.dim);
         const staveraStr = staveraEntries.map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ');
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"";
+        const ependCheck = (!isEpend && allCoatings.length>0 && o.phases?.epend?.done) ? ` <span style="color:#00C851;font-size:22px;font-weight:900">✔</span>` : '';
         const notesLines = [];
         if (o.notes) notesLines.push(`<span style="color:#000">${formatNotesHtml(o.notes)}</span>`);
-        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${coatingsHtml(exo)}</span>`);
-        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${coatingsHtml(mesa)}</span>`);
+        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${coatingsHtml(exo)}${mesa.length===0?ependCheck:''}</span>`);
+        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${coatingsHtml(mesa)}${ependCheck}</span>`);
         if (staveraStr) notesLines.push(`<span style="color:#6a0dad;font-weight:bold">📐 ${staveraStr}</span>`);
         if (tzami) notesLines.push(`<span style="color:#555">🪟 ${tzami}</span>`);
         const notesCell = notesLines.join('<br>');
@@ -2254,12 +2309,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const isStd = order.orderType==='ΤΥΠΟΠΟΙΗΜΕΝΗ';
     const isReadyForTransfer = isOrderReadyForTransfer(order);
     const cust = !isArchive ? findCustomerOf(order) : null;
-    const viberOk = !!pickViberPhone(cust);
+    const viberBlocked = !!pickViberPhone(cust) && !!cust?.viberOptOut;
+    const viberOk = !!pickViberPhone(cust) && !cust?.viberOptOut;
     const emailOk = !!cust?.email;
     const smsOk = !!pickSmsPhone(cust);
-    const anyChannel = viberOk || emailOk || smsOk;
+    const anyChannel = viberOk || viberBlocked || emailOk || smsOk;
     const notif = order.notified || {};
+    const msgStatus = order.msgStatus || {};
     const shortDate = (ts) => ts ? `${String(new Date(ts).getDate()).padStart(2,'0')}/${String(new Date(ts).getMonth()+1).padStart(2,'0')}` : '';
+    const statusMark = (ch) => { const s = msgStatus[ch]?.status; if (s==='read') return <Text style={{color:'#4fc3f7', fontSize:10, fontWeight:'bold'}}>✓✓</Text>; if (s==='delivered') return <Text style={{color:'#cfd8dc', fontSize:10, fontWeight:'bold'}}>✓✓</Text>; if (s==='failed') return <Text style={{color:'#ffcdd2', fontSize:10, fontWeight:'bold'}}>✕</Text>; return null; };
     return (
         <TouchableOpacity key={order.id} onLongPress={()=>!isArchive&&order.status==='PENDING'&&editOrder(order)} delayLongPress={1000} activeOpacity={0.7} style={[styles.orderCard,{borderLeftColor:bc, backgroundColor: isProd?'#e8f5e9':'white', ...(searchQuery && {borderTopWidth:2, borderTopColor:'#007AFF', borderBottomWidth:2, borderBottomColor:'#007AFF', borderRightWidth:2, borderRightColor:'#007AFF'})}]}>
         <View style={[styles.cardContent, {flexDirection:'row'}]}>
@@ -2308,62 +2366,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               {fmtDate(order.prodAt)&&<Text style={[styles.dateChip,{fontSize:12}]}>🔨 {fmtDate(order.prodAt)}</Text>}
               {fmtDate(order.readyAt)&&<Text style={[styles.dateChip,{fontSize:12}]}>✅ {fmtDate(order.readyAt)}</Text>}
             </View>
-            {isProd&&order.phases&&(
-              <View style={{flexDirection:'row',flexWrap:'wrap',gap:4,marginTop:4}}>
-                {PHASES.map(ph=>{
-                  const phase = order.phases[ph.key];
-                  if(!phase||!phase.active) return null;
-                  // Για ΕΠΕΝΔΥΣΕΙΣ: το badge εμφανίζεται μόνο αν η παραγγελία έχει πραγματικά επενδύσεις
-                  if (ph.key === 'epend' && !(order.coatings && order.coatings.filter(c => c && String(c).trim()).length > 0)) return null;
-                  // Για ΜΟΝΤΑΡΙΣΜΑ: το badge εμφανίζεται μόνο αν η παραγγελία έχει installation='ΝΑΙ'
-                  if (ph.key === 'montDoor' && order.installation !== 'ΝΑΙ') return null;
-                  const labels = {laser:'LASER',cases:'ΚΑΣΕΣ',montSasi:'ΣΑΣΙ',vafio:'ΒΑΦΕΙΟ',epend:'ΕΠΕΝ.',montDoor:'ΜΟΝΤ.'};
-                  const coatCount = (order.coatings||[]).filter(c=>c&&String(c).trim()).length;
-                  const showCoatTicks = ph.key === 'epend' && coatCount >= 2;
-                  return (
-                    <View key={ph.key} style={{alignItems:'center', gap:2}}>
-                      <View style={{backgroundColor:phase.done?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:6,paddingVertical:2}}>
-                        <Text style={{color:'white',fontSize:12,fontWeight:'bold'}}>{phase.done?'✅':'⏳'} {labels[ph.key]||ph.key}</Text>
-                      </View>
-                      {showCoatTicks && (
-                        <View style={{flexDirection:'row', gap:3}}>
-                          {[0,1].map(i => {
-                            const checked = phase.done || !!(order.coatingChecks && order.coatingChecks[String(i)]);
-                            return (
-                              <View key={i} style={{backgroundColor:checked?'#2e7d32':'#ff9800',borderRadius:4,paddingHorizontal:4,paddingVertical:1}}>
-                                <Text style={{color:'white',fontSize:11,fontWeight:'bold'}}>{checked?'✅':'☐'}{i+1}</Text>
-                              </View>
-                            );
-                          })}
-                        </View>
-                      )}
-                    </View>
-                  );
-                })}
-                {order.stavera&&order.stavera.some(s=>s&&s.dim)&&(
-                  <View style={{alignItems:'center', gap:2, marginLeft:6}}>
-                    <View style={{backgroundColor:order.staveraDone?'#2e7d32':'#ff9800',borderRadius:6,paddingHorizontal:10,paddingVertical:4,borderWidth:1.5,borderColor:'#1a1a1a'}}>
-                      <Text style={{color:'white',fontSize:13,fontWeight:'bold'}}>{order.staveraDone?'✅':'⏳'} 📐 ΣΤΑΘ.</Text>
-                    </View>
-                  </View>
-                )}
-                {hasGlass(order)&&(
-                  <View style={{alignItems:'center', gap:2}}>
-                    <View style={{backgroundColor:order.glassDone?'#2e7d32':'#ff9800',borderRadius:6,paddingHorizontal:10,paddingVertical:4,borderWidth:1.5,borderColor:'#1a1a1a'}}>
-                      <Text style={{color:'white',fontSize:13,fontWeight:'bold'}}>{order.glassDone?'✅':'⏳'} 🪟 ΤΖ.</Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
+            <PhaseBadges order={order} />
             {isReadyForTransfer && <View style={{marginTop:8}}><BlinkingReadyBadge onPress={()=>transferOrderToReady(order.id)} /></View>}
           </View>
         </View>
         {!isArchive && anyChannel && (
           <View style={{justifyContent:'center', paddingHorizontal:6, paddingVertical:6, borderRightWidth:1, borderRightColor:'#e0e0e0', gap:4, minWidth:95}}>
-            <TouchableOpacity disabled={!viberOk} onPress={()=>confirmSend('viber',order,()=>notifyViber(order))} onLongPress={()=>clearNotified(order.id,'viber')} delayLongPress={2000} style={{backgroundColor: viberOk?'#7360f2':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
-              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.viber?'✓ ':'📞 '}Viber</Text>
-              {notif.viber && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.viber)}</Text>}
+            <TouchableOpacity disabled={!viberOk} onPress={()=>confirmSend('viber',order,()=>notifyViber(order))} onLongPress={()=>clearNotified(order.id,'viber')} delayLongPress={2000} style={{backgroundColor: viberBlocked?'#b71c1c':(viberOk?'#7360f2':'#ddd'), borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
+              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{viberBlocked?'🚫 ':notif.viber?'✓ ':'📞 '}Viber</Text>
+              {!viberBlocked && notif.viber && <View style={{flexDirection:'row', alignItems:'center', gap:3}}><Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.viber)}</Text>{statusMark('viber')}</View>}
+              {viberBlocked && <Text style={{color:'#fff', fontSize:9}}>απεγγράφηκε</Text>}
             </TouchableOpacity>
             <TouchableOpacity disabled={!emailOk} onPress={()=>confirmSend('email',order,()=>notifyEmail(order))} onLongPress={()=>clearNotified(order.id,'email')} delayLongPress={2000} style={{backgroundColor: emailOk?'#0288d1':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
               <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.email?'✓ ':'✉️ '}Email</Text>
@@ -2371,7 +2383,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             </TouchableOpacity>
             <TouchableOpacity disabled={!smsOk} onPress={()=>confirmSend('sms',order,()=>notifySms(order))} onLongPress={()=>clearNotified(order.id,'sms')} delayLongPress={2000} style={{backgroundColor: smsOk?'#1565C0':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
               <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.sms?'✓ ':'📱 '}SMS</Text>
-              {notif.sms && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.sms)}</Text>}
+              {notif.sms && <View style={{flexDirection:'row', alignItems:'center', gap:3}}><Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.sms)}</Text>{statusMark('sms')}</View>}
             </TouchableOpacity>
           </View>
         )}
@@ -2840,17 +2852,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#e8f0fe', borderRadius:8, borderWidth:1, borderColor:'#4a90d9'}}
               onPress={async ()=>{
-                const prodWithProgram = specialOrders.filter(o=>o.status==='PROD' && o.programNo);
+                const readyOnly = activeProdPhase==='montDoor' && montReadyFilter;
+                const prodWithProgram = specialOrders.filter(o=>o.status==='PROD' && o.programNo && (!readyOnly || isReadyForMont(o)));
                 if (prodWithProgram.length === 0) {
-                  if (Platform.OS==='web') window.alert('Δεν υπάρχουν παραγγελίες στην παραγωγή με αριθμό προγράμματος.');
-                  else Alert.alert("Προσοχή","Δεν υπάρχουν παραγγελίες στην παραγωγή με αριθμό προγράμματος.");
+                  const msg = readyOnly ? 'Δεν υπάρχουν έτοιμες προς μοντάρισμα παραγγελίες με αριθμό προγράμματος.' : 'Δεν υπάρχουν παραγγελίες στην παραγωγή με αριθμό προγράμματος.';
+                  if (Platform.OS==='web') window.alert(msg);
+                  else Alert.alert("Προσοχή", msg);
                   return;
                 }
                 // Έλεγχος unique programNo
                 const uniquePrograms = [...new Set(prodWithProgram.map(o=>o.programNo))];
                 if (uniquePrograms.length >= 2) {
                   // Πολλαπλά προγράμματα → άνοιγμα modal επιλογής, με την τρέχουσα φάση ώστε να εκτυπωθούν οι σωστές σελίδες
-                  setPrintProgramModal({ visible: true, programs: uniquePrograms, selected: null, phaseKey: activeProdPhase });
+                  setPrintProgramModal({ visible: true, programs: uniquePrograms, selected: null, phaseKey: activeProdPhase, readyOnly });
                   return;
                 }
                 // Μόνο ένα πρόγραμμα → εκτύπωση απευθείας
@@ -2902,6 +2916,21 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               }}>
               <Text style={{fontSize:14,fontWeight:'bold',color:'#1a1a2e'}}>📋 ΑΡ. ΠΡΟΓΡΑΜΜΑΤΟΣ</Text>
             </TouchableOpacity>
+            {activeProdPhase==='montDoor' && (
+              <TouchableOpacity
+                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor: montReadyFilter?'#00C851':'#e8f5e9', borderRadius:8, borderWidth:1, borderColor:'#00C851'}}
+                onPress={()=>{
+                  const next = !montReadyFilter;
+                  setMontReadyFilter(next);
+                  setPrintSelected(prev=>{
+                    const upd = {...prev};
+                    phaseOrders.filter(isReadyForMont).forEach(o=>{ upd[o.id] = next; });
+                    return upd;
+                  });
+                }}>
+                <Text style={{fontSize:14,fontWeight:'bold',color: montReadyFilter?'white':'#1b5e20'}}>✅ ΕΤΟΙΜΑ ΠΡΟΣ ΜΟΝΤΑΡΙΣΜΑ</Text>
+              </TouchableOpacity>
+            )}
           </View>
         );
       };
@@ -3046,7 +3075,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 {prodOrders.length===0?(
                   <Text style={{textAlign:'center',color:'#999',padding:20}}>Καμία παραγγελία στην παραγωγή</Text>
                 ):(
-                  prodOrders.filter(o=>matchesSearch(o, prodSearch)).map(o=>renderProdPhaseCard(o, ph.key, prodSearch))
+                  prodOrders.filter(o=>matchesSearch(o, prodSearch)).filter(o=>!(ph.key==='montDoor' && montReadyFilter) || isReadyForMont(o)).map(o=>renderProdPhaseCard(o, ph.key, prodSearch))
                 )}
               </View>
             ))}
@@ -3396,12 +3425,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 onPress={async()=>{
                   const selectedPNo = printProgramModal.selected;
                   const phaseKey = printProgramModal.phaseKey;
+                  const readyOnly = printProgramModal.readyOnly;
                   setPrintProgramModal({visible:false, programs:[], selected:null, phaseKey:null});
                   
                   if (phaseKey) {
                     // Εκτύπωση συγκεκριμένης φάσης με φιλτράρισμα programNo
                     const prodOrders = specialOrders.filter(o=>o.status==='PROD');
-                    const filteredOrders = prodOrders.filter(o=>o.programNo===selectedPNo && o.phases?.[phaseKey]?.active);
+                    const filteredOrders = prodOrders.filter(o=>o.programNo===selectedPNo && o.phases?.[phaseKey]?.active && (!readyOnly || isReadyForMont(o)));
                     if (filteredOrders.length === 0) {
                       Alert.alert("Προσοχή", `Δεν υπάρχουν παραγγελίες με πρόγραμμα ${selectedPNo} σε αυτή τη φάση.`);
                       return;
@@ -3453,9 +3483,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               [c.phone, c.phone2, c.phone3, c.phoneViber].some(p => p && String(p).toLowerCase().includes(q))
             ).slice(0, 40);
         const selectedCust = lookupCustomerId ? (customers || []).find(c => c.id === lookupCustomerId) : null;
-        const allOrders = [...(specialOrders || []), ...(soldSpecialOrders || [])];
+        const activeOrders = activeSection === 'archive' ? (soldSpecialOrders || []) : (specialOrders || []);
         const customerOrders = selectedCust
-          ? allOrders
+          ? activeOrders
               .filter(o => o.customer && selectedCust.name && o.customer.trim().toLowerCase() === selectedCust.name.trim().toLowerCase())
               .sort((a,b) => (b.createdAt||0) - (a.createdAt||0))
           : [];
@@ -3497,15 +3527,42 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               {/* Selected customer header */}
               {selectedCust && (
                 <View style={{backgroundColor:'#e3f2fd', borderRadius:8, padding:10, marginBottom:8, flexDirection:'row', alignItems:'center', justifyContent:'space-between'}}>
-                  <View style={{flex:1}}>
-                    <Text style={{fontSize:15, fontWeight:'bold', color:'#0d47a1'}}>👤 {selectedCust.name}</Text>
-                    {selectedCust.phone ? <Text style={{fontSize:12, color:'#555'}}>📞 {selectedCust.phone}</Text> : null}
-                    <Text style={{fontSize:11, color:'#777', marginTop:2}}>{customerOrders.length} παραγγελ{customerOrders.length===1?'ία':'ίες'}</Text>
+                  <View style={{flex:1, flexDirection:'row', alignItems:'center', gap:8}}>
+                    <View style={{flex:1}}>
+                      <Text style={{fontSize:15, fontWeight:'bold', color:'#0d47a1'}}>👤 {selectedCust.name}</Text>
+                      {selectedCust.phone ? <Text style={{fontSize:12, color:'#555'}}>📞 {selectedCust.phone}</Text> : null}
+                      <Text style={{fontSize:11, color:'#777', marginTop:2}}>{customerOrders.length} παραγγελ{customerOrders.length===1?'ία':'ίες'}</Text>
+                    </View>
+                    <TouchableOpacity onPress={()=>setLookupCustInfo(true)} style={{backgroundColor:'#0d47a1', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}>
+                      <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>ℹ ΣΤΟΙΧΕΙΑ</Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity onPress={()=>setLookupCustomerId(null)} style={{padding:6}}>
+                  <TouchableOpacity onPress={()=>{setLookupCustInfo(false);setLookupCustomerId(null);}} style={{padding:6}}>
                     <Text style={{color:'#0d47a1', fontWeight:'bold', fontSize:12}}>← Πίσω</Text>
                   </TouchableOpacity>
                 </View>
+              )}
+
+              {lookupCustInfo && selectedCust && (
+                <Modal visible transparent animationType="fade" onRequestClose={()=>setLookupCustInfo(false)}>
+                  <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.55)', justifyContent:'center', alignItems:'center', padding:20}}>
+                    <View style={{backgroundColor:'white', borderRadius:14, width:'92%', maxWidth:460, padding:18}}>
+                      <Text style={{fontSize:17, fontWeight:'bold', color:'#0d47a1', marginBottom:12}}>👤 ΣΤΟΙΧΕΙΑ ΠΕΛΑΤΗ</Text>
+                      <Text style={{fontSize:15, fontWeight:'bold', color:'#1a1a1a', marginBottom:6}}>{selectedCust.name}</Text>
+                      {selectedCust.identifier ? <Text style={{fontSize:13, color:'#555', marginBottom:3}}>🏷 {selectedCust.identifier}</Text> : null}
+                      {[selectedCust.phone, selectedCust.phone2, selectedCust.phone3].filter(Boolean).map((p,i)=>(
+                        <Text key={i} style={{fontSize:13, color:'#333', marginBottom:3}}>📞 {p}</Text>
+                      ))}
+                      {selectedCust.phoneViber ? <Text style={{fontSize:13, color: selectedCust.viberOptOut?'#c62828':'#7360f2', fontWeight:'bold', marginBottom:3}}>{selectedCust.viberOptOut?'🚫 ':'📱 '}Viber: {selectedCust.phoneViber}{selectedCust.viberOptOut?' (απεγγράφηκε)':''}</Text> : null}
+                      {selectedCust.email ? <Text style={{fontSize:13, color:'#333', marginBottom:3}}>✉️ {selectedCust.email}</Text> : null}
+                      {selectedCust.city ? <Text style={{fontSize:13, color:'#333', marginBottom:3}}>📍 {selectedCust.city}</Text> : null}
+                      {selectedCust.profession ? <Text style={{fontSize:13, color:'#333', marginBottom:3}}>💼 {selectedCust.profession}</Text> : null}
+                      <TouchableOpacity onPress={()=>setLookupCustInfo(false)} style={{marginTop:16, backgroundColor:'#0d47a1', borderRadius:10, padding:12, alignItems:'center'}}>
+                        <Text style={{color:'white', fontWeight:'bold'}}>ΚΛΕΙΣΙΜΟ</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </Modal>
               )}
 
               {/* Lists area */}
@@ -3522,7 +3579,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       <Text style={{color:'#aaa', fontSize:12, textAlign:'center', padding:20}}>Δεν βρέθηκαν πελάτες.</Text>
                     )}
                     {filteredCustomers.map(c => {
-                      const orderCount = allOrders.filter(o => o.customer && c.name && o.customer.trim().toLowerCase() === c.name.trim().toLowerCase()).length;
+                      const orderCount = activeOrders.filter(o => o.customer && c.name && o.customer.trim().toLowerCase() === c.name.trim().toLowerCase()).length;
                       return (
                         <TouchableOpacity key={c.id}
                           onPress={()=>setLookupCustomerId(c.id)}
@@ -3568,6 +3625,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                             {createdFmt ? <Text style={{fontSize:11, color:'#888'}}>📅 {createdFmt}</Text> : null}
                             {o.lock ? <Text style={{fontSize:11, color:'#555'}} numberOfLines={1}>🔒 {o.lock}</Text> : null}
                           </View>
+                          <PhaseBadges order={o} />
                         </TouchableOpacity>
                       );
                     })}
@@ -3633,6 +3691,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       <Text style={{fontSize:12, color:'#555'}}>📅 Καταχώρηση: <Text style={{fontWeight:'bold'}}>{createdFmt}</Text></Text>
                       <Text style={{fontSize:12, color:'#555'}}>🚚 Παράδοση: <Text style={{fontWeight:'bold'}}>{deliveryFmt}</Text></Text>
                     </View>
+
+                    <PhaseBadges order={o} />
 
                     {/* Πελάτης */}
                     <View style={{borderWidth:1, borderColor:'#ddd', borderRadius:8, padding:10, marginBottom:10}}>
@@ -4422,7 +4482,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               const cust = findCustomerOf(o);
               const vP = pickViberPhone(cust);
               const sP = pickSmsPhone(cust);
-              const hasViber = !!vP;
+              const viberOptedOut = !!vP && !!cust?.viberOptOut;
+              const hasViber = !!vP && !cust?.viberOptOut;
               const hasEmail = !!cust?.email;
               const hasSms = !!sP;
               const contactLine = [cust?.phone, cust?.phone2, cust?.phone3, cust?.phoneViber && `V:${cust.phoneViber}`].filter(Boolean).join('  ');
@@ -4448,7 +4509,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   </View>
                   {(!hasViber||!hasEmail||!hasSms) && (
                     <Text style={{fontSize:11, color:'#888', textAlign:'center', marginBottom:8}}>
-                      {!hasViber?'⚠️ Λείπει τηλέφωνο Viber. ':''}{!hasEmail?'⚠️ Λείπει email. ':''}{!hasSms?'⚠️ Λείπει κινητό (SMS).':''}
+                      {viberOptedOut?'🚫 Ο πελάτης απεγγράφηκε από Viber. ':(!hasViber?'⚠️ Λείπει τηλέφωνο Viber. ':'')}{!hasEmail?'⚠️ Λείπει email. ':''}{!hasSms?'⚠️ Λείπει κινητό (SMS).':''}
                     </Text>
                   )}
                   <TouchableOpacity onPress={()=>setNotifyModal({visible:false,order:null})}
@@ -4486,9 +4547,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           {/* 🔍 ΠΕΛΑΤΕΣ — αναζήτηση παραγγελιών ανά πελάτη */}
           <TouchableOpacity
             onPress={()=>setShowCustomerLookup(v=>!v)}
-            style={{backgroundColor: showCustomerLookup?'#1565c0':'#0d47a1', borderRadius:10, padding:12, alignItems:'center', gap:4, borderWidth:2, borderColor: showCustomerLookup?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.15)'}}>
+            style={{backgroundColor: activeSection==='archive' ? (showCustomerLookup?'#777':'#555') : (showCustomerLookup?'#1565c0':'#0d47a1'), borderRadius:10, padding:12, alignItems:'center', gap:4, borderWidth:2, borderColor: showCustomerLookup?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.15)'}}>
             <Text style={{fontSize:22}}>🔍</Text>
-            <Text style={{color:'white', fontSize:10, fontWeight:'bold', textAlign:'center', lineHeight:13}}>ΠΕΛΑΤΕΣ</Text>
+            <Text style={{color:'white', fontSize:10, fontWeight:'bold', textAlign:'center', lineHeight:13}}>{activeSection==='archive' ? 'ΠΕΛΑΤΕΣ ΑΡΧΕΙΟ' : 'ΠΕΛΑΤΕΣ'}</Text>
           </TouchableOpacity>
         </View>
         {/* CONTENT 80% — ΠΑΡΑΓΩΓΗ και ΚΑΤΑΧΩΡΗΜΕΝΕΣ βγαίνουν εκτός ScrollView για flex:1 */}

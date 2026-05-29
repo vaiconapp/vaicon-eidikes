@@ -283,7 +283,13 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
             <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Τηλ #1" keyboardType="phone-pad" value={form.phone} onChangeText={v => setForm({...form, phone:v})} />
             <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Τηλ #2" keyboardType="phone-pad" value={form.phone2} onChangeText={v => setForm({...form, phone2:v})} />
             <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Τηλ #3" keyboardType="phone-pad" value={form.phone3} onChangeText={v => setForm({...form, phone3:v})} />
-            <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Viber" keyboardType="phone-pad" value={form.phoneViber} onChangeText={v => setForm({...form, phoneViber:v})} />
+            {(editingId && customers.find(c=>c.id===editingId)?.viberOptOut) ? (
+              <View style={[styles.input, {flex:1, marginBottom:0, backgroundColor:'#ffebee', borderColor:'#c62828', borderWidth:1.5, justifyContent:'center'}]}>
+                <Text style={{color:'#c62828', fontWeight:'bold', fontSize:13}}>🚫 Απεγγραφή Viber</Text>
+              </View>
+            ) : (
+              <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Viber" keyboardType="phone-pad" value={form.phoneViber} onChangeText={v => setForm({...form, phoneViber:v})} />
+            )}
           </View>
           <TextInput style={styles.input} placeholder="Email (προαιρετικό)" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={v => setForm({...form, email:v})} />
           <TextInput style={styles.input} placeholder="Αναγνωριστικό (π.χ. Γιώργης Μαραθώνας)" value={form.identifier} onChangeText={v => setForm({...form, identifier:v})} />
