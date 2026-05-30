@@ -557,9 +557,11 @@ export default function App() {
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setBrAuthPwd(''); setBrAuthError(false); setRestoreAuthOpen(true); }}>
               <Text style={styles.menuItemText}>♻️ ΕΠΑΝΑΦΟΡΑ</Text>
             </TouchableOpacity>
+            {currentUser?.role === 'admin' && (
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff7ec' }]} onPress={() => { setMenuOpen(false); setAdminAuthPwd(''); setAdminAuthError(false); setAdminAuthOpen(true); }}>
               <Text style={[styles.menuItemText, { color: '#E65100' }]}>🛡️ ΔΙΑΧΕΙΡΙΣΤΗΣ</Text>
             </TouchableOpacity>
+            )}
             </>)}
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); fetchData(); Alert.alert("VAICON", "Ανανέωση δεδομένων..."); }}>
               <Text style={styles.menuItemText}>🔄 ΑΝΑΝΕΩΣΗ</Text>
