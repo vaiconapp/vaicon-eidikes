@@ -499,6 +499,7 @@ export default function App() {
         <Text style={styles.headerTitle}>VAICON</Text>
         <Text style={styles.headerSubtitle}>ΕΙΔΙΚΕΣ ΠΑΡΑΓΓΕΛΙΕΣ</Text>
         <Text style={styles.headerVersion}>{APP_VERSION}</Text>
+        {currentUser?.username ? <Text style={styles.headerUser}>👤 {currentUser.username}</Text> : null}
         <View style={{ flex: 1 }} />
         <TouchableOpacity style={styles.menuBtn} onPress={() => setMenuOpen(true)}>
           <Text style={styles.menuIcon}>☰</Text>
@@ -830,6 +831,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: 'white', fontSize: 15, fontWeight: '900', fontStyle: 'italic', letterSpacing: 2 },
   headerSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   headerVersion: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.25)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, letterSpacing: 0.5 },
+  headerUser: { color: 'white', fontSize: 11, fontWeight: '700', backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, letterSpacing: 0.5 },
   menuBtn: { padding: 4 },
   menuIcon: { color: 'white', fontSize: 22 },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start', alignItems: 'flex-end' },
