@@ -493,9 +493,11 @@ export default function App() {
               <Text style={styles.menuItemText}>🔄 ΑΝΑΝΕΩΣΗ</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff0f0', marginTop: 12 }]} onPress={() => {
-              Alert.alert("🔐 Αποσύνδεση", "Θέλεις να αποσυνδεθείς;", [
+              const doLogout = () => { forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); setMenuOpen(false); };
+              if (Platform.OS === 'web') { if (window.confirm("Θέλεις να αποσυνδεθείς;")) doLogout(); }
+              else Alert.alert("🔐 Αποσύνδεση", "Θέλεις να αποσυνδεθείς;", [
                 { text: "ΑΚΥΡΟ", style: "cancel" },
-                { text: "ΑΠΟΣΥΝΔΕΣΗ", style: "destructive", onPress: () => { forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); setMenuOpen(false); } }
+                { text: "ΑΠΟΣΥΝΔΕΣΗ", style: "destructive", onPress: doLogout }
               ]);
             }}>
               <Text style={[styles.menuItemText, { color: '#8B0000' }]}>🔐 ΑΠΟΣΥΝΔΕΣΗ</Text>
