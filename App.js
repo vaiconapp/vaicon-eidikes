@@ -22,6 +22,9 @@ const USER_DOMAIN = "@vaicon.local";
 const toEmail = (u) => String(u || '').trim().toLowerCase().replace(/\s+/g, '') + USER_DOMAIN;
 const roleForEmail = (e) => e.startsWith('admin') ? 'admin' : e.startsWith('guest') ? 'guest' : 'user';
 
+const APP_USERS = ['USER 10', 'USER 12', 'USER 14', 'USER 16', 'USER 18', 'GUEST', 'ADMIN'];
+const lockKey = (u) => String(u || '').toUpperCase().replace(/\s+/g, '');
+
 async function firebaseSignIn(email, password) {
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
     method: 'POST',
@@ -53,7 +56,7 @@ const forgetLogin = () => {
   try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_USER); } catch {}
 };
 
-function LoginScreen({ onSuccess }) {
+function LoginScreen({ onSuccess, locked = false }) {
   const [username, setUsername] = useState('');
   const [pwd, setPwd] = useState('');
   const [error, setError] = useState('');
@@ -66,6 +69,14 @@ function LoginScreen({ onSuccess }) {
     if (busy) return;
     const code = pwd.trim();
     if (!code) return;
+    if (locked) {
+      if (code === VAICON_PASSWORD) { onSuccess(); return; }
+      setBusy(true);
+      try { await firebaseSignIn('admin' + USER_DOMAIN, code); onSuccess(); }
+      catch { fail('Λάθος κωδικός διαχειριστή.'); }
+      finally { setBusy(false); }
+      return;
+    }
     if (code === VAICON_PASSWORD) { onSuccess({ username: 'ADMIN', role: 'admin', email: null }); return; }
     if (!username.trim()) { fail('Δώστε όνομα χρήστη.'); return; }
     const email = toEmail(username);
@@ -81,22 +92,24 @@ function LoginScreen({ onSuccess }) {
   };
 
   return (
-    <View style={loginStyles.bg}>
+    <View style={[loginStyles.bg, locked && { backgroundColor: '#E65100' }]}>
       <View style={loginStyles.card}>
         <View style={loginStyles.logoBox}>
-          <Text style={loginStyles.logoText}>VAICON</Text>
-          <Text style={loginStyles.logoSub}>Ειδικές Παραγγελίες</Text>
+          <Text style={[loginStyles.logoText, locked && { color: '#E65100' }]}>VAICON</Text>
+          <Text style={loginStyles.logoSub}>{locked ? '🔒 ΚΛΕΙΔΩΜΕΝΟ' : 'Ειδικές Παραγγελίες'}</Text>
         </View>
-        <Text style={loginStyles.label}>Όνομα Χρήστη</Text>
-        <TextInput
-          style={[loginStyles.input, { marginBottom: 12 }]}
-          value={username}
-          onChangeText={setUsername}
-          placeholder="π.χ. USER 10"
-          autoCapitalize="characters"
-          autoFocus
-        />
-        <Text style={loginStyles.label}>Κωδικός Πρόσβασης</Text>
+        {!locked && (<>
+          <Text style={loginStyles.label}>Όνομα Χρήστη</Text>
+          <TextInput
+            style={[loginStyles.input, { marginBottom: 12 }]}
+            value={username}
+            onChangeText={setUsername}
+            placeholder="π.χ. USER 10"
+            autoCapitalize="characters"
+            autoFocus
+          />
+        </>)}
+        <Text style={loginStyles.label}>{locked ? 'Owner Code' : 'Κωδικός Πρόσβασης'}</Text>
         <View style={loginStyles.inputRow}>
           <TextInput
             style={[loginStyles.input, error && loginStyles.inputError]}
@@ -104,6 +117,7 @@ function LoginScreen({ onSuccess }) {
             value={pwd}
             onChangeText={setPwd}
             placeholder="Κωδικός..."
+            autoFocus={locked}
             onSubmitEditing={handleLogin}
           />
           <TouchableOpacity style={loginStyles.eyeBtn} onPress={() => setShowPwd(v => !v)}>
@@ -111,11 +125,11 @@ function LoginScreen({ onSuccess }) {
           </TouchableOpacity>
         </View>
         {error ? <Text style={loginStyles.errorTxt}>❌ {error}</Text> : null}
-        <TouchableOpacity style={[loginStyles.btn, busy && { opacity: 0.6 }]} onPress={handleLogin} disabled={busy}>
-          <Text style={loginStyles.btnTxt}>{busy ? '...' : '🔓 ΕΙΣΟΔΟΣ'}</Text>
+        <TouchableOpacity style={[loginStyles.btn, locked && { backgroundColor: '#E65100' }, busy && { opacity: 0.6 }]} onPress={handleLogin} disabled={busy}>
+          <Text style={loginStyles.btnTxt}>{busy ? '...' : (locked ? '🔓 ΞΕΚΛΕΙΔΩΜΑ' : '🔓 ΕΙΣΟΔΟΣ')}</Text>
         </TouchableOpacity>
         <Text style={loginStyles.hint}>
-          Αυτή η συσκευή θα απομνημονεύσει την είσοδό σας.
+          {locked ? 'Η συσκευή κλειδώθηκε από τον διαχειριστή.' : 'Αυτή η συσκευή θα απομνημονεύσει την είσοδό σας.'}
         </Text>
       </View>
     </View>
@@ -192,6 +206,13 @@ export default function App() {
   const [pendingCustomer, setPendingCustomer] = useState(null);
   const [pendingCustomerCallback, setPendingCustomerCallback] = useState(null);
 
+  const [lockedUsers, setLockedUsers] = useState({});
+  const [ownerOverride, setOwnerOverride] = useState(false);
+  const [adminAuthOpen, setAdminAuthOpen] = useState(false);
+  const [adminAuthPwd, setAdminAuthPwd] = useState('');
+  const [adminAuthError, setAdminAuthError] = useState(false);
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+
   useEffect(() => {
     if (isLoggedIn) fetchData();
     else setLoading(false);
@@ -225,6 +246,52 @@ export default function App() {
       sources.forEach(es => es.close());
     };
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const load = async () => {
+      try { const r = await fetch(`${FIREBASE_URL}/app_lock.json`); setLockedUsers((await r.json()) || {}); } catch {}
+    };
+    load();
+    if (Platform.OS === 'web' && typeof EventSource !== 'undefined') {
+      const es = new EventSource(`${FIREBASE_URL}/app_lock.json`);
+      es.addEventListener('put', load);
+      es.addEventListener('patch', load);
+      const safety = setInterval(load, 15000);
+      return () => { es.close(); clearInterval(safety); };
+    }
+    const safety = setInterval(load, 5000);
+    return () => clearInterval(safety);
+  }, [isLoggedIn]);
+
+  const myLockKey = currentUser ? lockKey(currentUser.username) : null;
+  const amLocked = !!(myLockKey && lockedUsers && lockedUsers[myLockKey] && !ownerOverride);
+
+  const writeLock = async (key, val) => {
+    try {
+      await fetch(`${FIREBASE_URL}/app_lock/${key}.json`, val
+        ? { method: 'PUT', body: 'true' }
+        : { method: 'DELETE' });
+    } catch {}
+  };
+  const lockAll = async () => {
+    const obj = {}; APP_USERS.forEach(u => { obj[lockKey(u)] = true; });
+    try { await fetch(`${FIREBASE_URL}/app_lock.json`, { method: 'PUT', body: JSON.stringify(obj) }); } catch {}
+  };
+  const unlockAll = async () => {
+    try { await fetch(`${FIREBASE_URL}/app_lock.json`, { method: 'DELETE' }); } catch {}
+  };
+  const lockSelf = async () => {
+    if (myLockKey) { await writeLock(myLockKey, true); setLockedUsers(prev => ({ ...prev, [myLockKey]: true })); }
+    setAdminPanelOpen(false);
+    setOwnerOverride(false);
+  };
+  const tryOpenAdmin = async () => {
+    if (await verifyAdminCode(adminAuthPwd)) {
+      setAdminAuthOpen(false); setAdminAuthPwd(''); setAdminAuthError(false);
+      setOwnerOverride(true); setAdminPanelOpen(true);
+    } else { setAdminAuthError(true); setAdminAuthPwd(''); setTimeout(() => setAdminAuthError(false), 2000); }
+  };
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -416,6 +483,7 @@ export default function App() {
   };
 
   if (!isLoggedIn) return <LoginScreen onSuccess={(u) => { rememberLogin(u); setCurrentUser(u); setIsLoggedIn(true); }} />;
+  if (amLocked) return <LoginScreen locked onSuccess={() => { const u = { username: 'ADMIN', role: 'admin', email: null }; rememberLogin(u); setCurrentUser(u); setOwnerOverride(true); }} />;
   if (loading) return (
     <View style={styles.loading}>
       <ActivityIndicator size="large" color="#8B0000" />
@@ -487,6 +555,9 @@ export default function App() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setBrAuthPwd(''); setBrAuthError(false); setRestoreAuthOpen(true); }}>
               <Text style={styles.menuItemText}>♻️ ΕΠΑΝΑΦΟΡΑ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff7ec' }]} onPress={() => { setMenuOpen(false); setAdminAuthPwd(''); setAdminAuthError(false); setAdminAuthOpen(true); }}>
+              <Text style={[styles.menuItemText, { color: '#E65100' }]}>🛡️ ΔΙΑΧΕΙΡΙΣΤΗΣ</Text>
             </TouchableOpacity>
             </>)}
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); fetchData(); Alert.alert("VAICON", "Ανανέωση δεδομένων..."); }}>
@@ -664,6 +735,61 @@ export default function App() {
         <LocksScreen locks={locks} setLocks={setLocks} onClose={() => setShowLocks(false)} />
       </Modal>
 
+      <Modal visible={adminAuthOpen} transparent animationType="fade" onRequestClose={() => setAdminAuthOpen(false)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={statsAuthStyles.box}>
+            <Text style={[statsAuthStyles.title, { color: '#E65100' }]}>🛡️ Διαχειριστής</Text>
+            <Text style={statsAuthStyles.subtitle}>Δώστε τον Owner Code</Text>
+            <PwdInput value={adminAuthPwd} onChangeText={setAdminAuthPwd} error={adminAuthError} onSubmit={tryOpenAdmin} />
+            {adminAuthError && <Text style={statsAuthStyles.errorTxt}>❌ Λάθος κωδικός</Text>}
+            <View style={statsAuthStyles.btnRow}>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666' }]} onPress={() => { setAdminAuthOpen(false); setAdminAuthPwd(''); }}>
+                <Text style={statsAuthStyles.btnTxt}>ΑΚΥΡΟ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#E65100' }]} onPress={tryOpenAdmin}>
+                <Text style={statsAuthStyles.btnTxt}>ΕΙΣΟΔΟΣ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={adminPanelOpen} transparent animationType="fade" onRequestClose={() => setAdminPanelOpen(false)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { maxWidth: 440 }]}>
+            <Text style={[statsAuthStyles.title, { color: '#E65100' }]}>🛡️ Κλείδωμα Χρηστών</Text>
+            <Text style={statsAuthStyles.subtitle}>Πάτησε για να κλειδώσεις/ξεκλειδώσεις. Ισχύει αμέσως.</Text>
+            {APP_USERS.map((u) => {
+              const k = lockKey(u);
+              const isLocked = !!(lockedUsers && lockedUsers[k]);
+              return (
+                <View key={k} style={adminStyles.row}>
+                  <Text style={adminStyles.name}>{u}{currentUser && lockKey(currentUser.username) === k ? '  (εσύ)' : ''}</Text>
+                  <Text style={[adminStyles.badge, isLocked ? adminStyles.badgeLocked : adminStyles.badgeOpen]}>{isLocked ? '🔒 Κλειδωμένος' : '🔓 Ανοιχτός'}</Text>
+                  <TouchableOpacity style={[adminStyles.toggle, { backgroundColor: isLocked ? '#2e7d32' : '#E65100' }]} onPress={() => writeLock(k, !isLocked)}>
+                    <Text style={adminStyles.toggleTxt}>{isLocked ? 'Ξεκλείδωσε' : 'Κλείδωσε'}</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+            <View style={[statsAuthStyles.btnRow, { marginTop: 14 }]}>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#E65100' }]} onPress={lockAll}>
+                <Text style={statsAuthStyles.btnTxt}>🔒 ΚΛΕΙΔΩΜΑ ΟΛΩΝ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#2e7d32' }]} onPress={unlockAll}>
+                <Text style={statsAuthStyles.btnTxt}>🔓 ΞΕΚΛΕΙΔΩΜΑ ΟΛΩΝ</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000', marginTop: 10 }]} onPress={lockSelf}>
+              <Text style={statsAuthStyles.btnTxt}>🔒 ΚΛΕΙΔΩΣΕ ΚΙ ΑΥΤΟ ΤΟ PC</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666', marginTop: 10 }]} onPress={() => setAdminPanelOpen(false)}>
+              <Text style={statsAuthStyles.btnTxt}>ΚΛΕΙΣΙΜΟ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showCustomers} animationType="slide" onRequestClose={() => setShowCustomers(false)}>
         <CustomersScreen
           customers={customers}
@@ -724,4 +850,14 @@ const statsAuthStyles = StyleSheet.create({
   btnRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
   btn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
   btnTxt: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+});
+
+const adminStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  name: { flex: 1, fontSize: 14, fontWeight: 'bold', color: '#1a1a1a' },
+  badge: { fontSize: 11, fontWeight: 'bold' },
+  badgeLocked: { color: '#E65100' },
+  badgeOpen: { color: '#2e7d32' },
+  toggle: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8 },
+  toggleTxt: { color: 'white', fontWeight: 'bold', fontSize: 12 },
 });
