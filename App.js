@@ -13,7 +13,6 @@ import { APP_VERSION } from './version';
 
 export const FIREBASE_URL = "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app";
 
-const VAICON_PASSWORD = "vaicon2024";
 const STORAGE_KEY = "vaicon_special_auth_v1";
 const STORAGE_USER = "vaicon_special_user_v1";
 const FIREBASE_API_KEY = "AIzaSyDTAyLh1-Jrdpz_TRUFbpQhqZHNhfPg47U";
@@ -70,14 +69,12 @@ function LoginScreen({ onSuccess, locked = false }) {
     const code = pwd.trim();
     if (!code) return;
     if (locked) {
-      if (code === VAICON_PASSWORD) { onSuccess(); return; }
       setBusy(true);
       try { await firebaseSignIn('admin' + USER_DOMAIN, code); onSuccess(); }
       catch { fail('Λάθος κωδικός διαχειριστή.'); }
       finally { setBusy(false); }
       return;
     }
-    if (code === VAICON_PASSWORD) { onSuccess({ username: 'ADMIN', role: 'admin', email: null }); return; }
     if (!username.trim()) { fail('Δώστε όνομα χρήστη.'); return; }
     const email = toEmail(username);
     setBusy(true);
@@ -466,7 +463,6 @@ export default function App() {
   };
 
   const verifyAdminCode = async (code) => {
-    if (code === VAICON_PASSWORD) return true;
     try { await firebaseSignIn('admin' + USER_DOMAIN, code); return true; } catch { return false; }
   };
   const tryOpenStats = async () => {
