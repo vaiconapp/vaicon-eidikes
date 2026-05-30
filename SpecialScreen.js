@@ -2176,15 +2176,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     await syncToCloud(upd);
   };
   const removeFromPhase = (orderId, phaseKey) => {
-    Alert.alert("Αφαίρεση","Αφαίρεση από αυτή τη φάση παραγωγής;",[
-      {text:"Όχι"},
-      {text:"Ναι", onPress: async () => {
-        const order = specialOrders.find(o=>o.id===orderId); if(!order) return;
-        const upd = {...order, phases:{...order.phases, [phaseKey]:{...order.phases[phaseKey], active:false}}};
-        setSpecialOrders(specialOrders.map(o=>o.id===orderId?upd:o));
-        await syncToCloud(upd);
-      }}
-    ]);
+    const doRemove = async () => {
+      const order = specialOrders.find(o=>o.id===orderId); if(!order) return;
+      const upd = {...order, phases:{...order.phases, [phaseKey]:{...order.phases[phaseKey], active:false}}};
+      setSpecialOrders(specialOrders.map(o=>o.id===orderId?upd:o));
+      await syncToCloud(upd);
+    };
+    if (Platform.OS === 'web') { if (window.confirm("Αφαίρεση από αυτή τη φάση παραγωγής;")) doRemove(); }
+    else Alert.alert("Αφαίρεση","Αφαίρεση από αυτή τη φάση παραγωγής;",[{text:"Όχι"},{text:"Ναι",onPress:doRemove}]);
   };
 
   const cancelOrder = (id) => {
@@ -3162,13 +3161,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       )}
                       <TouchableOpacity
                         style={{backgroundColor:'#ff4444', paddingHorizontal:8, paddingVertical:3, borderRadius:5, alignSelf:'stretch', alignItems:'center'}}
-                        onPress={()=>Alert.alert("⚠️ Διαγραφή",`Διαγραφή παραγγελίας #${o.orderNo};`,[
-                          {text:"ΑΚΥΡΟ",style:"cancel"},
-                          {text:"ΔΙΑΓΡΑΦΗ",style:"destructive",onPress:async()=>{
-                            setSpecialOrders(specialOrders.filter(x=>x.id!==o.id));
-                            await deleteFromCloud(o.id);
-                          }}
-                        ])}>
+                        onPress={()=>{
+                          const doDel = async()=>{ setSpecialOrders(specialOrders.filter(x=>x.id!==o.id)); await deleteFromCloud(o.id); };
+                          if (Platform.OS==='web') { if (window.confirm(`Διαγραφή παραγγελίας #${o.orderNo};`)) doDel(); }
+                          else Alert.alert("⚠️ Διαγραφή",`Διαγραφή παραγγελίας #${o.orderNo};`,[{text:"ΑΚΥΡΟ",style:"cancel"},{text:"ΔΙΑΓΡΑΦΗ",style:"destructive",onPress:doDel}]);
+                        }}>
                         <Text style={{color:'white', fontSize:10, fontWeight:'bold'}}>✕ ΔΙΑ/ΦΗ</Text>
                       </TouchableOpacity>
                     </View>
