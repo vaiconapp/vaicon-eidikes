@@ -15,33 +15,68 @@ export const FIREBASE_URL = "https://vaicon-eidikes-default-rtdb.europe-west1.fi
 
 const VAICON_PASSWORD = "vaicon2024";
 const STORAGE_KEY = "vaicon_special_auth_v1";
+const STORAGE_USER = "vaicon_special_user_v1";
+const FIREBASE_API_KEY = "AIzaSyDTAyLh1-Jrdpz_TRUFbpQhqZHNhfPg47U";
+const USER_DOMAIN = "@vaicon.local";
+
+const toEmail = (u) => String(u || '').trim().toLowerCase().replace(/\s+/g, '') + USER_DOMAIN;
+const roleForEmail = (e) => e.startsWith('admin') ? 'admin' : e.startsWith('guest') ? 'guest' : 'user';
+
+async function firebaseSignIn(email, password) {
+  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || 'AUTH_FAILED');
+  return data;
+}
 
 const isRemembered = () => {
   if (Platform.OS !== 'web') return false;
   try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
 };
-const rememberLogin = () => {
+const loadUser = () => {
+  if (Platform.OS !== 'web') return null;
+  try { return JSON.parse(localStorage.getItem(STORAGE_USER) || 'null'); } catch { return null; }
+};
+const rememberLogin = (user) => {
   if (Platform.OS !== 'web') return;
-  try { localStorage.setItem(STORAGE_KEY, 'true'); } catch {}
+  try {
+    localStorage.setItem(STORAGE_KEY, 'true');
+    if (user) localStorage.setItem(STORAGE_USER, JSON.stringify(user));
+  } catch {}
 };
 const forgetLogin = () => {
   if (Platform.OS !== 'web') return;
-  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+  try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_USER); } catch {}
 };
 
 function LoginScreen({ onSuccess }) {
+  const [username, setUsername] = useState('');
   const [pwd, setPwd] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
   const [showPwd, setShowPwd] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const handleLogin = () => {
-    if (pwd === VAICON_PASSWORD) {
-      rememberLogin();
-      onSuccess();
-    } else {
-      setError(true);
-      setPwd('');
-      setTimeout(() => setError(false), 2000);
+  const fail = (msg) => { setError(msg); setPwd(''); setTimeout(() => setError(''), 2500); };
+
+  const handleLogin = async () => {
+    if (busy) return;
+    const code = pwd.trim();
+    if (!code) return;
+    if (code === VAICON_PASSWORD) { onSuccess({ username: 'ADMIN', role: 'admin', email: null }); return; }
+    if (!username.trim()) { fail('Δώστε όνομα χρήστη.'); return; }
+    const email = toEmail(username);
+    setBusy(true);
+    try {
+      const u = await firebaseSignIn(email, code);
+      onSuccess({ username: username.trim().toUpperCase(), role: roleForEmail(email), email, uid: u.localId });
+    } catch {
+      fail('Λάθος όνομα ή κωδικός.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -52,6 +87,15 @@ function LoginScreen({ onSuccess }) {
           <Text style={loginStyles.logoText}>VAICON</Text>
           <Text style={loginStyles.logoSub}>Ειδικές Παραγγελίες</Text>
         </View>
+        <Text style={loginStyles.label}>Όνομα Χρήστη</Text>
+        <TextInput
+          style={[loginStyles.input, { marginBottom: 12 }]}
+          value={username}
+          onChangeText={setUsername}
+          placeholder="π.χ. USER 10"
+          autoCapitalize="characters"
+          autoFocus
+        />
         <Text style={loginStyles.label}>Κωδικός Πρόσβασης</Text>
         <View style={loginStyles.inputRow}>
           <TextInput
@@ -60,16 +104,15 @@ function LoginScreen({ onSuccess }) {
             value={pwd}
             onChangeText={setPwd}
             placeholder="Κωδικός..."
-            autoFocus
             onSubmitEditing={handleLogin}
           />
           <TouchableOpacity style={loginStyles.eyeBtn} onPress={() => setShowPwd(v => !v)}>
             <Text style={{ fontSize: 20 }}>{showPwd ? '🙈' : '👁️'}</Text>
           </TouchableOpacity>
         </View>
-        {error && <Text style={loginStyles.errorTxt}>❌ Λάθος κωδικός. Δοκιμάστε ξανά.</Text>}
-        <TouchableOpacity style={loginStyles.btn} onPress={handleLogin}>
-          <Text style={loginStyles.btnTxt}>🔓 ΕΙΣΟΔΟΣ</Text>
+        {error ? <Text style={loginStyles.errorTxt}>❌ {error}</Text> : null}
+        <TouchableOpacity style={[loginStyles.btn, busy && { opacity: 0.6 }]} onPress={handleLogin} disabled={busy}>
+          <Text style={loginStyles.btnTxt}>{busy ? '...' : '🔓 ΕΙΣΟΔΟΣ'}</Text>
         </TouchableOpacity>
         <Text style={loginStyles.hint}>
           Αυτή η συσκευή θα απομνημονεύσει την είσοδό σας.
@@ -118,6 +161,7 @@ function PwdInput({ value, onChangeText, error, onSubmit, autoFocus = true }) {
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(isRemembered());
+  const [currentUser, setCurrentUser] = useState(loadUser());
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -153,11 +197,33 @@ export default function App() {
     else setLoading(false);
   }, [isLoggedIn]);
 
-  // Αυτόματη ανανέωση κάθε 5 δευτερόλεπτα
   useEffect(() => {
     if (!isLoggedIn) return;
-    const interval = setInterval(() => { fetchData(true); }, 5000);
-    return () => clearInterval(interval);
+
+    if (Platform.OS !== 'web' || typeof EventSource === 'undefined') {
+      const interval = setInterval(() => { fetchData(true); }, 5000);
+      return () => clearInterval(interval);
+    }
+
+    let debounce = null;
+    const scheduleRefresh = () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => fetchData(true), 300);
+    };
+
+    const sources = ['special_orders', 'customers', 'coatings', 'locks'].map(p => {
+      const es = new EventSource(`${FIREBASE_URL}/${p}.json`);
+      es.addEventListener('put', scheduleRefresh);
+      es.addEventListener('patch', scheduleRefresh);
+      return es;
+    });
+    const safety = setInterval(() => fetchData(true), 30000);
+
+    return () => {
+      clearTimeout(debounce);
+      clearInterval(safety);
+      sources.forEach(es => es.close());
+    };
   }, [isLoggedIn]);
 
   useEffect(() => {
@@ -332,7 +398,24 @@ export default function App() {
     }
   };
 
-  if (!isLoggedIn) return <LoginScreen onSuccess={() => setIsLoggedIn(true)} />;
+  const verifyAdminCode = async (code) => {
+    if (code === VAICON_PASSWORD) return true;
+    try { await firebaseSignIn('admin' + USER_DOMAIN, code); return true; } catch { return false; }
+  };
+  const tryOpenStats = async () => {
+    if (await verifyAdminCode(statsAuthPwd)) { setStatsAuthOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setShowStats(true); }
+    else { setStatsAuthError(true); setStatsAuthPwd(''); setTimeout(() => setStatsAuthError(false), 2000); }
+  };
+  const tryBackup = async () => {
+    if (await verifyAdminCode(brAuthPwd)) { setBackupAuthOpen(false); setBrAuthPwd(''); doBackup(); }
+    else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
+  };
+  const tryRestore = async () => {
+    if (await verifyAdminCode(brAuthPwd)) { setRestoreAuthOpen(false); setBrAuthPwd(''); openRestoreFilePicker(); }
+    else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
+  };
+
+  if (!isLoggedIn) return <LoginScreen onSuccess={(u) => { rememberLogin(u); setCurrentUser(u); setIsLoggedIn(true); }} />;
   if (loading) return (
     <View style={styles.loading}>
       <ActivityIndicator size="large" color="#8B0000" />
@@ -368,6 +451,7 @@ export default function App() {
           }}
           coatings={coatings}
           locks={locks}
+          readOnly={currentUser?.role === 'guest'}
         />
       </View>
 
@@ -375,6 +459,7 @@ export default function App() {
         <TouchableOpacity style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
           <View style={styles.menuPanel}>
             <Text style={styles.menuTitle}>ΜΕΝΟΥ</Text>
+            {currentUser?.role !== 'guest' && (<>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowCustomers(true); }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={styles.menuItemText}>👥 ΠΕΛΑΤΕΣ</Text>
@@ -403,13 +488,14 @@ export default function App() {
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setBrAuthPwd(''); setBrAuthError(false); setRestoreAuthOpen(true); }}>
               <Text style={styles.menuItemText}>♻️ ΕΠΑΝΑΦΟΡΑ</Text>
             </TouchableOpacity>
+            </>)}
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); fetchData(); Alert.alert("VAICON", "Ανανέωση δεδομένων..."); }}>
               <Text style={styles.menuItemText}>🔄 ΑΝΑΝΕΩΣΗ</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff0f0', marginTop: 12 }]} onPress={() => {
               Alert.alert("🔐 Αποσύνδεση", "Θέλεις να αποσυνδεθείς;", [
                 { text: "ΑΚΥΡΟ", style: "cancel" },
-                { text: "ΑΠΟΣΥΝΔΕΣΗ", style: "destructive", onPress: () => { forgetLogin(); setIsLoggedIn(false); setMenuOpen(false); } }
+                { text: "ΑΠΟΣΥΝΔΕΣΗ", style: "destructive", onPress: () => { forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); setMenuOpen(false); } }
               ]);
             }}>
               <Text style={[styles.menuItemText, { color: '#8B0000' }]}>🔐 ΑΠΟΣΥΝΔΕΣΗ</Text>
@@ -426,33 +512,19 @@ export default function App() {
         <View style={statsAuthStyles.overlay}>
           <View style={statsAuthStyles.box}>
             <Text style={statsAuthStyles.title}>🔐 Πρόσβαση Στατιστικών</Text>
-            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό εφαρμογής</Text>
+            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό διαχειριστή</Text>
             <PwdInput
               value={statsAuthPwd}
               onChangeText={setStatsAuthPwd}
               error={statsAuthError}
-              onSubmit={() => {
-                if (statsAuthPwd === VAICON_PASSWORD) {
-                  setStatsAuthOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setShowStats(true);
-                } else {
-                  setStatsAuthError(true); setStatsAuthPwd('');
-                  setTimeout(() => setStatsAuthError(false), 2000);
-                }
-              }}
+              onSubmit={tryOpenStats}
             />
             {statsAuthError && <Text style={statsAuthStyles.errorTxt}>❌ Λάθος κωδικός</Text>}
             <View style={statsAuthStyles.btnRow}>
               <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666' }]} onPress={() => { setStatsAuthOpen(false); setStatsAuthPwd(''); }}>
                 <Text style={statsAuthStyles.btnTxt}>ΑΚΥΡΟ</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000' }]} onPress={() => {
-                if (statsAuthPwd === VAICON_PASSWORD) {
-                  setStatsAuthOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setShowStats(true);
-                } else {
-                  setStatsAuthError(true); setStatsAuthPwd('');
-                  setTimeout(() => setStatsAuthError(false), 2000);
-                }
-              }}>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000' }]} onPress={tryOpenStats}>
                 <Text style={statsAuthStyles.btnTxt}>ΕΙΣΟΔΟΣ</Text>
               </TouchableOpacity>
             </View>
@@ -474,23 +546,17 @@ export default function App() {
         <View style={statsAuthStyles.overlay}>
           <View style={statsAuthStyles.box}>
             <Text style={statsAuthStyles.title}>💾 Δημιουργία Backup</Text>
-            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό εφαρμογής</Text>
+            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό διαχειριστή</Text>
             <PwdInput
               value={brAuthPwd} onChangeText={setBrAuthPwd} error={brAuthError}
-              onSubmit={() => {
-                if (brAuthPwd === VAICON_PASSWORD) { setBackupAuthOpen(false); setBrAuthPwd(''); doBackup(); }
-                else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
-              }}
+              onSubmit={tryBackup}
             />
             {brAuthError && <Text style={statsAuthStyles.errorTxt}>❌ Λάθος κωδικός</Text>}
             <View style={statsAuthStyles.btnRow}>
               <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666' }]} onPress={() => { setBackupAuthOpen(false); setBrAuthPwd(''); }}>
                 <Text style={statsAuthStyles.btnTxt}>ΑΚΥΡΟ</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#2e7d32' }]} onPress={() => {
-                if (brAuthPwd === VAICON_PASSWORD) { setBackupAuthOpen(false); setBrAuthPwd(''); doBackup(); }
-                else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
-              }}>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#2e7d32' }]} onPress={tryBackup}>
                 <Text style={statsAuthStyles.btnTxt}>ΣΥΝΕΧΕΙΑ</Text>
               </TouchableOpacity>
             </View>
@@ -525,23 +591,17 @@ export default function App() {
         <View style={statsAuthStyles.overlay}>
           <View style={statsAuthStyles.box}>
             <Text style={statsAuthStyles.title}>♻️ Επαναφορά από Backup</Text>
-            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό εφαρμογής</Text>
+            <Text style={statsAuthStyles.subtitle}>Δώστε τον κωδικό διαχειριστή</Text>
             <PwdInput
               value={brAuthPwd} onChangeText={setBrAuthPwd} error={brAuthError}
-              onSubmit={() => {
-                if (brAuthPwd === VAICON_PASSWORD) { setRestoreAuthOpen(false); setBrAuthPwd(''); openRestoreFilePicker(); }
-                else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
-              }}
+              onSubmit={tryRestore}
             />
             {brAuthError && <Text style={statsAuthStyles.errorTxt}>❌ Λάθος κωδικός</Text>}
             <View style={statsAuthStyles.btnRow}>
               <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666' }]} onPress={() => { setRestoreAuthOpen(false); setBrAuthPwd(''); }}>
                 <Text style={statsAuthStyles.btnTxt}>ΑΚΥΡΟ</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000' }]} onPress={() => {
-                if (brAuthPwd === VAICON_PASSWORD) { setRestoreAuthOpen(false); setBrAuthPwd(''); openRestoreFilePicker(); }
-                else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
-              }}>
+              <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000' }]} onPress={tryRestore}>
                 <Text style={statsAuthStyles.btnTxt}>ΣΥΝΕΧΕΙΑ</Text>
               </TouchableOpacity>
             </View>

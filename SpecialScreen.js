@@ -386,7 +386,7 @@ function DuplicateModal({ visible, base, suggested, onUse, onKeep, onCancel }) {
   );
 }
 
-export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[] }) {
+export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[], readOnly=false }) {
   // ---------- Helpers μορφοποίησης επενδύσεων/κλειδαριών ----------
   // Επιστρέφουν RN style για UI και HTML string για εκτυπώσεις, με βάση τις ρυθμίσεις bold/size/color
   const coatingStyle = (name, baseSize) => getFormatStyle(findFormatItem(name, coatings), baseSize);
@@ -4531,7 +4531,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {key:'prod',    icon:'⚙️', label:'ΠΑΡΑΓΩΓΗ', count:specialOrders.filter(o=>o.status==='PROD').length, badgeColor:'#ff9800'},
             {key:'ready',   icon:'📦', label:'ΕΤΟΙΜΑ', count:specialOrders.filter(o=>o.status==='READY').length, badgeColor:'#2e7d32'},
             {key:'archive', icon:'💰', label:'ΑΡΧΕΙΟ', count:soldSpecialOrders.length, badgeColor:'#555'},
-          ].map(item=>(
+          ].filter(item=>!readOnly||item.key==='pending').map(item=>(
             <TouchableOpacity key={item.key}
               onPress={()=>setActiveSection(item.key)}
               style={{backgroundColor:activeSection===item.key?'#8B0000':'#2c2c2c', borderRadius:10, padding:12, alignItems:'center', gap:4, borderWidth:2, borderColor:activeSection===item.key?'rgba(255,255,255,0.3)':'transparent', position:'relative'}}>
@@ -4545,12 +4545,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           {/* Διαχωριστικό */}
           <View style={{height:1, backgroundColor:'rgba(255,255,255,0.18)', marginVertical:2}} />
           {/* 🔍 ΠΕΛΑΤΕΣ — αναζήτηση παραγγελιών ανά πελάτη */}
+          {!readOnly && (
           <TouchableOpacity
             onPress={()=>setShowCustomerLookup(v=>!v)}
             style={{backgroundColor: activeSection==='archive' ? (showCustomerLookup?'#777':'#555') : (showCustomerLookup?'#1565c0':'#0d47a1'), borderRadius:10, padding:12, alignItems:'center', gap:4, borderWidth:2, borderColor: showCustomerLookup?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.15)'}}>
             <Text style={{fontSize:22}}>🔍</Text>
             <Text style={{color:'white', fontSize:10, fontWeight:'bold', textAlign:'center', lineHeight:13}}>{activeSection==='archive' ? 'ΠΕΛΑΤΕΣ ΑΡΧΕΙΟ' : 'ΠΕΛΑΤΕΣ'}</Text>
           </TouchableOpacity>
+          )}
         </View>
         {/* CONTENT 80% — ΠΑΡΑΓΩΓΗ και ΚΑΤΑΧΩΡΗΜΕΝΕΣ βγαίνουν εκτός ScrollView για flex:1 */}
         {activeSection==='prod' ? (
@@ -4561,7 +4563,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <View style={{flex:1, flexDirection:'row'}}>
             {/* ΑΡΙΣΤΕΡΑ: Scrollable λίστα καρτών */}
             <ScrollView style={{flex:1, padding:10}} keyboardShouldPersistTaps="handled">
-              <View style={{paddingBottom:80}}>
+              <View style={{paddingBottom:80}} pointerEvents={readOnly?'none':'auto'}>
                 {[...specialOrders.filter(o => showOnlyStuck
                   ? isOrderReadyForTransfer(o)
                   : (o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone))
@@ -4571,7 +4573,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               </View>
             </ScrollView>
             {/* ΔΕΞΙΑ: Σταθερή μπάρα */}
-            <View style={{width:280, backgroundColor:'#f9f9f9', borderLeftWidth:1, borderLeftColor:'#e0e0e0', padding:12, gap:32}}>
+            <View style={{width:280, backgroundColor:'#f9f9f9', borderLeftWidth:1, borderLeftColor:'#e0e0e0', padding:12, gap:32}} pointerEvents={readOnly?'none':'auto'}>
               {/* Τίτλος + αριθμός */}
               <View style={{backgroundColor:'#ffbb33', borderRadius:8, padding:14}}>
                 <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:18}}>● ΚΑΤΑΧΩΡΗΜΕΝΕΣ</Text>
