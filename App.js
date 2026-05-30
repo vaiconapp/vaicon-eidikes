@@ -271,6 +271,8 @@ export default function App() {
   const [adminAuthPwd, setAdminAuthPwd] = useState('');
   const [adminAuthError, setAdminAuthError] = useState(false);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [userLabels, setUserLabels] = useState({});
+  const [labelDrafts, setLabelDrafts] = useState({});
 
   useEffect(() => {
     if (isLoggedIn) fetchData();
@@ -290,26 +292,25 @@ export default function App() {
     if (!isLoggedIn) return;
 
     if (Platform.OS !== 'web' || typeof EventSource === 'undefined') {
-      const interval = setInterval(() => { fetchData(true); }, 5000);
+      const interval = setInterval(() => { fetchData(true); }, 20000);
       return () => clearInterval(interval);
     }
 
-    let debounce = null;
-    const scheduleRefresh = () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(() => fetchData(true), 300);
-    };
-
-    const sources = ['special_orders', 'customers', 'coatings', 'locks'].map(p => {
+    const timers = [];
+    const sources = ['special_orders', 'customers', 'coatings', 'locks'].map((p, i) => {
       const es = new EventSource(`${FIREBASE_URL}/${p}.json` + (fbToken ? `?auth=${fbToken}` : ''));
-      es.addEventListener('put', scheduleRefresh);
-      es.addEventListener('patch', scheduleRefresh);
+      const refresh = () => {
+        clearTimeout(timers[i]);
+        timers[i] = setTimeout(() => fetchData(true, [p]), 300);
+      };
+      es.addEventListener('put', refresh);
+      es.addEventListener('patch', refresh);
       return es;
     });
-    const safety = setInterval(() => fetchData(true), 30000);
+    const safety = setInterval(() => fetchData(true), 3 * 60 * 1000);
 
     return () => {
-      clearTimeout(debounce);
+      timers.forEach(clearTimeout);
       clearInterval(safety);
       sources.forEach(es => es.close());
     };
@@ -331,6 +332,29 @@ export default function App() {
     const safety = setInterval(load, 5000);
     return () => clearInterval(safety);
   }, [isLoggedIn, tokenVersion]);
+
+  useEffect(() => {
+    if (!adminPanelOpen) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`${FIREBASE_URL}/user_labels.json`);
+        const data = (await r.json()) || {};
+        if (alive) { setUserLabels(data); setLabelDrafts(data); }
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, [adminPanelOpen]);
+
+  const saveLabel = async (k, val) => {
+    const trimmed = (val || '').trim();
+    if ((userLabels[k] || '') === trimmed) return;
+    try {
+      await fetch(`${FIREBASE_URL}/user_labels/${k}.json`, trimmed
+        ? { method: 'PUT', body: JSON.stringify(trimmed) }
+        : { method: 'DELETE' });
+    } catch {}
+  };
 
   const myLockKey = currentUser ? lockKey(currentUser.username) : null;
   const amLocked = !!(myLockKey && lockedUsers && lockedUsers[myLockKey] && !ownerOverride);
@@ -491,41 +515,47 @@ export default function App() {
     }
   };
 
-  const fetchData = async (silent=false) => {
+  const fetchData = async (silent=false, only=null) => {
+    const want = (p) => !only || only.includes(p);
     if (!silent) setLoading(true);
     try {
-      const resS = await fetch(`${FIREBASE_URL}/special_orders.json`);
-      const dataS = await resS.json();
-      if (dataS) {
-        const fixOrder = (o) => ({
-          ...o,
-          stavera: o.stavera
-            ? (Array.isArray(o.stavera)
-                ? o.stavera
-                : Object.values(o.stavera))
-            : [],
-          coatings: o.coatings
-            ? (Array.isArray(o.coatings)
-                ? o.coatings
-                : Object.values(o.coatings))
-            : [],
-        });
-        const loadedS = Object.keys(dataS).map(key => fixOrder({ id: key, ...dataS[key] }));
-        setSpecialOrders(loadedS.filter(o => o.status !== 'SOLD'));
-        setSoldSpecialOrders(loadedS.filter(o => o.status === 'SOLD'));
+      if (want('special_orders')) {
+        const resS = await fetch(`${FIREBASE_URL}/special_orders.json`);
+        const dataS = await resS.json();
+        if (dataS) {
+          const fixOrder = (o) => ({
+            ...o,
+            stavera: o.stavera
+              ? (Array.isArray(o.stavera)
+                  ? o.stavera
+                  : Object.values(o.stavera))
+              : [],
+            coatings: o.coatings
+              ? (Array.isArray(o.coatings)
+                  ? o.coatings
+                  : Object.values(o.coatings))
+              : [],
+          });
+          const loadedS = Object.keys(dataS).map(key => fixOrder({ id: key, ...dataS[key] }));
+          setSpecialOrders(loadedS.filter(o => o.status !== 'SOLD'));
+          setSoldSpecialOrders(loadedS.filter(o => o.status === 'SOLD'));
+        }
       }
-      const res4 = await fetch(`${FIREBASE_URL}/customers.json`);
-      const data4 = await res4.json();
-      if (data4) setCustomers(Object.keys(data4).map(key => ({ id: key, ...data4[key] })));
-
-      const res5 = await fetch(`${FIREBASE_URL}/coatings.json`);
-      const data5 = await res5.json();
-      if (data5) setCoatings(Object.keys(data5).map(key => ({ id: key, ...data5[key] })));
-
-      const res7 = await fetch(`${FIREBASE_URL}/locks.json`);
-      const data7 = await res7.json();
-      if (data7) setLocks(Object.keys(data7).map(key => ({ id: key, ...data7[key] })));
-
+      if (want('customers')) {
+        const res4 = await fetch(`${FIREBASE_URL}/customers.json`);
+        const data4 = await res4.json();
+        if (data4) setCustomers(Object.keys(data4).map(key => ({ id: key, ...data4[key] })));
+      }
+      if (want('coatings')) {
+        const res5 = await fetch(`${FIREBASE_URL}/coatings.json`);
+        const data5 = await res5.json();
+        if (data5) setCoatings(Object.keys(data5).map(key => ({ id: key, ...data5[key] })));
+      }
+      if (want('locks')) {
+        const res7 = await fetch(`${FIREBASE_URL}/locks.json`);
+        const data7 = await res7.json();
+        if (data7) setLocks(Object.keys(data7).map(key => ({ id: key, ...data7[key] })));
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -835,7 +865,17 @@ export default function App() {
               return (
                 <View key={k} style={adminStyles.row}>
                   <Text style={adminStyles.name}>{u}{currentUser && lockKey(currentUser.username) === k ? '  (εσύ)' : ''}</Text>
-                  <Text style={[adminStyles.badge, isLocked ? adminStyles.badgeLocked : adminStyles.badgeOpen]}>{isLocked ? '🔒 Κλειδωμένος' : '🔓 Ανοιχτός'}</Text>
+                  <TextInput
+                    style={adminStyles.labelInput}
+                    placeholder="Όνομα..."
+                    placeholderTextColor="#aaa"
+                    value={labelDrafts[k] || ''}
+                    onChangeText={(t) => setLabelDrafts(d => ({ ...d, [k]: t }))}
+                    onBlur={() => saveLabel(k, labelDrafts[k])}
+                    onSubmitEditing={() => saveLabel(k, labelDrafts[k])}
+                    maxLength={20}
+                  />
+                  <Text style={[adminStyles.badge, isLocked ? adminStyles.badgeLocked : adminStyles.badgeOpen]}>{isLocked ? '🔒' : '🔓'}</Text>
                   <TouchableOpacity style={[adminStyles.toggle, { backgroundColor: isLocked ? '#2e7d32' : '#E65100' }]} onPress={() => writeLock(k, !isLocked)}>
                     <Text style={adminStyles.toggleTxt}>{isLocked ? 'Ξεκλείδωσε' : 'Κλείδωσε'}</Text>
                   </TouchableOpacity>
@@ -925,8 +965,9 @@ const statsAuthStyles = StyleSheet.create({
 
 const adminStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  name: { flex: 1, fontSize: 14, fontWeight: 'bold', color: '#1a1a1a' },
-  badge: { fontSize: 11, fontWeight: 'bold' },
+  name: { width: 90, fontSize: 14, fontWeight: 'bold', color: '#1a1a1a' },
+  labelInput: { flex: 1, paddingHorizontal: 8, paddingVertical: 5, fontSize: 13, borderWidth: 1, borderColor: '#ccc', borderRadius: 6, backgroundColor: '#fafafa' },
+  badge: { fontSize: 14, fontWeight: 'bold' },
   badgeLocked: { color: '#E65100' },
   badgeOpen: { color: '#2e7d32' },
   toggle: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8 },
