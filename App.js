@@ -15,6 +15,7 @@ export const FIREBASE_URL = "https://vaicon-eidikes-default-rtdb.europe-west1.fi
 
 const STORAGE_KEY = "vaicon_special_auth_v1";
 const STORAGE_USER = "vaicon_special_user_v1";
+const STORAGE_TOKEN = "vaicon_special_token_v1";
 const FIREBASE_API_KEY = "AIzaSyDTAyLh1-Jrdpz_TRUFbpQhqZHNhfPg47U";
 const USER_DOMAIN = "@vaicon.local";
 
@@ -24,8 +25,66 @@ const roleForEmail = (e) => e.startsWith('admin') ? 'admin' : e.startsWith('gues
 const APP_USERS = ['USER 10', 'USER 12', 'USER 14', 'USER 16', 'USER 18', 'GUEST', 'ADMIN'];
 const lockKey = (u) => String(u || '').toUpperCase().replace(/\s+/g, '');
 
+const rawFetch = globalThis.fetch.bind(globalThis);
+
+let fbToken = null, fbRefresh = null, fbTokenExp = 0, fbRefreshing = null;
+
+const saveTokens = (idToken, refreshToken, expiresIn) => {
+  if (idToken) fbToken = idToken;
+  if (refreshToken) fbRefresh = refreshToken;
+  if (expiresIn) fbTokenExp = Date.now() + Number(expiresIn) * 1000;
+  try { localStorage.setItem(STORAGE_TOKEN, JSON.stringify({ t: fbToken, r: fbRefresh, e: fbTokenExp })); } catch {}
+};
+const loadTokens = () => {
+  try { const o = JSON.parse(localStorage.getItem(STORAGE_TOKEN) || 'null'); if (o) { fbToken = o.t; fbRefresh = o.r; fbTokenExp = o.e || 0; } } catch {}
+};
+const clearTokens = () => { fbToken = fbRefresh = null; fbTokenExp = 0; try { localStorage.removeItem(STORAGE_TOKEN); } catch {} };
+
+const refreshIdToken = async () => {
+  if (!fbRefresh) return false;
+  if (fbRefreshing) return fbRefreshing;
+  fbRefreshing = (async () => {
+    try {
+      const res = await rawFetch(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(fbRefresh)}`,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.id_token) return false;
+      saveTokens(data.id_token, data.refresh_token, data.expires_in);
+      return true;
+    } catch { return false; }
+  })();
+  const r = await fbRefreshing; fbRefreshing = null; return r;
+};
+const ensureFreshToken = async () => {
+  if (fbToken && Date.now() < fbTokenExp - 5 * 60 * 1000) return fbToken;
+  if (fbRefresh) await refreshIdToken();
+  return fbToken;
+};
+
+// Οι κανόνες ασφαλείας της βάσης απαιτούν ταυτότητα· προσθέτουμε ?auth=<idToken>
+// αυτόματα σε κάθε κλήση προς το FIREBASE_URL, αντί σε ~20 ξεχωριστά σημεία.
+if (globalThis.fetch && !globalThis.__fbAuthPatched) {
+  globalThis.__fbAuthPatched = true;
+  globalThis.fetch = async (input, init) => {
+    let url = typeof input === 'string' ? input : (input && input.url);
+    if (url && url.indexOf(FIREBASE_URL) === 0 && url.indexOf('auth=') === -1) {
+      await ensureFreshToken();
+      if (fbToken) {
+        url += (url.indexOf('?') === -1 ? '?' : '&') + 'auth=' + fbToken;
+        input = typeof input === 'string' ? url : new Request(url, input);
+      }
+    }
+    return rawFetch(input, init);
+  };
+}
+
+loadTokens();
+
 async function firebaseSignIn(email, password) {
-  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
+  const res = await rawFetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, returnSecureToken: true }),
@@ -51,6 +110,7 @@ const rememberLogin = (user) => {
   } catch {}
 };
 const forgetLogin = () => {
+  clearTokens();
   if (Platform.OS !== 'web') return;
   try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_USER); } catch {}
 };
@@ -70,7 +130,7 @@ function LoginScreen({ onSuccess, locked = false }) {
     if (!code) return;
     if (locked) {
       setBusy(true);
-      try { await firebaseSignIn('admin' + USER_DOMAIN, code); onSuccess(); }
+      try { const u = await firebaseSignIn('admin' + USER_DOMAIN, code); saveTokens(u.idToken, u.refreshToken, u.expiresIn); onSuccess(); }
       catch { fail('Λάθος κωδικός διαχειριστή.'); }
       finally { setBusy(false); }
       return;
@@ -80,6 +140,7 @@ function LoginScreen({ onSuccess, locked = false }) {
     setBusy(true);
     try {
       const u = await firebaseSignIn(email, code);
+      saveTokens(u.idToken, u.refreshToken, u.expiresIn);
       onSuccess({ username: username.trim().toUpperCase(), role: roleForEmail(email), email, uid: u.localId });
     } catch {
       fail('Λάθος όνομα ή κωδικός.');
@@ -203,6 +264,7 @@ export default function App() {
   const [pendingCustomer, setPendingCustomer] = useState(null);
   const [pendingCustomerCallback, setPendingCustomerCallback] = useState(null);
 
+  const [tokenVersion, setTokenVersion] = useState(0);
   const [lockedUsers, setLockedUsers] = useState({});
   const [ownerOverride, setOwnerOverride] = useState(false);
   const [adminAuthOpen, setAdminAuthOpen] = useState(false);
@@ -213,6 +275,15 @@ export default function App() {
   useEffect(() => {
     if (isLoggedIn) fetchData();
     else setLoading(false);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let alive = true;
+    const tick = async () => { if (await refreshIdToken() && alive) setTokenVersion(v => v + 1); };
+    if (!fbToken || Date.now() > fbTokenExp - 5 * 60 * 1000) tick();
+    const iv = setInterval(tick, 50 * 60 * 1000);
+    return () => { alive = false; clearInterval(iv); };
   }, [isLoggedIn]);
 
   useEffect(() => {
@@ -230,7 +301,7 @@ export default function App() {
     };
 
     const sources = ['special_orders', 'customers', 'coatings', 'locks'].map(p => {
-      const es = new EventSource(`${FIREBASE_URL}/${p}.json`);
+      const es = new EventSource(`${FIREBASE_URL}/${p}.json` + (fbToken ? `?auth=${fbToken}` : ''));
       es.addEventListener('put', scheduleRefresh);
       es.addEventListener('patch', scheduleRefresh);
       return es;
@@ -242,7 +313,7 @@ export default function App() {
       clearInterval(safety);
       sources.forEach(es => es.close());
     };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, tokenVersion]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -251,7 +322,7 @@ export default function App() {
     };
     load();
     if (Platform.OS === 'web' && typeof EventSource !== 'undefined') {
-      const es = new EventSource(`${FIREBASE_URL}/app_lock.json`);
+      const es = new EventSource(`${FIREBASE_URL}/app_lock.json` + (fbToken ? `?auth=${fbToken}` : ''));
       es.addEventListener('put', load);
       es.addEventListener('patch', load);
       const safety = setInterval(load, 15000);
@@ -259,7 +330,7 @@ export default function App() {
     }
     const safety = setInterval(load, 5000);
     return () => clearInterval(safety);
-  }, [isLoggedIn]);
+  }, [isLoggedIn, tokenVersion]);
 
   const myLockKey = currentUser ? lockKey(currentUser.username) : null;
   const amLocked = !!(myLockKey && lockedUsers && lockedUsers[myLockKey] && !ownerOverride);
