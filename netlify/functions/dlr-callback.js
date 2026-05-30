@@ -3,6 +3,8 @@
 // βρίσκει το mapping στο /msg_map/{id} και ενημερώνει το special_orders/{id}/msgStatus/{channel}.
 // Env: FIREBASE_DB_URL
 
+const { fbFetch } = require('./lib/fbAdmin');
+
 const ok = (body = 'OK') => ({ statusCode: 200, headers: { 'Content-Type': 'text/plain' }, body });
 
 const STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
@@ -35,17 +37,17 @@ exports.handler = async (event) => {
   if (!id || !status) return ok('skip');
 
   try {
-    const mapRes = await fetch(`${db}/msg_map/${encodeURIComponent(id)}.json`);
+    const mapRes = await fbFetch(`${db}/msg_map/${encodeURIComponent(id)}.json`);
     const map = await mapRes.json().catch(() => null);
     if (!map?.orderId) return ok('no-map');
     const channel = map.channel || 'sms';
 
-    const cur = await (await fetch(`${db}/special_orders/${map.orderId}/msgStatus/${channel}.json`)).json().catch(() => null);
+    const cur = await (await fbFetch(`${db}/special_orders/${map.orderId}/msgStatus/${channel}.json`)).json().catch(() => null);
     const curRank = STATUS_RANK[cur?.status] || 0;
     const newRank = STATUS_RANK[status] || 0;
     if (status !== 'failed' && newRank < curRank) return ok('stale');
 
-    await fetch(`${db}/special_orders/${map.orderId}/msgStatus/${channel}.json`, {
+    await fbFetch(`${db}/special_orders/${map.orderId}/msgStatus/${channel}.json`, {
       method: 'PUT',
       body: JSON.stringify({ status, at: Date.now() }),
     });

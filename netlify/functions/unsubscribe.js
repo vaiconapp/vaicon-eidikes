@@ -3,6 +3,8 @@
 // POST (ίδιο c) -> καταγραφή απεγγραφής στο customers/{id}/viberOptOut
 // Env: FIREBASE_DB_URL
 
+const { fbFetch } = require('./lib/fbAdmin');
+
 const html = (statusCode, body) => ({
   statusCode,
   headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -32,7 +34,7 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === 'POST') {
     try {
-      await fetch(`${db}/customers/${encodeURIComponent(c)}/viberOptOut.json`, {
+      await fbFetch(`${db}/customers/${encodeURIComponent(c)}/viberOptOut.json`, {
         method: 'PUT',
         body: JSON.stringify({ ts: Date.now() }),
       });

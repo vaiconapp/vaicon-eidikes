@@ -6,6 +6,8 @@
 //   FIREBASE_DB_URL    — base URL της Realtime DB (για msg_map)
 //   URL                — (auto Netlify) public URL του site, για unsubscribe/callback
 
+const { fbFetch } = require('./lib/fbAdmin');
+
 const YUBOTO_ENDPOINT = 'https://services.yuboto.com/omni/v1/Send';
 
 const json = (statusCode, body) => ({
@@ -27,7 +29,7 @@ const saveMsgMap = async (id, orderId, channel) => {
   const db = (process.env.FIREBASE_DB_URL || '').replace(/\/$/, '');
   if (!db || !id || !orderId) return;
   try {
-    await fetch(`${db}/msg_map/${encodeURIComponent(id)}.json`, {
+    await fbFetch(`${db}/msg_map/${encodeURIComponent(id)}.json`, {
       method: 'PUT',
       body: JSON.stringify({ orderId, channel, ts: Date.now() }),
     });
