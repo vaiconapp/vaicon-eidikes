@@ -221,6 +221,7 @@ function PwdInput({ value, onChangeText, error, onSubmit, autoFocus = true }) {
         value={value}
         onChangeText={onChangeText}
         placeholder="Κωδικός..."
+        autoComplete="off"
         autoFocus={autoFocus}
         onSubmitEditing={onSubmit}
       />
@@ -618,6 +619,7 @@ export default function App() {
           coatings={coatings}
           locks={locks}
           readOnly={currentUser?.role === 'guest'}
+          codeModalOpen={adminAuthOpen || adminPanelOpen || statsAuthOpen || backupAuthOpen || restoreAuthOpen}
         />
       </View>
 

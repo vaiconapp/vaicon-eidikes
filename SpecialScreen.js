@@ -386,7 +386,7 @@ function DuplicateModal({ visible, base, suggested, onUse, onKeep, onCancel }) {
   );
 }
 
-export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[], readOnly=false }) {
+export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[], readOnly=false, codeModalOpen=false }) {
   // ---------- Helpers μορφοποίησης επενδύσεων/κλειδαριών ----------
   // Επιστρέφουν RN style για UI και HTML string για εκτυπώσεις, με βάση τις ρυθμίσεις bold/size/color
   const coatingStyle = (name, baseSize) => getFormatStyle(findFormatItem(name, coatings), baseSize);
@@ -746,6 +746,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     }, 0);
     return ()=>clearTimeout(t);
   }, [activeSection, pageWidth]);
+
+  // Ο browser αυτοσυμπληρώνει το username στο πεδίο αναζήτησης όταν εμφανίζεται κωδικός·
+  // καθάρισέ το μόλις κλείσει το modal ώστε να μη μένει κρυφό φίλτρο που αδειάζει τη λίστα.
+  useEffect(() => {
+    if (codeModalOpen) return;
+    setProdSearch(''); setPendingSearch(''); setReadySearch(''); setCustomerLookupSearch('');
+  }, [codeModalOpen]);
 
   const blurAll = () => {
     glassRef.current?.blur();
@@ -3036,6 +3043,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 style={{flex:1, fontSize:13, color:'#1a1a1a', padding:0}}
                 placeholder="Αναζήτηση..."
                 placeholderTextColor="#bbb"
+                autoComplete="off"
                 value={prodSearch}
                 onChangeText={v=>setProdSearch(v)}
                 clearButtonMode="while-editing"
@@ -3511,6 +3519,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   style={{flex:1, fontSize:14, color:'#1a1a1a', padding:0, outlineStyle:'none'}}
                   placeholder="Αναζήτηση πελάτη (όνομα ή τηλέφωνο)..."
                   placeholderTextColor="#aaa"
+                  autoComplete="off"
                   value={customerLookupSearch}
                   onChangeText={v=>{ setCustomerLookupSearch(v); if (lookupCustomerId) setLookupCustomerId(null); }}
                 />
@@ -4641,6 +4650,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     style={{flex:1, fontSize:14, color:'#1a1a1a', padding:0}}
                     placeholder="Αναζήτηση..."
                     placeholderTextColor="#bbb"
+                    autoComplete="off"
                     value={pendingSearch}
                     onChangeText={v=>setPendingSearch(v)}
                     clearButtonMode="while-editing"
@@ -4680,7 +4690,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               </TouchableOpacity>
             ) : (
               <>
-                <TextInput ref={customerRef} style={styles.input} placeholder="Αναζήτηση Πελάτη" value={customerSearch}
+                <TextInput ref={customerRef} style={styles.input} placeholder="Αναζήτηση Πελάτη" autoComplete="off" value={customerSearch}
                   onChangeText={v=>{setCustomerSearch(v);setShowCustomerList(true);setCustomForm({...customForm,customer:v});}}
                   onSubmitEditing={()=>orderNoRef.current?.focus()}
                   returnKeyType="next" blurOnSubmit={false}
@@ -5135,6 +5145,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     style={{flex:1, fontSize:13, color:'#1a1a1a', padding:0}}
                     placeholder="Αναζήτηση..."
                     placeholderTextColor="#bbb"
+                    autoComplete="off"
                     value={readySearch}
                     onChangeText={v=>setReadySearch(v)}
                     clearButtonMode="while-editing"
