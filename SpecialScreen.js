@@ -549,6 +549,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [pendingSearch, setPendingSearch] = useState('');
   const [prodSearch, setProdSearch] = useState('');
   const [readySearch, setReadySearch] = useState('');
+  const [archivePage, setArchivePage] = useState(0);
 
   const [printSelected, setPrintSelected] = useState({});
   const [montReadyFilter, setMontReadyFilter] = useState(false);
@@ -746,6 +747,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     }, 0);
     return ()=>clearTimeout(t);
   }, [activeSection, pageWidth]);
+
+  useEffect(() => { if (activeSection === 'archive') setArchivePage(0); }, [activeSection]);
 
   // Ο browser αυτοσυμπληρώνει το username στο πεδίο αναζήτησης όταν εμφανίζεται κωδικός·
   // καθάρισέ το μόλις κλείσει το modal ώστε να μη μένει κρυφό φίλτρο που αδειάζει τη λίστα.
@@ -5166,18 +5169,40 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           )}
 
           {/* ΑΡΧΕΙΟ */}
-          {activeSection==='archive'&&(
+          {activeSection==='archive'&&(()=>{
+            const PAGE = 30;
+            const sorted = [...soldSpecialOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+            const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE));
+            const page = Math.min(archivePage, totalPages - 1);
+            const pageItems = sorted.slice(page * PAGE, page * PAGE + PAGE);
+            const PagerBtn = ({label, disabled, onPress}) => (
+              <TouchableOpacity disabled={disabled} onPress={onPress}
+                style={{paddingHorizontal:14, paddingVertical:8, borderRadius:8, backgroundColor: disabled?'#ccc':'#333'}}>
+                <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>{label}</Text>
+              </TouchableOpacity>
+            );
+            return (
             <View>
               <View style={[styles.listHeader,{backgroundColor:'#333', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
-                <Text style={styles.listHeaderText}>📂 ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ ({soldSpecialOrders.length})</Text>
+                <Text style={styles.listHeaderText}>📂 ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ ({sorted.length})</Text>
                 <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
                   onPress={()=>handleSimplePrint(soldSpecialOrders, 'ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ')}>
                   <Text style={{color:'#333', fontSize:11, fontWeight:'bold'}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
                 </TouchableOpacity>
               </View>
-              {soldSpecialOrders.map(o=>renderOrderCard(o,true))}
+              {pageItems.map(o=>renderOrderCard(o,true))}
+              {totalPages > 1 && (
+                <View style={{flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, paddingVertical:14, flexWrap:'wrap'}}>
+                  <PagerBtn label="⏮ ΑΡΧΗ" disabled={page===0} onPress={()=>setArchivePage(0)} />
+                  <PagerBtn label="◀" disabled={page===0} onPress={()=>setArchivePage(page-1)} />
+                  <Text style={{fontWeight:'bold', color:'#333', minWidth:110, textAlign:'center'}}>Σελίδα {page+1} / {totalPages}</Text>
+                  <PagerBtn label="▶" disabled={page>=totalPages-1} onPress={()=>setArchivePage(page+1)} />
+                  <PagerBtn label="ΤΕΛΟΣ ⏭" disabled={page>=totalPages-1} onPress={()=>setArchivePage(totalPages-1)} />
+                </View>
+              )}
             </View>
-          )}
+            );
+          })()}
 
         </View>
         </ScrollView>
