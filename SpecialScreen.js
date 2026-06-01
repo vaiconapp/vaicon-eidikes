@@ -391,7 +391,7 @@ function DuplicateModal({ visible, base, suggested, onUse, onKeep, onCancel }) {
   );
 }
 
-export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[], readOnly=false, codeModalOpen=false }) {
+export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[], readOnly=false, codeModalOpen=false, isAdmin=false }) {
   // ---------- Helpers μορφοποίησης επενδύσεων/κλειδαριών ----------
   // Επιστρέφουν RN style για UI και HTML string για εκτυπώσεις, με βάση τις ρυθμίσεις bold/size/color
   const coatingStyle = (name, baseSize) => getFormatStyle(findFormatItem(name, coatings), baseSize);
@@ -961,11 +961,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;}
       th{padding:4px 6px;text-align:left;border:1px solid #000;font-weight:bold;white-space:nowrap;font-size:9px;background:#ddd;}
       td{padding:4px 6px;border:1px solid #000;vertical-align:top;white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;}
+      td:first-child{white-space:nowrap;word-break:keep-all;overflow-wrap:normal;}
       td.nowrap{white-space:nowrap;}
       td.notes{white-space:normal;min-width:120px;width:auto;}
       td.col-glass{white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;width:120px;max-width:120px;}
       td.col-lock{white-space:normal;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;width:140px;max-width:140px;}
-      .col-no{width:48px;}
+      .col-no{width:70px;white-space:nowrap;}
       .col-tem{width:36px;text-align:center;}
       .col-dim{width:80px;}
       .col-fora{width:28px;}
@@ -1093,13 +1094,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       }).join('');
       if (isEpend) {
         return `<table style="table-layout:fixed;width:100%"><colgroup>
-          <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:39px"><col style="width:105px"><col><col style="width:70px">
+          <col style="width:70px"><col style="width:125px"><col style="width:35px"><col style="width:39px"><col style="width:105px"><col><col style="width:70px">
         </colgroup><thead><tr>
           <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
         </tr></thead><tbody>${rows}</tbody></table>`;
       }
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:55px"><col style="width:125px"><col style="width:35px"><col style="width:39px"><col style="width:105px"><col style="width:28px"><col style="width:169px"><col style="width:28px"><col><col style="width:70px">
+        <col style="width:70px"><col style="width:125px"><col style="width:35px"><col style="width:39px"><col style="width:105px"><col style="width:28px"><col style="width:169px"><col style="width:28px"><col><col style="width:70px">
       </colgroup><thead><tr>
         <th>Νο</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Χρώμα</th><th>Μεντ.</th><th>Κλειδαριά</th><th>Τ/Κ</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
@@ -1127,7 +1128,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </tr>`;
       }).join('');
       return `<table style="table-layout:fixed;width:100%"><colgroup>
-        <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:28px"><col style="width:28px"><col style="width:70px"><col style="width:200px"><col style="width:80px">
+        <col style="width:70px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:28px"><col style="width:28px"><col style="width:70px"><col style="width:200px"><col style="width:80px">
       </colgroup><thead><tr>
         <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Μεντ.</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th><th>Ημερομηνίες</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
@@ -1142,6 +1143,27 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const isSasi    = copyTitle && copyTitle.includes('ΣΑΣΙ');
       const isProfil  = copyTitle && copyTitle.includes('ΠΡΟΦΙΛ');
 
+      // Φιλτράρισμα παρατηρήσεων για εκτυπώσεις laser — σβήνει στάνταρ φράσεις
+      const LASER_SKIP = ['ΣΟΥΣΤ','ΠΟΜΟΛ','ΠΕΤΡΟΒΑΜΒΑΚ','ΜΠΟΥΛ','ΑΦΑΛΟ','ΝΕΥΡ','DEFENDER','ΥΠΟΓΕΙ','ΙΣΟΓΕΙ','ΠΗΧΑΚ','ΤΖΑΜ','ΜΑΤΙ','ΑΝΑΠΟΔ','ΦΡΕΖΑ'];
+      const normForMatch = s => String(s||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      const cleanLaserNotes = (notes) => {
+        if (!notes) return '';
+        const cleaned = String(notes).split('\n').map(line => {
+          const parts = line.split(',').filter(p => {
+            const n = normForMatch(p);
+            return !LASER_SKIP.some(k => n.includes(k));
+          });
+          return parts.join(',');
+        }).filter(l => l.trim()).join('\n');
+        return formatNotesHtml(cleaned);
+      };
+      const cleanLaserLock = (lockName) => {
+        if (!lockName) return '—';
+        if (normForMatch(lockName).includes('SECUREMME')) return '';
+        return lockHtml(lockName);
+      };
+      const cleanLaserMat = (mat) => mat === 'DKP' ? '' : mat;
+
       // ΠΡΟΦΙΛ: χωρίς τζάμι, τ.κάσας, υλ.κάσας
       if (isProfil) {
         const rows = orders.map(o => {
@@ -1149,7 +1171,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           const hingesNum = parseInt(o.hinges)||2;
           const mentesedesVal = (!o.hinges||o.hinges==='2')?'—':o.hinges;
           const mentStyle = hingesNum>=3 ? 'font-size:14px;font-weight:900;color:#cc0000;' : 'font-size:10px;';
-          const kleidaria = lockHtml(o.lock);
+          const kleidaria = cleanLaserLock(o.lock);
           const armorVal = (o.armor||'ΜΟΝΗ').includes('ΔΙΠΛΗ') ? '' : '<b>Μ/Θ</b>';
           return `<tr>
             <td class="col-no" style="font-weight:bold">${o.orderNo||'—'}</td>
@@ -1159,13 +1181,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentesedesVal}</td>
             <td class="col-lock" style="font-size:10px">${kleidaria}</td>
-            <td class="notes" style="font-size:10px">${formatNotesHtml(o.notes)}</td>
+            <td class="notes" style="font-size:10px">${cleanLaserNotes(o.notes)}</td>
           </tr>`;
         }).join('');
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000"><td style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="6"></td></tr>`;
         return `<table style="table-layout:fixed;width:100%"><colgroup>
-          <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:130px"><col>
+          <col style="width:70px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:130px"><col>
         </colgroup><thead><tr>
           <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Κλειδ.</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
@@ -1191,16 +1213,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td class="col-fora" style="font-weight:bold">${fora}</td>
             <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentVal}</td>
-            <td class="col-lock" style="font-size:10px">${lockHtml(o.lock)}</td>
+            <td class="col-lock" style="font-size:10px">${cleanLaserLock(o.lock)}</td>
             <td class="col-type" style="font-size:10px;text-align:center">${caseTypeVal}</td>
-            <td class="col-mat" style="font-size:10px;font-weight:bold">${mat}</td>
-            <td class="notes" style="font-size:10px">${formatNotesHtml(o.notes)}</td>
+            <td class="col-mat" style="font-size:10px;font-weight:bold">${cleanLaserMat(mat)}</td>
+            <td class="notes" style="font-size:10px">${cleanLaserNotes(o.notes)}</td>
           </tr>`;
         }).join('');
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="6"></td></tr>`;
         return `<table style="table-layout:fixed;width:100%"><colgroup>
-          <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:130px"><col style="width:28px"><col style="width:70px"><col>
+          <col style="width:70px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:130px"><col style="width:28px"><col style="width:70px"><col>
         </colgroup><thead><tr>
           <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Κλειδ.</th><th>Τ/Κ</th><th>Υλ.Κάσας</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
@@ -1226,14 +1248,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <td class="col-thor" style="font-size:10px;text-align:center">${armorVal}</td>
             <td class="col-ment" style="${mentStyle}">${mentVal}</td>
             <td class="col-glass" style="font-size:10px">${((o.glassDim||'')+(o.glassNotes?' '+o.glassNotes:''))||'—'}</td>
-            <td class="col-lock" style="font-size:10px">${lockHtml(o.lock)}</td>
-            <td class="notes" style="font-size:10px">${formatNotesHtml(o.notes)}</td>
+            <td class="col-lock" style="font-size:10px">${cleanLaserLock(o.lock)}</td>
+            <td class="notes" style="font-size:10px">${cleanLaserNotes(o.notes)}</td>
           </tr>`;
         }).join('');
         const total = totalQty(orders);
         const totalRow = `<tr style="border-top:2px solid #000;background:#f5f5f5"><td colspan="1" style="font-weight:bold">ΣΥΝΟΛΟ</td><td style="text-align:center;font-weight:900;font-size:14px">${total}</td><td colspan="4"></td></tr>`;
         return `<table style="table-layout:fixed;width:100%"><colgroup>
-          <col style="width:55px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:110px"><col style="width:130px"><col>
+          <col style="width:70px"><col style="width:30px"><col style="width:100px"><col style="width:35px"><col style="width:30px"><col style="width:28px"><col style="width:110px"><col style="width:130px"><col>
         </colgroup><thead><tr>
           <th>Νο</th><th>Τεμ.</th><th>Διάσταση</th><th>Φορά</th><th>Θ/Σ</th><th>Μεντ.</th><th>Τζάμι</th><th>Κλειδ.</th><th>Παρατηρήσεις</th>
         </tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
@@ -2672,6 +2694,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       table{width:100%;border-collapse:collapse;font-size:10px;}
       th{padding:5px 4px;text-align:left;border-top:2px solid #000;border-bottom:1px solid #000;font-weight:bold;white-space:nowrap;}
       td{padding:5px 4px;border-bottom:1px solid #000;vertical-align:top;}
+      td:first-child{white-space:nowrap;word-break:keep-all;overflow-wrap:normal;}
       tr:last-child td{border-bottom:2px solid #000;}
       @media print{@page{size:A4 landscape;margin:5mm;}*{color:#000!important;background:#fff!important;}}
     `;
@@ -2858,18 +2881,6 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               </View>
               <Text style={{fontSize:15,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
-              onPress={()=>{
-                const newSelected = {...printSelected};
-                phaseOrders.forEach(o=>{
-                  const isPrinted = !!(o.phases?.[activeProdPhase]?.printed);
-                  newSelected[o.id] = !isPrinted;
-                });
-                setPrintSelected(newSelected);
-              }}>
-              <Text style={{fontSize:15,fontWeight:'bold',color:'#856404'}}>🖨️ ΜΗ ΕΚΤΥΠ.</Text>
-            </TouchableOpacity>
             {/* 3α: Κουμπί ΑΡΙΘΜΟΣ ΠΡΟΓΡΑΜΜΑΤΟΣ */}
             <TouchableOpacity
               style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#e8f0fe', borderRadius:8, borderWidth:1, borderColor:'#4a90d9'}}
@@ -2905,6 +2916,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;}
                   th{padding:4px 6px;text-align:left;border:1px solid #000;font-weight:bold;background:#ddd;font-size:9px;}
                   td{padding:4px 6px;border:1px solid #000;vertical-align:top;}
+                  td:first-child{white-space:nowrap;word-break:keep-all;overflow-wrap:normal;}
                   tr:nth-child(even) td{background:#f5f5f5;}
                   @media print{@page{size:A4 landscape;margin:8mm;}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
                 `;
@@ -4639,6 +4651,23 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone)), 'ΟΛΕΣ')}>
                   <Text style={{color:'white', fontWeight:'bold', fontSize:16}}>🖨️ ΟΛΕΣ</Text>
                 </TouchableOpacity>
+                {isAdmin && (
+                  <TouchableOpacity
+                    style={{backgroundColor:'#FFD700', borderRadius:8, padding:11, alignItems:'center', marginTop:6}}
+                    onPress={()=>{
+                      const lines = [...specialOrders, ...soldSpecialOrders]
+                        .filter(o => o.notes && String(o.notes).trim())
+                        .map(o => `#${o.orderNo||'?'}: ${o.notes}`);
+                      const text = lines.join('\n---\n');
+                      if (Platform.OS==='web' && navigator?.clipboard) {
+                        navigator.clipboard.writeText(text).then(()=>{
+                          window.alert(`Αντιγράφηκαν ${lines.length} παρατηρήσεις στο clipboard.`);
+                        });
+                      }
+                    }}>
+                    <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:14}}>📋 ΑΝΤΙΓΡΑΦΗ ΠΑΡΑΤ.</Text>
+                  </TouchableOpacity>
+                )}
               </View>
               {/* Κουμπί ειδοποίησης: παραγγελίες έτοιμες αλλά κολλημένες σε PROD */}
               {specialOrders.filter(isOrderReadyForTransfer).length > 0 && (
@@ -5325,10 +5354,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>✕ Καθάρισμα</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity onPress={()=>handleSimplePrint(shownList, 'ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ')}
-                    style={{paddingVertical:8, borderRadius:8, alignItems:'center', backgroundColor:'#1976d2'}}>
-                    <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
-                  </TouchableOpacity>
+                  {isAdmin && (
+                    <TouchableOpacity onPress={()=>handleSimplePrint(shownList, 'ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ')}
+                      style={{paddingVertical:8, borderRadius:8, alignItems:'center', backgroundColor:'#1976d2'}}>
+                      <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
 

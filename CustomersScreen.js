@@ -62,7 +62,7 @@ const fmtDate = (ts) => {
 
 const INIT = { name: '', phone: '', phone2: '', phone3: '', phoneViber: '', email: '', identifier: '', city: '', profession: '' };
 
-export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[] }) {
+export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[], isAdmin=false }) {
   const [form, setForm] = useState(prefillName ? { ...INIT, name: prefillName } : INIT);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
@@ -262,9 +262,11 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
         </TouchableOpacity>
         <Text style={styles.headerTitle}>👥 ΠΕΛΑΤΕΣ</Text>
         <View style={{ flex: 1 }} />
-        <TouchableOpacity onPress={printCustomers} style={styles.printBtn}>
-          <Text style={styles.printTxt}>🖨️</Text>
-        </TouchableOpacity>
+        {isAdmin && (
+          <TouchableOpacity onPress={printCustomers} style={styles.printBtn}>
+            <Text style={styles.printTxt}>🖨️</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView ref={scrollRef} style={{ padding: 12 }}>

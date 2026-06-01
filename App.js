@@ -619,6 +619,7 @@ export default function App() {
           coatings={coatings}
           locks={locks}
           readOnly={currentUser?.role === 'guest'}
+          isAdmin={currentUser?.role === 'admin'}
           codeModalOpen={adminAuthOpen || adminPanelOpen || statsAuthOpen || backupAuthOpen || restoreAuthOpen}
         />
       </View>
@@ -644,17 +645,8 @@ export default function App() {
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowLocks(true); }}>
               <Text style={styles.menuItemText}>🔒 ΚΛΕΙΔΑΡΙΕΣ</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setStatsAuthOpen(true); }}>
-              <Text style={styles.menuItemText}>📊 ΣΤΑΤΙΣΤΙΚΑ</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowActivity(true); }}>
               <Text style={styles.menuItemText}>📜 ΙΣΤΟΡΙΚΟ ΚΙΝΗΣΕΩΝ</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setBrAuthPwd(''); setBrAuthError(false); setBackupAuthOpen(true); }}>
-              <Text style={styles.menuItemText}>💾 BACKUP</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setBrAuthPwd(''); setBrAuthError(false); setRestoreAuthOpen(true); }}>
-              <Text style={styles.menuItemText}>♻️ ΕΠΑΝΑΦΟΡΑ</Text>
             </TouchableOpacity>
             {currentUser?.role === 'admin' && (
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff7ec' }]} onPress={() => { setMenuOpen(false); setAdminAuthPwd(''); setAdminAuthError(false); setAdminAuthOpen(true); }}>
@@ -895,7 +887,17 @@ export default function App() {
             <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000', marginTop: 10 }]} onPress={lockSelf}>
               <Text style={statsAuthStyles.btnTxt}>🔒 ΚΛΕΙΔΩΣΕ ΚΙ ΑΥΤΟ ΤΟ PC</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666', marginTop: 10 }]} onPress={() => setAdminPanelOpen(false)}>
+            <View style={{ height: 1, backgroundColor: '#eee', marginTop: 14, marginBottom: 10 }} />
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#1976d2' }]} onPress={() => { setAdminPanelOpen(false); setShowStats(true); }}>
+              <Text style={statsAuthStyles.btnTxt}>📊 ΣΤΑΤΙΣΤΙΚΑ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#2e7d32', marginTop: 8 }]} onPress={() => { setAdminPanelOpen(false); doBackup(); }}>
+              <Text style={statsAuthStyles.btnTxt}>💾 BACKUP</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#E65100', marginTop: 8 }]} onPress={() => { setAdminPanelOpen(false); openRestoreFilePicker(); }}>
+              <Text style={statsAuthStyles.btnTxt}>♻️ ΕΠΑΝΑΦΟΡΑ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666', marginTop: 14 }]} onPress={() => setAdminPanelOpen(false)}>
               <Text style={statsAuthStyles.btnTxt}>ΚΛΕΙΣΙΜΟ</Text>
             </TouchableOpacity>
           </View>
@@ -904,6 +906,7 @@ export default function App() {
 
       <Modal visible={showCustomers} animationType="slide" onRequestClose={() => setShowCustomers(false)}>
         <CustomersScreen
+          isAdmin={currentUser?.role === 'admin'}
           customers={customers}
           setCustomers={setCustomers}
           customOrders={[]}
