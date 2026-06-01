@@ -127,12 +127,17 @@ const isOrderReadyForTransfer = (order) => {
   });
 };
 
-// Helper: παραγγελία έτοιμη προς μοντάρισμα (προηγούμενες φάσεις done, επένδυση δεν μετράει)
+// Helper: επένδυση τύπου laminate/pvc (δεν μπλοκάρει το μοντάρισμα ακόμα κι αν εκκρεμεί)
+const isLaminateOrPvc = (name) => { const n = String(name||'').toUpperCase(); if (n.includes('ΔΙΚΟ ΤΟΥ') || n.includes('ΔΙΚΑ ΤΟΥ')) return false; return n.includes('LAMINATE') || n.includes('PVC'); };
+// Helper: παραγγελία έτοιμη προς μοντάρισμα (προηγούμενες φάσεις done· επένδυση: laminate/pvc δεν μετράει, οι υπόλοιπες πρέπει να είναι done)
 const isReadyForMont = (o) => {
   if (!o || o.installation !== 'ΝΑΙ') return false;
   const m = o.phases?.montDoor;
   if (!m?.active || m.done) return false;
-  return ['laser','cases','montSasi','vafio'].every(k => !o.phases?.[k]?.active || o.phases?.[k]?.done);
+  if (!['laser','cases','montSasi','vafio'].every(k => !o.phases?.[k]?.active || o.phases?.[k]?.done)) return false;
+  const coats = (o.coatings||[]).filter(c => c && String(c).trim());
+  if (coats.length === 0 || o.phases?.epend?.done) return true;
+  return coats.every(isLaminateOrPvc);
 };
 
 // Helpers για ανοιγόμενο τζάμι (ίδια λογική με σταθερό αλλά ξεχωριστή διαδικασία)
@@ -550,6 +555,11 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [prodSearch, setProdSearch] = useState('');
   const [readySearch, setReadySearch] = useState('');
   const [archivePage, setArchivePage] = useState(0);
+  const [archiveView, setArchiveView] = useState('calendar');
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [archiveMonth, setArchiveMonth] = useState(()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); });
+  const [archiveFrom, setArchiveFrom] = useState(null);
+  const [archiveTo, setArchiveTo] = useState(null);
 
   const [printSelected, setPrintSelected] = useState({});
   const [montReadyFilter, setMontReadyFilter] = useState(false);
@@ -1057,11 +1067,14 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         const staveraEntries = (o.stavera||[]).filter(s=>s&&s.dim);
         const staveraStr = staveraEntries.map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(' | ');
         const tzami = o.orderType==="ΤΥΠΟΠΟΙΗΜΕΝΗ"?"":((o.glassDim||"")+(o.glassNotes?` ${o.glassNotes}`:""))||"";
-        const ependCheck = (!isEpend && allCoatings.length>0 && o.phases?.epend?.done) ? ` <span style="color:#00C851;font-size:22px;font-weight:900">✔</span>` : '';
+        const ependDone = !isEpend && o.phases?.epend?.done;
+        const checkMark = ` <span style="color:#00C851;font-size:22px;font-weight:900">✔</span>`;
+        const exoCheck = ependDone && exo.length>0 ? checkMark : '';
+        const mesaCheck = ependDone && mesa.length>0 ? checkMark : '';
         const notesLines = [];
         if (o.notes) notesLines.push(`<span style="color:#000">${formatNotesHtml(o.notes)}</span>`);
-        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${coatingsHtml(exo)}${mesa.length===0?ependCheck:''}</span>`);
-        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${coatingsHtml(mesa)}${ependCheck}</span>`);
+        if (exo.length>0) notesLines.push(`<span style="color:#b8860b;font-weight:bold">🎨 ΕΞΩ: ${coatingsHtml(exo)}${exoCheck}</span>`);
+        if (mesa.length>0) notesLines.push(`<span style="color:#1565c0;font-weight:bold">🎨 ΜΕΣ: ${coatingsHtml(mesa)}${mesaCheck}</span>`);
         if (staveraStr) notesLines.push(`<span style="color:#6a0dad;font-weight:bold">📐 ${staveraStr}</span>`);
         if (tzami) notesLines.push(`<span style="color:#555">🪟 ${tzami}</span>`);
         const notesCell = notesLines.join('<br>');
@@ -4553,8 +4566,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <View style={{flex:1}} />
           {/* Διαχωριστικό */}
           <View style={{height:1, backgroundColor:'rgba(255,255,255,0.18)', marginVertical:2}} />
-          {/* 🔍 ΠΕΛΑΤΕΣ — αναζήτηση παραγγελιών ανά πελάτη */}
-          {!readOnly && (
+          {/* 🔍 ΠΕΛΑΤΕΣ — αναζήτηση παραγγελιών ανά πελάτη (στο αρχείο γίνεται από το κεντρικό explorer) */}
+          {!readOnly && activeSection!=='archive' && (
           <TouchableOpacity
             onPress={()=>setShowCustomerLookup(v=>!v)}
             style={{backgroundColor: activeSection==='archive' ? (showCustomerLookup?'#777':'#555') : (showCustomerLookup?'#1565c0':'#0d47a1'), borderRadius:10, padding:12, alignItems:'center', gap:4, borderWidth:2, borderColor: showCustomerLookup?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.15)'}}>
@@ -5171,35 +5184,163 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           {/* ΑΡΧΕΙΟ */}
           {activeSection==='archive'&&(()=>{
             const PAGE = 30;
-            const sorted = [...soldSpecialOrders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
-            const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE));
-            const page = Math.min(archivePage, totalPages - 1);
-            const pageItems = sorted.slice(page * PAGE, page * PAGE + PAGE);
             const PagerBtn = ({label, disabled, onPress}) => (
               <TouchableOpacity disabled={disabled} onPress={onPress}
                 style={{paddingHorizontal:14, paddingVertical:8, borderRadius:8, backgroundColor: disabled?'#ccc':'#333'}}>
                 <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>{label}</Text>
               </TouchableOpacity>
             );
+            const renderList = (list) => {
+              const totalPages = Math.max(1, Math.ceil(list.length / PAGE));
+              const page = Math.min(archivePage, totalPages - 1);
+              const items = list.slice(page * PAGE, page * PAGE + PAGE);
+              return (<>
+                {list.length===0 && <Text style={{textAlign:'center', color:'#999', padding:20}}>Καμία παραγγελία.</Text>}
+                {items.map(o=>renderOrderCard(o,true))}
+                {totalPages > 1 && (
+                  <View style={{flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, paddingVertical:14, flexWrap:'wrap'}}>
+                    <PagerBtn label="⏮ ΑΡΧΗ" disabled={page===0} onPress={()=>setArchivePage(0)} />
+                    <PagerBtn label="◀" disabled={page===0} onPress={()=>setArchivePage(page-1)} />
+                    <Text style={{fontWeight:'bold', color:'#333', minWidth:110, textAlign:'center'}}>Σελίδα {page+1} / {totalPages}</Text>
+                    <PagerBtn label="▶" disabled={page>=totalPages-1} onPress={()=>setArchivePage(page+1)} />
+                    <PagerBtn label="ΤΕΛΟΣ ⏭" disabled={page>=totalPages-1} onPress={()=>setArchivePage(totalPages-1)} />
+                  </View>
+                )}
+              </>);
+            };
+            const ToggleBtn = ({label, active, onPress}) => (
+              <TouchableOpacity onPress={onPress}
+                style={{paddingVertical:10, paddingHorizontal:8, borderRadius:8, alignItems:'center', backgroundColor: active?'#333':'#e0e0e0'}}>
+                <Text style={{color: active?'white':'#555', fontWeight:'bold', fontSize:13}}>{label}</Text>
+              </TouchableOpacity>
+            );
+            const startOfDay = (ts) => { const d=new Date(ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+            const fmt = (ts) => { const d=new Date(ts); return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`; };
+            const mDate = new Date(archiveMonth);
+            const year = mDate.getFullYear(), month = mDate.getMonth();
+            const monthNames = ['Ιανουάριος','Φεβρουάριος','Μάρτιος','Απρίλιος','Μάιος','Ιούνιος','Ιούλιος','Αύγουστος','Σεπτέμβριος','Οκτώβριος','Νοέμβριος','Δεκέμβριος'];
+            const counts = {};
+            soldSpecialOrders.forEach(o=>{ if(!o.soldAt) return; const d=new Date(o.soldAt); if(d.getFullYear()===year && d.getMonth()===month) counts[d.getDate()]=(counts[d.getDate()]||0)+1; });
+            const firstDow = (new Date(year, month, 1).getDay()+6)%7;
+            const daysInMonth = new Date(year, month+1, 0).getDate();
+            const cells = [];
+            for(let i=0;i<firstDow;i++) cells.push(null);
+            for(let d=1;d<=daysInMonth;d++) cells.push(d);
+            const years = [...new Set(soldSpecialOrders.filter(o=>o.soldAt).map(o=>new Date(o.soldAt).getFullYear()))].sort((a,b)=>b-a);
+            const lo = archiveFrom;
+            const hi = archiveTo!=null ? archiveTo : archiveFrom;
+            const pickDay = (ts) => {
+              setArchivePage(0);
+              if (archiveFrom==null || archiveTo!=null) { setArchiveFrom(ts); setArchiveTo(null); }
+              else if (ts < archiveFrom) { setArchiveTo(archiveFrom); setArchiveFrom(ts); }
+              else setArchiveTo(ts);
+            };
+            const rangeList = lo!=null ? soldSpecialOrders.filter(o=>{ if(!o.soldAt) return false; const t=startOfDay(o.soldAt); return t>=lo && t<=hi; }).sort((a,b)=>(a.soldAt||0)-(b.soldAt||0)) : [];
+            const q = archiveSearch.trim();
+            const searchResults = q ? soldSpecialOrders.filter(o=>matchesSearch(o, q)).sort((a,b)=>(b.soldAt||0)-(a.soldAt||0)) : [];
+            const shownList = archiveView==='search' ? searchResults : rangeList;
             return (
             <View>
-              <View style={[styles.listHeader,{backgroundColor:'#333', flexDirection:'row', alignItems:'center', justifyContent:'space-between'}]}>
-                <Text style={styles.listHeaderText}>📂 ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ ({sorted.length})</Text>
-                <TouchableOpacity style={{backgroundColor:'white', paddingHorizontal:10, paddingVertical:5, borderRadius:20}}
-                  onPress={()=>handleSimplePrint(soldSpecialOrders, 'ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ')}>
-                  <Text style={{color:'#333', fontSize:11, fontWeight:'bold'}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
-                </TouchableOpacity>
-              </View>
-              {pageItems.map(o=>renderOrderCard(o,true))}
-              {totalPages > 1 && (
-                <View style={{flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, paddingVertical:14, flexWrap:'wrap'}}>
-                  <PagerBtn label="⏮ ΑΡΧΗ" disabled={page===0} onPress={()=>setArchivePage(0)} />
-                  <PagerBtn label="◀" disabled={page===0} onPress={()=>setArchivePage(page-1)} />
-                  <Text style={{fontWeight:'bold', color:'#333', minWidth:110, textAlign:'center'}}>Σελίδα {page+1} / {totalPages}</Text>
-                  <PagerBtn label="▶" disabled={page>=totalPages-1} onPress={()=>setArchivePage(page+1)} />
-                  <PagerBtn label="ΤΕΛΟΣ ⏭" disabled={page>=totalPages-1} onPress={()=>setArchivePage(totalPages-1)} />
+              <View style={{flexDirection:'row', gap:24, paddingVertical:10, alignItems:'flex-start'}}>
+                <View style={{width:430}}>
+                  {archiveView==='search' ? (
+                    <View style={{flexDirection:'row', alignItems:'center', backgroundColor:'#fff', borderRadius:8, borderWidth:1.5, borderColor:'#ddd', paddingHorizontal:10, paddingVertical:6}}>
+                      <Text style={{fontSize:16, marginRight:6, color:'#aaa'}}>🔍</Text>
+                      <TextInput
+                        style={{flex:1, fontSize:14, color:'#1a1a1a', padding:0}}
+                        placeholder="Πελάτης ή αριθμός παραγγελίας..."
+                        placeholderTextColor="#bbb"
+                        autoComplete="off"
+                        value={archiveSearch}
+                        onChangeText={v=>{ setArchiveSearch(v); setArchivePage(0); }}
+                      />
+                      {archiveSearch.length>0 && (
+                        <TouchableOpacity onPress={()=>{ setArchiveSearch(''); setArchivePage(0); }}>
+                          <Text style={{color:'#aaa', fontSize:16, fontWeight:'bold', paddingLeft:6}}>✕</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : (
+                    <View style={{maxWidth:430}}>
+                      <View style={{flexDirection:'row', alignItems:'center', marginBottom:6}}>
+                        <TouchableOpacity onPress={()=>setArchiveMonth(new Date(year, month-1, 1).getTime())}
+                          style={{paddingHorizontal:10, paddingVertical:6, borderRadius:8, backgroundColor:'#333'}}>
+                          <Text style={{color:'white', fontWeight:'bold'}}>◀</Text>
+                        </TouchableOpacity>
+                        <Text style={{fontSize:15, fontWeight:'bold', color:'#333', marginHorizontal:6}}>{monthNames[month]} {year}</Text>
+                        <TouchableOpacity onPress={()=>setArchiveMonth(new Date(year, month+1, 1).getTime())}
+                          style={{paddingHorizontal:10, paddingVertical:6, borderRadius:8, backgroundColor:'#333'}}>
+                          <Text style={{color:'white', fontWeight:'bold'}}>▶</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={()=>setArchiveMonth(new Date().getTime())}
+                          style={{paddingHorizontal:10, paddingVertical:6, borderRadius:8, backgroundColor:'#2e7d32', marginLeft:6}}>
+                          <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>Σήμερα</Text>
+                        </TouchableOpacity>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flex:1, marginLeft:8}}
+                          contentContainerStyle={{flexGrow:1, justifyContent:'flex-end', alignItems:'center', gap:6}}>
+                          {years.map(y=>(
+                            <TouchableOpacity key={y} onPress={()=>setArchiveMonth(new Date(y, month, 1).getTime())}
+                              style={{paddingHorizontal:10, paddingVertical:5, borderRadius:16, backgroundColor: y===year?'#333':'#e0e0e0'}}>
+                              <Text style={{color: y===year?'white':'#555', fontWeight:'bold', fontSize:12}}>{y}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                      <View style={{flexDirection:'row'}}>
+                        {['Δε','Τρ','Τε','Πε','Πα','Σα','Κυ'].map(w=>(
+                          <View key={w} style={{flex:1, alignItems:'center', paddingVertical:2}}>
+                            <Text style={{fontSize:10, fontWeight:'bold', color:'#888'}}>{w}</Text>
+                          </View>
+                        ))}
+                      </View>
+                      <View style={{flexDirection:'row', flexWrap:'wrap'}}>
+                        {cells.map((d,i)=>{
+                          if(d===null) return <View key={'e'+i} style={{width:`${100/7}%`, padding:2}} />;
+                          const c = counts[d]||0;
+                          const cellTs = new Date(year, month, d).getTime();
+                          const inRange = archiveFrom!=null && cellTs>=lo && cellTs<=hi;
+                          const isToday = cellTs===startOfDay(Date.now());
+                          return (
+                            <View key={d} style={{width:`${100/7}%`, padding:2}}>
+                              <TouchableOpacity disabled={c===0}
+                                onPress={()=>pickDay(cellTs)}
+                                style={{minHeight:34, borderRadius:6, alignItems:'center', justifyContent:'center', backgroundColor: inRange?'#333':(isToday?'#2e7d32':(c>0?'#e3f2fd':'#f5f5f5')), borderWidth: (c>0||isToday)?1.5:1, borderColor: inRange?'#333':(isToday?'#2e7d32':(c>0?'#90caf9':'#eee'))}}>
+                                <Text style={{fontSize:12, fontWeight:'bold', color: (inRange||isToday)?'white':'#333'}}>{d}</Text>
+                                {c>0 && <Text style={{fontSize:13, fontWeight:'900', color: (inRange||isToday)?'#fff':'#c62828'}}>{c}</Text>}
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
                 </View>
-              )}
+
+                <View style={{width:140, gap:16}}>
+                  <ToggleBtn label="🔍 Αναζήτηση" active={archiveView==='search'} onPress={()=>{ setArchiveView('search'); setArchivePage(0); }} />
+                  <ToggleBtn label="📅 Ημερολόγιο" active={archiveView==='calendar'} onPress={()=>{ setArchiveView('calendar'); setArchivePage(0); }} />
+                  {archiveView==='calendar' && archiveFrom!=null && (
+                    <TouchableOpacity onPress={()=>{ setArchiveFrom(null); setArchiveTo(null); setArchivePage(0); }}
+                      style={{paddingVertical:8, borderRadius:8, alignItems:'center', backgroundColor:'#c62828'}}>
+                      <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>✕ Καθάρισμα</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={()=>handleSimplePrint(shownList, 'ΑΡΧΕΙΟ ΠΩΛΗΣΕΩΝ')}
+                    style={{paddingVertical:8, borderRadius:8, alignItems:'center', backgroundColor:'#1976d2'}}>
+                    <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {archiveView==='search'
+                ? (q ? renderList(searchResults) : <Text style={{textAlign:'center', color:'#999', padding:20}}>Γράψε όνομα πελάτη ή αριθμό παραγγελίας.</Text>)
+                : (archiveFrom!=null
+                    ? (<View style={{marginTop:12}}>
+                        <Text style={{fontSize:14, fontWeight:'bold', color:'#333', marginBottom:8}}>Πωλήσεις {fmt(lo)}{hi!==lo?` έως ${fmt(hi)}`:''} ({rangeList.length})</Text>
+                        {renderList(rangeList)}
+                      </View>)
+                    : <Text style={{textAlign:'center', color:'#999', padding:20}}>Διάλεξε μέρα στο ημερολόγιο (ή δύο μέρες για διάστημα).</Text>)
+              }
             </View>
             );
           })()}
