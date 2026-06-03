@@ -247,13 +247,16 @@ const isReadyForMont = (o) => {
   if (!['laser','cases','montSasi','vafio'].every(k => !o.phases?.[k]?.active || o.phases?.[k]?.done)) return false;
   const coats = (o.coatings||[]).filter(c => c && String(c).trim());
   if (coats.length === 0 || o.phases?.epend?.done) return true;
-  return coats.every(isLaminateOrPvc);
+  return coats.every((c, i) => isLaminateOrPvc(c) || !!(o.coatingChecks && o.coatingChecks[String(i)]));
 };
 
 const isReadyForEpend = (o) => {
   if (!o) return false;
   const e = o.phases?.epend; if (!e?.active || e.done) return false;
-  return ['laser','cases','montSasi','vafio'].every(k => !o.phases?.[k]?.active || o.phases?.[k]?.done);
+  if (!['laser','cases','montSasi','vafio'].every(k => !o.phases?.[k]?.active || o.phases?.[k]?.done)) return false;
+  const coats = (o.coatings||[]).filter(c => c && String(c).trim());
+  if (!coats.some(isLaminateOrPvc)) return false;
+  return coats.every((c, i) => isLaminateOrPvc(c) || !!(o.coatingChecks && o.coatingChecks[String(i)]));
 };
 
 // Helpers για ανοιγόμενο τζάμι (ίδια λογική με σταθερό αλλά ξεχωριστή διαδικασία)
@@ -2833,9 +2836,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </TouchableOpacity>
           {/* DONE + οπτικά ticks επενδύσεων αριστερά (μόνο για ΕΠΕΝΔΥΣΕΙΣ με 2+ επενδύσεις) */}
           <View style={{flexDirection:'row', alignItems:'stretch', gap:4}}>
-            {phaseKey === 'epend' && (order.coatings||[]).filter(c=>c&&String(c).trim()).length >= 2 && (
+            {phaseKey === 'epend' && (order.coatings||[]).filter(c=>c&&String(c).trim()).length >= 1 && (
               <View style={{flexDirection:'column', gap:3, justifyContent:'space-between'}}>
-                {[0,1].map(i => {
+                {(order.coatings||[]).filter(c=>c&&String(c).trim()).map((_, i) => {
                   const checked = phase.done || !!(order.coatingChecks && order.coatingChecks[String(i)]);
                   return (
                     <TouchableOpacity key={i}
