@@ -19,15 +19,15 @@ export const logActivity = async (section, action, details = {}) => {
   }
 };
 
-// Φόρτωση ιστορικού (τελευταίες 7 μέρες)
+// Φόρτωση ιστορικού (τελευταίες 3 μέρες)
 export const loadActivityLog = async () => {
   try {
     const res = await fetch(`${FIREBASE_URL}/activity_log.json`);
     const data = await res.json();
     if (!data) return [];
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 μέρες πριν
+    const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000; // 3 μέρες πριν
     const entries = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-    // Κρατάμε μόνο τελευταίες 7 μέρες
+    // Κρατάμε μόνο τελευταίες 3 μέρες
     return entries
       .filter(e => e.ts >= cutoff)
       .sort((a, b) => b.ts - a.ts); // νεότερο πρώτα
@@ -36,13 +36,13 @@ export const loadActivityLog = async () => {
   }
 };
 
-// Διαγραφή παλαιών εγγραφών (>7 μέρες) — καλείται κατά τη φόρτωση
+// Διαγραφή παλαιών εγγραφών (>3 μέρες) — καλείται κατά τη φόρτωση
 export const cleanOldLogs = async () => {
   try {
     const res = await fetch(`${FIREBASE_URL}/activity_log.json`);
     const data = await res.json();
     if (!data) return;
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
     for (const key of Object.keys(data)) {
       if (data[key].ts < cutoff) {
         await fetch(`${FIREBASE_URL}/activity_log/${key}.json`, { method: 'DELETE' });
@@ -52,14 +52,14 @@ export const cleanOldLogs = async () => {
 };
 
 // Συνδυασμένη φόρτωση + καθαρισμός με ΜΙΑ μόνο διαδρομή στη βάση.
-// Επιστρέφει τις πρόσφατες κινήσεις (≤7 ημέρες) και σβήνει τις παλιές
+// Επιστρέφει τις πρόσφατες κινήσεις (≤3 ημέρες) και σβήνει τις παλιές
 // μαζικά στο background με ΜΙΑ PATCH (αντί για 1 DELETE ανά εγγραφή).
 export const loadAndClean = async () => {
   try {
     const res = await fetch(`${FIREBASE_URL}/activity_log.json`);
     const data = await res.json();
     if (!data) return [];
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
     const fresh = [];
     const oldKeys = [];
     for (const key of Object.keys(data)) {

@@ -119,7 +119,7 @@ export default function ActivityScreen({ onClose }) {
         ))}
       </ScrollView>
 
-      <Text style={styles.count}>{filtered.length} κινήσεις (τελευταίες 7 μέρες)</Text>
+      <Text style={styles.count}>{filtered.length} κινήσεις (τελευταίες 3 μέρες)</Text>
 
       {/* LIST */}
       {loading ? (

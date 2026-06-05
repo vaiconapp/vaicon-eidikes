@@ -793,7 +793,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [pageWidth, setPageWidth] = useState(SCREEN_WIDTH);
 
 
-  const syncToCloud = async (o) => { try { await fetch(`${FIREBASE_URL}/special_orders/${o.id}.json`,{method:'PUT',body:JSON.stringify(o)}); } catch { Alert.alert("Σφάλμα","Δεν αποθηκεύτηκε."); } };
+  const syncToCloud = async (o) => { try { const r = await fetch(`${FIREBASE_URL}/special_orders/${o.id}.json`,{method:'PUT',body:JSON.stringify(o)}); return r.ok; } catch { return false; } };
   const deleteFromCloud = async (id) => { try { await fetch(`${FIREBASE_URL}/special_orders/${id}.json`,{method:'DELETE'}); } catch(e){} };
 
   // Πελάτης από όνομα παραγγελίας (για phone/email)
@@ -867,6 +867,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   };
 
   const resetForm = () => { setCustomForm(INIT_FORM); setCustomerSearch(''); setSelectedCustomer(null); setShowCustomerList(false); setEditingOrder(null); };
+  const isFormDirty = () => { const f=customForm||{}; return !!((f.customer&&f.customer.trim())||(f.orderNo&&f.orderNo.trim())||(f.h&&f.h.trim())||(f.w&&f.w.trim())||(f.notes&&f.notes.trim())||(f.coatings||[]).some(c=>c&&String(c).trim())); };
+  const requestSection = (key) => {
+    if (key!=='form' && activeSection==='form' && isFormDirty()) {
+      const msg = '⚠️ Έχεις παραγγελία που ΔΕΝ αποθηκεύτηκε.\nΑν αλλάξεις καρτέλα θα ΧΑΘΟΥΝ τα στοιχεία.\nΣίγουρα θες να φύγεις;';
+      if (Platform.OS==='web') { if (window.confirm(msg)) setActiveSection(key); return; }
+      Alert.alert('Μη αποθηκευμένη παραγγελία', msg, [{text:'ΑΚΥΡΟ',style:'cancel'},{text:'ΦΥΓΕ — ΧΩΡΙΣ ΑΠΟΘΗΚΕΥΣΗ',style:'destructive',onPress:()=>setActiveSection(key)}]);
+      return;
+    }
+    setActiveSection(key);
+  };
 
   // Ακύρωση φόρμας: αν είμαστε σε επεξεργασία, επαναφέρει την παραγγελία
   const cancelForm = async () => {
@@ -970,8 +980,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
     async function doSave() {
       const newOrder = {...customForm, ...overrides, orderType:'ΕΙΔΙΚΗ', id:Date.now().toString(), createdAt:Date.now(), status:'PENDING'};
+      const ok = await syncToCloud(newOrder);
+      if (!ok) {
+        const msg = `⚠️ Η παραγγελία ${newOrder.orderNo} ΔΕΝ αποθηκεύτηκε στη βάση.\nΈλεγξε τη σύνδεση και πάτησε ξανά Αποθήκευση.\n(Τα στοιχεία παραμένουν στη φόρμα.)`;
+        if (Platform.OS==='web') window.alert(msg); else Alert.alert('ΔΕΝ ΑΠΟΘΗΚΕΥΤΗΚΕ', msg);
+        return;
+      }
       setSpecialOrders([newOrder,...specialOrders]);
-      await syncToCloud(newOrder);
       await logActivity('ΕΙΔΙΚΗ', 'Νέα παραγγελία', { orderNo: newOrder.orderNo, customer: newOrder.customer, size: `${newOrder.h}x${newOrder.w}`, qty: newOrder.qty });
       resetForm();
       setNotifyModal({ visible:true, order:newOrder });
@@ -984,7 +999,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     setEditingOrder(order);
     setSpecialOrders(specialOrders.filter(o=>o.id!==order.id));
     deleteFromCloud(order.id);
-
+    logActivity('ΕΙΔΙΚΗ', 'Επεξεργασία (άνοιγμα)', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
   };
 
   // Μεταφορά PENDING → PROD: αρχικοποιεί τις φάσεις παραγωγής
@@ -2438,6 +2453,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       const order = specialOrders.find(o=>o.id===id);
       setSpecialOrders(specialOrders.filter(o=>o.id!==id));
       await deleteFromCloud(id);
+      if (order) await logActivity('ΕΙΔΙΚΗ', 'Ακύρωση/Διαγραφή', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
       if (!order || order.orderType!=='ΤΥΠΟΠΟΙΗΜΕΝΗ') return;
       const customer = order.customer || `#${order.orderNo}`;
       const orderQty = parseInt(order.qty)||1;
@@ -2470,8 +2486,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   };
   const deleteFromArchive = (id) => setArchiveDeleteModal({ visible:true, orderId:id, pwd:'', error:false });
   const confirmDeleteFromArchive = async (id) => {
+    const order = soldSpecialOrders.find(o=>o.id===id);
     setSoldSpecialOrders(soldSpecialOrders.filter(o=>o.id!==id));
     await deleteFromCloud(id);
+    if (order) await logActivity('ΕΙΔΙΚΗ', 'Διαγραφή από Αρχείο', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
   };
   const returnToReady = async (id) => {
     const order = soldSpecialOrders.find(o=>o.id===id);
@@ -5003,7 +5021,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {key:'archive', icon:'💰', label:'ΑΡΧΕΙΟ', count:soldSpecialOrders.length, badgeColor:'#555'},
           ].filter(item=>!readOnly||item.key==='pending').map(item=>(
             <TouchableOpacity key={item.key}
-              onPress={()=>setActiveSection(item.key)}
+              onPress={()=>requestSection(item.key)}
               style={{backgroundColor:activeSection===item.key?'#8B0000':'#2c2c2c', borderRadius:10, padding:12, alignItems:'center', gap:4, borderWidth:2, borderColor:activeSection===item.key?'rgba(255,255,255,0.3)':'transparent', position:'relative'}}>
               {item.count>0&&<View style={{position:'absolute',top:6,right:6,backgroundColor:item.badgeColor,borderRadius:10,paddingHorizontal:5,paddingVertical:1,minWidth:18,alignItems:'center'}}><Text style={{color:'white',fontSize:9,fontWeight:'bold'}}>{item.count}</Text></View>}
               <Text style={{fontSize:22}}>{item.icon}</Text>
