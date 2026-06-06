@@ -472,15 +472,21 @@ export default function App() {
   const doBackup = async () => {
     setBackupRunning(true);
     try {
-      const res = await fetch(`${FIREBASE_URL}/.json`);
-      if (!res.ok) throw new Error('Σφάλμα ανάγνωσης βάσης');
-      const fullData = (await res.json()) || {};
+      const NODES = ['special_orders', 'customers', 'coatings', 'locks', 'user_labels', 'activity_log', 'msg_map', 'messages', 'app_lock', 'installers', 'installations', 'activity_log_install'];
+      const fullData = {};
+      for (const p of NODES) {
+        const r = await fetch(`${FIREBASE_URL}/${p}.json`);
+        if (!r.ok) continue;
+        const d = await r.json();
+        if (d !== null && d !== undefined) fullData[p] = d;
+      }
+      if (Object.keys(fullData).length === 0) throw new Error('Σφάλμα ανάγνωσης βάσης');
       const now = new Date();
       const pad = n => String(n).padStart(2, '0');
       const createdAtStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
       const payload = { createdAt: now.getTime(), createdAtStr, version: APP_VERSION, data: fullData };
       const json = JSON.stringify(payload, null, 2);
-      const filename = 'vaicon-eidikes-backup.json';
+      const filename = `vaicon-eidikes-backup-${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()}_${pad(now.getHours())}-${pad(now.getMinutes())}.json`;
 
       if (Platform.OS !== 'web') {
         Alert.alert('Μη διαθέσιμο', 'Το backup είναι διαθέσιμο μόνο από browser.');
