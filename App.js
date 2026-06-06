@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, ActivityIndicator, Platform,
-  StatusBar, TouchableOpacity, Modal, TextInput, Alert, BackHandler
+  StatusBar, TouchableOpacity, Modal, TextInput, Alert, BackHandler, ScrollView
 } from 'react-native';
 import SpecialScreen from './SpecialScreen';
 import CustomersScreen from './CustomersScreen';
 import CoatingsScreen from './CoatingsScreen';
 import LocksScreen from './LocksScreen';
 import ActivityScreen from './ActivityScreen';
+import MessagesScreen from './MessagesScreen';
 import StatsScreen from './StatsScreen';
 import { APP_VERSION } from './version';
 
@@ -248,6 +249,12 @@ export default function App() {
   const [showCoatings, setShowCoatings] = useState(false);
   const [showLocks, setShowLocks] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
+  const [incomingMsg, setIncomingMsg] = useState(null);
+  const [showInbox, setShowInbox] = useState(false);
+  const [inbox, setInbox] = useState([]);
+  const [unreadPrompt, setUnreadPrompt] = useState(0);
+  const promptAckRef = useRef(false);
   const [showStats, setShowStats] = useState(false);
   const [statsAuthOpen, setStatsAuthOpen] = useState(false);
   const [statsAuthPwd, setStatsAuthPwd] = useState('');
@@ -335,7 +342,40 @@ export default function App() {
   }, [isLoggedIn, tokenVersion]);
 
   useEffect(() => {
-    if (!adminPanelOpen) return;
+    if (!isLoggedIn || !currentUser?.username || currentUser.role === 'guest' || currentUser.role === 'admin') return;
+    const myKey = lockKey(currentUser.username);
+    const pickUnread = (data) => {
+      const unread = Object.values(data || {}).filter(m => m && m.read === false);
+      if (!unread.length) { promptAckRef.current = false; setUnreadPrompt(0); return; }
+      if (!promptAckRef.current) setUnreadPrompt(unread.length);
+    };
+    const load = async () => { try { const r = await fetch(`${FIREBASE_URL}/messages/${myKey}.json`); pickUnread(await r.json()); } catch {} };
+    load();
+    const iv = setInterval(load, 15000);
+    return () => clearInterval(iv);
+  }, [isLoggedIn, currentUser, tokenVersion]);
+
+  const dismissMsg = async () => {
+    const m = incomingMsg; setIncomingMsg(null);
+    if (!m || !currentUser?.username) return;
+    setInbox(prev => prev.map(x => x.id === m.id ? { ...x, read: true, readAt: m.readAt || Date.now() } : x));
+    if (m.read) return;
+    try { await fetch(`${FIREBASE_URL}/messages/${lockKey(currentUser.username)}/${m.id}.json`, { method: 'PATCH', body: JSON.stringify({ read: true, readAt: Date.now() }) }); } catch {}
+  };
+
+  const openInbox = async () => {
+    setMenuOpen(false);
+    setShowInbox(true);
+    if (!currentUser?.username) return;
+    try {
+      const r = await fetch(`${FIREBASE_URL}/messages/${lockKey(currentUser.username)}.json`);
+      const d = (await r.json()) || {};
+      setInbox(Object.keys(d).map(id => ({ id, ...d[id] })).sort((a, b) => (b.ts || 0) - (a.ts || 0)));
+    } catch { setInbox([]); }
+  };
+
+  useEffect(() => {
+    if (!adminPanelOpen && !showMessages) return;
     let alive = true;
     (async () => {
       try {
@@ -345,7 +385,7 @@ export default function App() {
       } catch {}
     })();
     return () => { alive = false; };
-  }, [adminPanelOpen]);
+  }, [adminPanelOpen, showMessages]);
 
   const saveLabel = async (k, val) => {
     const trimmed = (val || '').trim();
@@ -396,6 +436,10 @@ export default function App() {
       if (backupSuccess) { setBackupSuccess(null); return true; }
       if (restorePayload || restoreFileError) { setRestorePayload(null); setRestoreFileError(null); setRestoreConfirmText(''); return true; }
       if (showStats) { setShowStats(false); return true; }
+      if (incomingMsg) { dismissMsg(); return true; }
+      if (unreadPrompt > 0) { setUnreadPrompt(0); return true; }
+      if (showInbox) { setShowInbox(false); return true; }
+      if (showMessages) { setShowMessages(false); return true; }
       if (showActivity) { setShowActivity(false); return true; }
       if (showCoatings) { setShowCoatings(false); return true; }
       if (showLocks) { setShowLocks(false); return true; }
@@ -403,7 +447,7 @@ export default function App() {
       return false;
     });
     return () => handler.remove();
-  }, [menuOpen, showActivity, showCoatings, showLocks, showCustomers, showStats, statsAuthOpen, backupAuthOpen, restoreAuthOpen, backupSuccess, restorePayload, restoreFileError]);
+  }, [menuOpen, showActivity, showMessages, showInbox, incomingMsg, unreadPrompt, showCoatings, showLocks, showCustomers, showStats, statsAuthOpen, backupAuthOpen, restoreAuthOpen, backupSuccess, restorePayload, restoreFileError]);
 
   const downloadBlob = (text, filename) => {
     const blob = new Blob([text], { type: 'application/json' });
@@ -599,6 +643,14 @@ export default function App() {
         <Text style={styles.headerVersion}>{APP_VERSION}</Text>
         {currentUser?.username ? <Text style={styles.headerUser}>👤 {currentUser.username}</Text> : null}
         <View style={{ flex: 1 }} />
+        {currentUser?.role !== 'guest' && currentUser?.role !== 'admin' && (
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, marginRight: 8 }}
+            onPress={openInbox}>
+            <Text style={{ fontSize: 18 }}>✉️</Text>
+            <Text style={{ color: 'white', fontSize: 14, fontWeight: 'bold', letterSpacing: 0.5 }}>ΜΗΝΥΜΑΤΑ</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.menuBtn} onPress={() => setMenuOpen(true)}>
           <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
@@ -648,11 +700,14 @@ export default function App() {
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowActivity(true); }}>
               <Text style={styles.menuItemText}>📜 ΙΣΤΟΡΙΚΟ ΚΙΝΗΣΕΩΝ</Text>
             </TouchableOpacity>
-            {currentUser?.role === 'admin' && (
+            {currentUser?.role === 'admin' && (<>
+            <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#eef4ff' }]} onPress={() => { setMenuOpen(false); setShowMessages(true); }}>
+              <Text style={[styles.menuItemText, { color: '#1565C0' }]}>✉️ ΜΗΝΥΜΑΤΑ</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff7ec' }]} onPress={() => { setMenuOpen(false); setAdminAuthPwd(''); setAdminAuthError(false); setAdminAuthOpen(true); }}>
               <Text style={[styles.menuItemText, { color: '#E65100' }]}>🛡️ ΔΙΑΧΕΙΡΙΣΤΗΣ</Text>
             </TouchableOpacity>
-            )}
+            </>)}
             </>)}
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); fetchData(); Alert.alert("VAICON", "Ανανέωση δεδομένων..."); }}>
               <Text style={styles.menuItemText}>🔄 ΑΝΑΝΕΩΣΗ</Text>
@@ -673,6 +728,78 @@ export default function App() {
 
       <Modal visible={showActivity} animationType="slide" onRequestClose={() => setShowActivity(false)}>
         <ActivityScreen onClose={() => setShowActivity(false)} />
+      </Modal>
+
+      <Modal visible={showMessages} animationType="slide" onRequestClose={() => setShowMessages(false)}>
+        <MessagesScreen
+          users={APP_USERS.filter(u => u !== 'GUEST' && u !== 'ADMIN')}
+          userLabels={userLabels}
+          lockKey={lockKey}
+          onClose={() => setShowMessages(false)}
+        />
+      </Modal>
+
+      <Modal visible={unreadPrompt > 0} transparent animationType="fade" onRequestClose={() => setUnreadPrompt(0)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { maxWidth: 420, padding: 28, borderTopWidth: 10, borderTopColor: '#1565C0', alignItems: 'center' }]}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center', marginBottom: 12, elevation: 4, shadowColor: '#1565C0', shadowOpacity: 0.5, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}>
+              <Text style={{ fontSize: 30 }}>✉️</Text>
+            </View>
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1565C0', textAlign: 'center' }}>
+              {unreadPrompt === 1 ? 'Έχεις 1 νέο μήνυμα' : `Έχεις ${unreadPrompt} νέα μηνύματα`}
+            </Text>
+            <TouchableOpacity
+              style={[statsAuthStyles.btn, { backgroundColor: '#1565C0', padding: 16, alignSelf: 'stretch', marginTop: 20 }]}
+              onPress={() => { promptAckRef.current = true; setUnreadPrompt(0); openInbox(); }}>
+              <Text style={[statsAuthStyles.btnTxt, { fontSize: 17 }]}>ΔΙΑΒΑΣΕ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showInbox} transparent animationType="slide" onRequestClose={() => setShowInbox(false)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { maxWidth: 560, maxHeight: '85%', borderTopWidth: 10, borderTopColor: '#1565C0' }]}>
+            <Text style={[statsAuthStyles.title, { color: '#1565C0', fontSize: 20 }]}>📬 Τα μηνύματά μου</Text>
+            {inbox.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: '#aaa', marginVertical: 30, fontSize: 15 }}>Δεν υπάρχουν μηνύματα.</Text>
+            ) : (
+              <ScrollView style={{ marginVertical: 12 }}>
+                {inbox.map(m => (
+                  <TouchableOpacity key={m.id} onPress={() => setIncomingMsg(m)}
+                    style={{ backgroundColor: m.read ? '#f5f5f5' : '#bcd4ff', borderRadius: 10, padding: 14, marginBottom: 8, borderLeftWidth: 6, borderLeftColor: m.read ? '#bbb' : '#0d47a1' }}>
+                    <Text numberOfLines={2} style={{ fontSize: 16, color: m.read ? '#222' : '#0d2c66', fontWeight: m.read ? '400' : '700', marginBottom: 6 }}>{m.text}</Text>
+                    <Text style={{ fontSize: 13, color: m.read ? '#444' : '#0d47a1', fontWeight: '700' }}>
+                      {m.ts ? new Date(m.ts).toLocaleString('el-GR') : ''}{m.read ? '  ·  ✓ διαβασμένο' : '  ·  ● νέο'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#1565C0' }]} onPress={() => setShowInbox(false)}>
+              <Text style={statsAuthStyles.btnTxt}>ΚΛΕΙΣΙΜΟ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!incomingMsg} transparent animationType="fade" onRequestClose={dismissMsg}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { maxWidth: 560, padding: 26, borderTopWidth: 10, borderTopColor: '#1565C0' }, showInbox && { marginBottom: 70, marginLeft: 40 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <Text style={[statsAuthStyles.title, { color: '#1565C0', fontSize: 19, marginBottom: 0 }]}>Μήνυμα από τον Διαχειριστή</Text>
+              <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#1565C0', shadowOpacity: 0.5, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } }}>
+                <Text style={{ fontSize: 24 }}>✉️</Text>
+              </View>
+            </View>
+            <ScrollView style={{ maxHeight: 380, marginVertical: 22 }}>
+              <Text style={{ fontSize: 27, color: '#222', textAlign: 'center', lineHeight: 38 }}>{incomingMsg?.text}</Text>
+            </ScrollView>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#1565C0', padding: 18 }]} onPress={dismissMsg}>
+              <Text style={[statsAuthStyles.btnTxt, { fontSize: 18 }]}>ΟΚ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       <Modal visible={statsAuthOpen} transparent animationType="fade" onRequestClose={() => setStatsAuthOpen(false)}>
