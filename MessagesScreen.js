@@ -13,8 +13,8 @@ export default function MessagesScreen({ users = [], userLabels = {}, lockKey, o
 
   const nameOf = (u) => userLabels[lockKey(u)] || u;
 
-  const loadArchive = useCallback(async () => {
-    setLoading(true);
+  const loadArchive = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const r = await fetch(`${FB_URL}/messages.json`);
       const data = (await r.json()) || {};
@@ -32,6 +32,11 @@ export default function MessagesScreen({ users = [], userLabels = {}, lockKey, o
   }, []);
 
   useEffect(() => { loadArchive(); }, [loadArchive]);
+
+  useEffect(() => {
+    const iv = setInterval(() => loadArchive(true), 12000);
+    return () => clearInterval(iv);
+  }, [loadArchive]);
 
   const toggle = (u) => setSelected(s => ({ ...s, [u]: !s[u] }));
 

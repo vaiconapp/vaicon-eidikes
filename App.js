@@ -363,9 +363,7 @@ export default function App() {
     try { await fetch(`${FIREBASE_URL}/messages/${lockKey(currentUser.username)}/${m.id}.json`, { method: 'PATCH', body: JSON.stringify({ read: true, readAt: Date.now() }) }); } catch {}
   };
 
-  const openInbox = async () => {
-    setMenuOpen(false);
-    setShowInbox(true);
+  const loadInbox = async () => {
     if (!currentUser?.username) return;
     try {
       const r = await fetch(`${FIREBASE_URL}/messages/${lockKey(currentUser.username)}.json`);
@@ -375,6 +373,14 @@ export default function App() {
       setInbox(arr.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
     } catch { setInbox([]); }
   };
+
+  const openInbox = () => { setMenuOpen(false); setShowInbox(true); loadInbox(); };
+
+  useEffect(() => {
+    if (!showInbox) return;
+    const iv = setInterval(loadInbox, 12000);
+    return () => clearInterval(iv);
+  }, [showInbox]);
 
   useEffect(() => {
     if (!adminPanelOpen && !showMessages) return;
