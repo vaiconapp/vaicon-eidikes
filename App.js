@@ -370,7 +370,9 @@ export default function App() {
     try {
       const r = await fetch(`${FIREBASE_URL}/messages/${lockKey(currentUser.username)}.json`);
       const d = (await r.json()) || {};
-      setInbox(Object.keys(d).map(id => ({ id, ...d[id] })).sort((a, b) => (b.ts || 0) - (a.ts || 0)));
+      const arr = Object.keys(d).map(id => ({ id, ...d[id] }));
+      [...arr].sort((a, b) => (a.ts || 0) - (b.ts || 0)).forEach((m, i) => { m._num = i + 1; });
+      setInbox(arr.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
     } catch { setInbox([]); }
   };
 
@@ -739,24 +741,6 @@ export default function App() {
         />
       </Modal>
 
-      <Modal visible={unreadPrompt > 0} transparent animationType="fade" onRequestClose={() => setUnreadPrompt(0)}>
-        <View style={statsAuthStyles.overlay}>
-          <View style={[statsAuthStyles.box, { maxWidth: 420, padding: 28, borderTopWidth: 10, borderTopColor: '#1565C0', alignItems: 'center' }]}>
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center', marginBottom: 12, elevation: 4, shadowColor: '#1565C0', shadowOpacity: 0.5, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}>
-              <Text style={{ fontSize: 30 }}>✉️</Text>
-            </View>
-            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1565C0', textAlign: 'center' }}>
-              {unreadPrompt === 1 ? 'Έχεις 1 νέο μήνυμα' : `Έχεις ${unreadPrompt} νέα μηνύματα`}
-            </Text>
-            <TouchableOpacity
-              style={[statsAuthStyles.btn, { backgroundColor: '#1565C0', padding: 16, alignSelf: 'stretch', marginTop: 20 }]}
-              onPress={() => { promptAckRef.current = true; setUnreadPrompt(0); openInbox(); }}>
-              <Text style={[statsAuthStyles.btnTxt, { fontSize: 17 }]}>ΔΙΑΒΑΣΕ</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       <Modal visible={showInbox} transparent animationType="slide" onRequestClose={() => setShowInbox(false)}>
         <View style={statsAuthStyles.overlay}>
           <View style={[statsAuthStyles.box, { maxWidth: 560, maxHeight: '85%', borderTopWidth: 10, borderTopColor: '#1565C0' }]}>
@@ -767,11 +751,16 @@ export default function App() {
               <ScrollView style={{ marginVertical: 12 }}>
                 {inbox.map(m => (
                   <TouchableOpacity key={m.id} onPress={() => setIncomingMsg(m)}
-                    style={{ backgroundColor: m.read ? '#f5f5f5' : '#bcd4ff', borderRadius: 10, padding: 14, marginBottom: 8, borderLeftWidth: 6, borderLeftColor: m.read ? '#bbb' : '#0d47a1' }}>
-                    <Text numberOfLines={2} style={{ fontSize: 16, color: m.read ? '#222' : '#0d2c66', fontWeight: m.read ? '400' : '700', marginBottom: 6 }}>{m.text}</Text>
-                    <Text style={{ fontSize: 13, color: m.read ? '#444' : '#0d47a1', fontWeight: '700' }}>
-                      {m.ts ? new Date(m.ts).toLocaleString('el-GR') : ''}{m.read ? '  ·  ✓ διαβασμένο' : '  ·  ● νέο'}
-                    </Text>
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: m.read ? '#f5f5f5' : '#bcd4ff', borderRadius: 10, padding: 14, marginBottom: 8, borderLeftWidth: 6, borderLeftColor: m.read ? '#bbb' : '#0d47a1' }}>
+                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: m.read ? '#bbb' : '#0d47a1', alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 15, fontWeight: '900', color: 'white' }}>{m._num}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text numberOfLines={2} style={{ fontSize: 16, color: m.read ? '#222' : '#0d2c66', fontWeight: m.read ? '400' : '700', marginBottom: 6 }}>{m.text}</Text>
+                      <Text style={{ fontSize: 13, color: m.read ? '#444' : '#0d47a1', fontWeight: '700' }}>
+                        {m.ts ? new Date(m.ts).toLocaleString('el-GR') : ''}{m.read ? '  ·  ✓ διαβασμένο' : '  ·  ● νέο'}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -787,6 +776,11 @@ export default function App() {
         <View style={statsAuthStyles.overlay}>
           <View style={[statsAuthStyles.box, { maxWidth: 560, padding: 26, borderTopWidth: 10, borderTopColor: '#1565C0' }, showInbox && { marginBottom: 70, marginLeft: 40 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              {incomingMsg?._num ? (
+                <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#0d47a1', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 15, fontWeight: '900', color: 'white' }}>{incomingMsg._num}</Text>
+                </View>
+              ) : null}
               <Text style={[statsAuthStyles.title, { color: '#1565C0', fontSize: 19, marginBottom: 0 }]}>Μήνυμα από τον Διαχειριστή</Text>
               <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#1565C0', shadowOpacity: 0.5, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } }}>
                 <Text style={{ fontSize: 24 }}>✉️</Text>
@@ -797,6 +791,24 @@ export default function App() {
             </ScrollView>
             <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#1565C0', padding: 18 }]} onPress={dismissMsg}>
               <Text style={[statsAuthStyles.btnTxt, { fontSize: 18 }]}>ΟΚ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={unreadPrompt > 0} transparent animationType="fade" onRequestClose={() => setUnreadPrompt(0)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { maxWidth: 420, padding: 28, borderTopWidth: 10, borderTopColor: '#1565C0', alignItems: 'center' }]}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center', marginBottom: 12, elevation: 4, shadowColor: '#1565C0', shadowOpacity: 0.5, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}>
+              <Text style={{ fontSize: 30 }}>✉️</Text>
+            </View>
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1565C0', textAlign: 'center' }}>
+              {unreadPrompt === 1 ? 'Έχεις 1 νέο μήνυμα' : `Έχεις ${unreadPrompt} νέα μηνύματα`}
+            </Text>
+            <TouchableOpacity
+              style={[statsAuthStyles.btn, { backgroundColor: '#1565C0', padding: 16, alignSelf: 'stretch', marginTop: 20 }]}
+              onPress={() => { promptAckRef.current = true; setUnreadPrompt(0); openInbox(); }}>
+              <Text style={[statsAuthStyles.btnTxt, { fontSize: 17 }]}>ΔΙΑΒΑΣΕ</Text>
             </TouchableOpacity>
           </View>
         </View>

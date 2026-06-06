@@ -3759,8 +3759,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   const selectedPNo = printProgramModal.selected;
                   const phaseKey = printProgramModal.phaseKey;
                   const readyOnly = printProgramModal.readyOnly;
+                  const mode = printProgramModal.mode;
                   setPrintProgramModal({visible:false, programs:[], selected:null, phaseKey:null});
-                  
+
+                  if (mode === 'pending') {
+                    const visible = specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone));
+                    const filtered = visible.filter(o=>o.programNo===selectedPNo).sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
+                    if (filtered.length === 0) { Alert.alert('Προσοχή', `Δεν υπάρχουν παραγγελίες με πρόγραμμα ${selectedPNo}.`); return; }
+                    await handleSimplePrint(filtered, `ΠΡΟΓΡΑΜΜΑ ${selectedPNo}`);
+                    return;
+                  }
+
                   if (phaseKey) {
                     // Εκτύπωση συγκεκριμένης φάσης με φιλτράρισμα programNo
                     const prodOrders = specialOrders.filter(o=>o.status==='PROD');
@@ -5099,6 +5108,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   style={{backgroundColor:'#2e7d32', borderRadius:8, padding:11, alignItems:'center'}}
                   onPress={()=>handleSimplePrint(specialOrders.filter(o=>o.status==='PROD'), 'ΠΑΡΑΓΩΓΗ')}>
                   <Text style={{color:'white', fontWeight:'bold', fontSize:16}}>🖨️ ΠΑΡΑΓΩΓΗ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{backgroundColor:'#1a1a2e', borderRadius:8, padding:11, alignItems:'center'}}
+                  onPress={()=>{
+                    const visible = specialOrders.filter(o=>o.status==='PENDING'||o.status==='PROD'||(o.status==='READY'&&o.staveraPendingAtReady&&!o.staveraDone));
+                    const programs = [...new Set(visible.filter(o=>o.programNo).map(o=>o.programNo))];
+                    if (programs.length===0) { Alert.alert('Προσοχή','Δεν υπάρχουν παραγγελίες με αριθμό προγράμματος.'); return; }
+                    setPrintProgramModal({visible:true, programs, selected: programs.length===1?programs[0]:null, phaseKey:null, readyOnly:false, mode:'pending'});
+                  }}>
+                  <Text style={{color:'#FFD600', fontWeight:'bold', fontSize:16}}>🖨️ ΠΡΟΓΡΑΜΜΑ</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={{backgroundColor:'#1a1a1a', borderRadius:8, padding:11, alignItems:'center'}}

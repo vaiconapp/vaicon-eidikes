@@ -21,7 +21,9 @@ export default function MessagesScreen({ users = [], userLabels = {}, lockKey, o
       const list = [];
       Object.keys(data).forEach(uk => {
         const folder = data[uk] || {};
-        Object.keys(folder).forEach(id => list.push({ uk, id, ...folder[id] }));
+        const items = Object.keys(folder).map(id => ({ uk, id, ...folder[id] }));
+        items.sort((a, b) => (a.ts || 0) - (b.ts || 0)).forEach((m, i) => { m._num = i + 1; });
+        items.forEach(m => list.push(m));
       });
       list.sort((a, b) => (b.ts || 0) - (a.ts || 0));
       setArchive(list);
@@ -66,6 +68,7 @@ export default function MessagesScreen({ users = [], userLabels = {}, lockKey, o
   const renderItem = useCallback(({ item }) => (
     <View style={styles.card}>
       <View style={[styles.bar, { backgroundColor: item.read ? '#2e7d32' : '#E65100' }]} />
+      <View style={styles.numCircle}><Text style={styles.numTxt}>{item._num}</Text></View>
       <View style={styles.cardBody}>
         <View style={styles.cardTop}>
           <Text style={styles.toTxt}>👤 {item.toName || item.uk}</Text>
@@ -165,6 +168,8 @@ const styles = StyleSheet.create({
   count: { fontSize: 11, color: '#999', padding: 8, paddingBottom: 4 },
   card: { flexDirection: 'row', backgroundColor: 'white', marginHorizontal: 10, marginBottom: 6, borderRadius: 8, overflow: 'hidden', elevation: 1 },
   bar: { width: 5 },
+  numCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginHorizontal: 8 },
+  numTxt: { fontSize: 14, fontWeight: '900', color: 'white' },
   cardBody: { flex: 1, padding: 10 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
   toTxt: { fontSize: 13, fontWeight: 'bold', color: '#1a1a1a', flex: 1 },
