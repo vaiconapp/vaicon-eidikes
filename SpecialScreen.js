@@ -709,7 +709,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [programModal, setProgramModal] = useState({ visible: false, programNo: '' }); // modal αριθμού προγράμματος
   const [printProgramModal, setPrintProgramModal] = useState({ visible: false, programs: [], selected: null, phaseKey: null, readyOnly: false }); // modal επιλογής programNo για εκτύπωση ΠΡΟΓΡΑΜΜΑ / φάσεων
   const [docQR, setDocQR] = useState({ visible:false, orderId:null, token:null, mode:'add', photoId:null, url:'', initial:null, status:'waiting' }); // QR ανεβάσματος εγγράφου
-  const [docViewer, setDocViewer] = useState({ visible:false, orderId:null, orderNo:'', photos:[], idx:0, loading:false }); // προβολή εγγράφων πελάτη
+  const [docViewer, setDocViewer] = useState({ visible:false, orderId:null, orderNo:'', photos:[], idx:0, loading:false, zoom:1, rot:0 }); // προβολή εγγράφων πελάτη
   const panPosition = useRef({ x: 0, y: 0 });
   const [panPos, setPanPos] = useState({ x: 0, y: 0 });
   const isDragging = useRef(false);
@@ -724,6 +724,37 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [custPanPos, setCustPanPos] = useState({ x: 0, y: 0 });
   const custIsDragging = useRef(false);
   const custDragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  const [docWinPos, setDocWinPos] = useState({ x: 0, y: 0 });
+  const [docWinSize, setDocWinSize] = useState({ w: 700, h: 660 });
+  const [docImgPos, setDocImgPos] = useState({ x: 0, y: 0 });
+  const docDragRef = useRef(null);
+  const docDragStart = useRef({ mx: 0, my: 0, a: 0, b: 0 });
+  const startDocDrag = (kind) => (e) => {
+    if (Platform.OS !== 'web') return;
+    if (e.stopPropagation) e.stopPropagation();
+    docDragRef.current = kind;
+    const mx = e.clientX || e.touches?.[0]?.clientX || 0;
+    const my = e.clientY || e.touches?.[0]?.clientY || 0;
+    const base = kind === 'resize' ? docWinSize : kind === 'move' ? docWinPos : docImgPos;
+    docDragStart.current = { mx, my, a: kind === 'resize' ? base.w : base.x, b: kind === 'resize' ? base.h : base.y };
+    const onMove = (ev) => {
+      if (docDragRef.current !== kind) return;
+      const cx = ev.clientX || ev.touches?.[0]?.clientX || 0;
+      const cy = ev.clientY || ev.touches?.[0]?.clientY || 0;
+      const dx = cx - docDragStart.current.mx, dy = cy - docDragStart.current.my;
+      if (kind === 'move') setDocWinPos({ x: docDragStart.current.a + dx, y: docDragStart.current.b + dy });
+      else if (kind === 'resize') setDocWinSize({ w: Math.max(380, docDragStart.current.a + dx), h: Math.max(380, docDragStart.current.b + dy) });
+      else setDocImgPos({ x: docDragStart.current.a + dx, y: docDragStart.current.b + dy });
+    };
+    const onUp = () => {
+      docDragRef.current = null;
+      window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove); window.addEventListener('touchend', onUp);
+  };
 
   const handleCustDragStart = (e) => {
     custIsDragging.current = true;
@@ -823,7 +854,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     setDocQR({ visible:true, orderId:order.id, token, mode, photoId, url:`${window.location.origin}/.netlify/functions/upload-doc?t=${token}`, initial, status:'waiting' });
   };
   const openDocViewer = async (order) => {
-    setDocViewer({ visible:true, orderId:order.id, orderNo:order.orderNo||'', photos:[], idx:0, loading:true });
+    setDocWinPos({ x:0, y:0 }); setDocImgPos({ x:0, y:0 });
+    setDocViewer({ visible:true, orderId:order.id, orderNo:order.orderNo||'', photos:[], idx:0, loading:true, zoom:1, rot:0 });
     try { const photos = await loadOrderFiles(order.id); setDocViewer(v=>({...v, photos, idx:0, loading:false })); }
     catch { setDocViewer(v=>({...v, loading:false })); }
   };
@@ -843,10 +875,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     if (Platform.OS==='web') { if (window.confirm('Διαγραφή αυτού του εγγράφου;')) doDel(); }
     else Alert.alert('Διαγραφή','Διαγραφή εγγράφου;',[{text:'Όχι'},{text:'Ναι',style:'destructive',onPress:doDel}]);
   };
-  const printDocPhotos = (photos, title) => {
+  const printDocPhotos = (photos, title, rot=0) => {
     if (!photos.length) return;
-    const imgs = photos.map(p=>`<img src="${p.img}" style="width:100%;max-width:780px;display:block;margin:0 auto;page-break-after:always;">`).join('');
-    printHTML(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="margin:0;padding:6px;">${imgs}</body></html>`, title);
+    const r = ((rot % 360) + 360) % 360;
+    const imgStyle = (r===90||r===270) ? `transform:rotate(${r}deg);max-width:90vh;max-height:90vw;` : `transform:rotate(${r}deg);max-width:100%;max-height:96vh;`;
+    const imgs = photos.map(p=>`<div style="height:100vh;display:flex;align-items:center;justify-content:center;page-break-after:always;"><img src="${p.img}" style="${imgStyle}display:block;"></div>`).join('');
+    printHTML(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="margin:0;padding:0;">${imgs}</body></html>`, title);
   };
   useEffect(() => {
     if (!docQR.visible || !docQR.orderId || docQR.status==='done') return;
@@ -3900,11 +3934,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
       {/* ΠΡΟΒΟΛΗ ΕΓΓΡΑΦΩΝ ΠΕΛΑΤΗ */}
       <Modal visible={docViewer.visible} transparent animationType="slide" onRequestClose={()=>setDocViewer(v=>({...v,visible:false}))}>
-        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.85)', justifyContent:'center', alignItems:'center', padding:16}}>
-          <View style={{backgroundColor:'#fff', borderRadius:16, padding:16, width:'92%', maxWidth:640, maxHeight:'92%'}}>
-            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
-              <Text style={{fontSize:16, fontWeight:'bold', color:'#1a1a1a'}}>📎 ΕΓΓΡΑΦΟ ΠΕΛΑΤΗ #{docViewer.orderNo}</Text>
-              <TouchableOpacity onPress={()=>setDocViewer(v=>({...v,visible:false}))}><Text style={{fontSize:22, color:'#888'}}>✕</Text></TouchableOpacity>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.85)', justifyContent:'center', alignItems:'center'}}>
+          <View style={[
+            { width: docWinSize.w, height: docWinSize.h, maxWidth:'98%', backgroundColor:'#fff', borderRadius:16, overflow:'hidden', elevation:24, shadowColor:'#000', shadowOffset:{width:0,height:6}, shadowOpacity:0.35, shadowRadius:12 },
+            Platform.OS==='web' ? { position:'absolute', top: 30 + docWinPos.y, left: `calc(50% - ${docWinSize.w/2}px + ${docWinPos.x}px)` } : {},
+          ]}>
+            <View
+              style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingHorizontal:14, paddingVertical:12, backgroundColor:'#0d47a1', ...(Platform.OS==='web'?{cursor:'grab'}:{})}}
+              {...(Platform.OS==='web' ? { onMouseDown: startDocDrag('move'), onTouchStart: startDocDrag('move') } : {})}>
+              <Text style={{fontSize:15, fontWeight:'bold', color:'#fff'}}>☰ 📎 ΕΓΓΡΑΦΟ ΠΕΛΑΤΗ #{docViewer.orderNo}</Text>
+              <TouchableOpacity onPress={()=>setDocViewer(v=>({...v,visible:false}))}><Text style={{fontSize:20, color:'#fff', fontWeight:'bold', paddingHorizontal:6}}>✕</Text></TouchableOpacity>
             </View>
             {docViewer.loading ? (
               <Text style={{textAlign:'center', padding:30, color:'#888'}}>Φόρτωση…</Text>
@@ -3913,22 +3952,41 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <Text style={{color:'#888', marginBottom:16}}>Δεν υπάρχουν έγγραφα.</Text>
                 <TouchableOpacity style={{backgroundColor:'#1565C0', borderRadius:8, paddingHorizontal:18, paddingVertical:10}} onPress={()=>{ const o=[...specialOrders,...soldSpecialOrders].find(x=>x.id===docViewer.orderId); if(o) openDocQR(o,'add'); }}><Text style={{color:'#fff', fontWeight:'bold'}}>➕ ΠΡΟΣΘΗΚΗ</Text></TouchableOpacity>
               </View>
-            ) : (
-              <View>
-                <Image source={{uri:docViewer.photos[docViewer.idx]?.img}} style={{width:'100%', height:380, borderRadius:8, backgroundColor:'#000'}} resizeMode="contain" />
+            ) : (()=>{
+              const baseDoc = Math.max(220, Math.min(docWinSize.w - 56, docWinSize.h - 250));
+              const dragImg = Platform.OS==='web' && docViewer.zoom>1;
+              return (
+              <View style={{flex:1, padding:12}}>
+                <View
+                  style={{flex:1, borderRadius:8, backgroundColor:'#000', overflow:'hidden', justifyContent:'center', alignItems:'center', ...(dragImg?{cursor:'grab'}:{})}}
+                  {...(dragImg ? { onMouseDown: startDocDrag('pan'), onTouchStart: startDocDrag('pan') } : {})}>
+                  <Image source={{uri:docViewer.photos[docViewer.idx]?.img}} style={{width:baseDoc*docViewer.zoom, height:baseDoc*docViewer.zoom, transform:[{translateX:docImgPos.x},{translateY:docImgPos.y},{rotate:`${docViewer.rot}deg`}]}} resizeMode="contain" />
+                </View>
+                <View style={{flexDirection:'row', justifyContent:'center', alignItems:'center', gap:10, marginTop:8}}>
+                  <TouchableOpacity onPress={()=>{setDocImgPos({x:0,y:0});setDocViewer(v=>({...v, zoom:Math.max(1, +(v.zoom-0.5).toFixed(1))}));}} style={{backgroundColor:'#eee', borderRadius:8, width:42, height:38, alignItems:'center', justifyContent:'center'}}><Text style={{fontSize:20, fontWeight:'bold', color:'#333'}}>🔍−</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={()=>setDocViewer(v=>({...v, zoom:Math.min(5, +(v.zoom+0.5).toFixed(1))}))} style={{backgroundColor:'#eee', borderRadius:8, width:42, height:38, alignItems:'center', justifyContent:'center'}}><Text style={{fontSize:20, fontWeight:'bold', color:'#333'}}>🔍+</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={()=>setDocViewer(v=>({...v, rot:(v.rot+90)%360}))} style={{backgroundColor:'#eee', borderRadius:8, width:42, height:38, alignItems:'center', justifyContent:'center'}}><Text style={{fontSize:20, fontWeight:'bold', color:'#333'}}>↻</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={()=>{setDocImgPos({x:0,y:0});setDocViewer(v=>({...v, zoom:1, rot:0}));}} style={{backgroundColor:'#eee', borderRadius:8, paddingHorizontal:12, height:38, alignItems:'center', justifyContent:'center'}}><Text style={{fontSize:13, fontWeight:'bold', color:'#333'}}>ΕΠΑΝΑΦΟΡΑ</Text></TouchableOpacity>
+                </View>
                 <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginTop:8}}>
-                  <TouchableOpacity disabled={docViewer.idx<=0} onPress={()=>setDocViewer(v=>({...v,idx:v.idx-1}))} style={{padding:8, opacity:docViewer.idx<=0?0.3:1}}><Text style={{fontSize:20}}>◀</Text></TouchableOpacity>
+                  <TouchableOpacity disabled={docViewer.idx<=0} onPress={()=>{setDocImgPos({x:0,y:0});setDocViewer(v=>({...v,idx:v.idx-1, zoom:1, rot:0}));}} style={{padding:8, opacity:docViewer.idx<=0?0.3:1}}><Text style={{fontSize:20}}>◀</Text></TouchableOpacity>
                   <Text style={{fontWeight:'bold', color:'#555'}}>{docViewer.idx+1} / {docViewer.photos.length}</Text>
-                  <TouchableOpacity disabled={docViewer.idx>=docViewer.photos.length-1} onPress={()=>setDocViewer(v=>({...v,idx:v.idx+1}))} style={{padding:8, opacity:docViewer.idx>=docViewer.photos.length-1?0.3:1}}><Text style={{fontSize:20}}>▶</Text></TouchableOpacity>
+                  <TouchableOpacity disabled={docViewer.idx>=docViewer.photos.length-1} onPress={()=>{setDocImgPos({x:0,y:0});setDocViewer(v=>({...v,idx:v.idx+1, zoom:1, rot:0}));}} style={{padding:8, opacity:docViewer.idx>=docViewer.photos.length-1?0.3:1}}><Text style={{fontSize:20}}>▶</Text></TouchableOpacity>
                 </View>
                 <View style={{flexDirection:'row', flexWrap:'wrap', gap:8, marginTop:10}}>
                   <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#1565C0', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>{ const o=[...specialOrders,...soldSpecialOrders].find(x=>x.id===docViewer.orderId); if(o) openDocQR(o,'add'); }}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>➕ ΠΡΟΣΘΗΚΗ</Text></TouchableOpacity>
                   <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#f9a825', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>{ const o=[...specialOrders,...soldSpecialOrders].find(x=>x.id===docViewer.orderId); const ph=docViewer.photos[docViewer.idx]; if(o&&ph) openDocQR(o,'replace',ph.id); }}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🔄 ΑΝΤΙΚΑΤΑΣΤΑΣΗ</Text></TouchableOpacity>
-                  <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#2e7d32', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>printDocPhotos([docViewer.photos[docViewer.idx]], `Έγγραφο #${docViewer.orderNo}`)}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🖨️ ΕΚΤΥΠΩΣΗ</Text></TouchableOpacity>
+                  <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#2e7d32', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>printDocPhotos([docViewer.photos[docViewer.idx]], `Έγγραφο #${docViewer.orderNo}`, docViewer.rot)}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🖨️ ΕΚΤΥΠΩΣΗ</Text></TouchableOpacity>
                   {docViewer.photos.length>1 && <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#1b5e20', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>printDocPhotos(docViewer.photos, `Έγγραφα #${docViewer.orderNo}`)}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🖨️ ΟΛΑ</Text></TouchableOpacity>}
                   <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#b71c1c', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>deleteDocPhoto(docViewer.orderId, docViewer.photos[docViewer.idx]?.id)}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🗑 ΔΙΑΓΡΑΦΗ</Text></TouchableOpacity>
                 </View>
               </View>
+              );
+            })()}
+            {Platform.OS==='web' && (
+              <View
+                style={{position:'absolute', right:0, bottom:0, width:24, height:24, backgroundColor:'rgba(0,0,0,0.18)', borderTopLeftRadius:8, cursor:'nwse-resize'}}
+                onMouseDown={startDocDrag('resize')} onTouchStart={startDocDrag('resize')} />
             )}
           </View>
         </View>
