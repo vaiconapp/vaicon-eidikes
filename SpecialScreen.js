@@ -843,6 +843,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const data = await (await fetch(`${FIREBASE_URL}/order_files/${orderId}.json`)).json();
     return data ? Object.keys(data).map(k=>({ id:k, ...data[k] })).sort((a,b)=>(a.ts||0)-(b.ts||0)) : [];
   };
+  const moveOrderFiles = async (oldId, newId) => {
+    if (!oldId || !newId || oldId===newId) return 0;
+    try {
+      const data = await (await fetch(`${FIREBASE_URL}/order_files/${oldId}.json`)).json();
+      if (!data) return 0;
+      await fetch(`${FIREBASE_URL}/order_files/${newId}.json`,{method:'PUT',body:JSON.stringify(data)});
+      await fetch(`${FIREBASE_URL}/order_files/${oldId}.json`,{method:'DELETE'});
+      return Object.keys(data).length;
+    } catch { return 0; }
+  };
   const openDocQR = async (order, mode='add', photoId=null) => {
     if (Platform.OS!=='web' || typeof window==='undefined') { Alert.alert('Έγγραφο πελάτη','Διαθέσιμο μόνο από υπολογιστή.'); return; }
     const token = randToken();
@@ -1089,6 +1099,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         if (Platform.OS==='web') window.alert(msg); else Alert.alert('ΔΕΝ ΑΠΟΘΗΚΕΥΤΗΚΕ', msg);
         return;
       }
+      if (editingOrder && editingOrder.id !== newOrder.id) {
+        const cnt = await moveOrderFiles(editingOrder.id, newOrder.id);
+        if (cnt > 0) { await fetch(`${FIREBASE_URL}/special_orders/${newOrder.id}.json`,{method:'PATCH',body:JSON.stringify({docCount:cnt})}); newOrder.docCount = cnt; }
+      }
       setSpecialOrders([newOrder,...specialOrders]);
       await logActivity('ΕΙΔΙΚΗ', 'Νέα παραγγελία', { orderNo: newOrder.orderNo, customer: newOrder.customer, size: `${newOrder.h}x${newOrder.w}`, qty: newOrder.qty });
       resetForm();
@@ -1101,7 +1115,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     setCustomerSearch(order.customer||'');
     setEditingOrder(order);
     setSpecialOrders(specialOrders.filter(o=>o.id!==order.id));
-    deleteFromCloud(order.id);
+    try { await fetch(`${FIREBASE_URL}/special_orders/${order.id}.json`,{method:'DELETE'}); } catch(e){}
     logActivity('ΕΙΔΙΚΗ', 'Επεξεργασία (άνοιγμα)', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
   };
 
