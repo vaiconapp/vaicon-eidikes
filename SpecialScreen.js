@@ -522,7 +522,7 @@ function DuplicateModal({ visible, base, suggested, onUse, onKeep, onCancel }) {
   );
 }
 
-export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[], readOnly=false, codeModalOpen=false, isAdmin=false }) {
+export default function SpecialScreen({ specialOrders=[], setSpecialOrders, soldSpecialOrders=[], setSoldSpecialOrders, customers=[], onRequestAddCustomer, coatings=[], locks=[], readOnly=false, codeModalOpen=false, isAdmin=false, currentUserName='', resolveName=(u)=>u }) {
   // ---------- Helpers μορφοποίησης επενδύσεων/κλειδαριών ----------
   // Επιστρέφουν RN style για UI και HTML string για εκτυπώσεις, με βάση τις ρυθμίσεις bold/size/color
   const coatingStyle = (name, baseSize) => getFormatStyle(findFormatItem(name, coatings), baseSize);
@@ -979,7 +979,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     await doSave();
 
     async function doSave() {
-      const newOrder = {...customForm, ...overrides, orderType:'ΕΙΔΙΚΗ', id:Date.now().toString(), createdAt:Date.now(), status:'PENDING'};
+      const newOrder = {...customForm, ...overrides, orderType:'ΕΙΔΙΚΗ', id:Date.now().toString(), createdAt:Date.now(), status:'PENDING', enteredBy: customForm.enteredBy || currentUserName};
       const ok = await syncToCloud(newOrder);
       if (!ok) {
         const msg = `⚠️ Η παραγγελία ${newOrder.orderNo} ΔΕΝ αποθηκεύτηκε στη βάση.\nΈλεγξε τη σύνδεση και πάτησε ξανά Αποθήκευση.\n(Τα στοιχεία παραμένουν στη φόρμα.)`;
@@ -2627,7 +2627,10 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             {order.staveraPendingAtReady&&!order.staveraDone&&<View style={{backgroundColor:'#e65100', borderRadius:6, paddingHorizontal:10, paddingVertical:3, alignSelf:'flex-start', marginBottom:5}}>
               <Text style={{color:'white', fontWeight:'bold', fontSize:14}}>⏳ ΕΚΚΡΕΜΕΙ ΣΤΑΘΕΡΟ</Text>
             </View>}
-            {highlightText('#'+order.orderNo, searchQuery, {fontSize:24,fontWeight:'900',color:'#1a1a1a',letterSpacing:1,marginBottom:2})}
+            <View style={{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:16,marginBottom:2}}>
+              {highlightText('#'+order.orderNo, searchQuery, {fontSize:24,fontWeight:'900',color:'#1a1a1a',letterSpacing:1})}
+              {isAdmin&&order.enteredBy?<View style={{borderWidth:2,borderColor:'#cc0000',borderRadius:6,paddingHorizontal:8,paddingVertical:2}}><Text style={{color:'#cc0000',fontWeight:'bold',fontSize:13}}>✍️ {resolveName(order.enteredBy)}</Text></View>:null}
+            </View>
             {order.customer?highlightText('👤 '+order.customer, searchQuery, {fontSize:17,fontWeight:'bold',color:'#333',marginBottom:3}):null}
             <View style={{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:4,marginBottom:3}}>
               {highlightText(`${order.h}x${order.w}`, searchQuery, [styles.cardDetails,{fontSize:14}])}

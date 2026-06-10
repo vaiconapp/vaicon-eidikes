@@ -402,6 +402,7 @@ export default function App() {
       await fetch(`${FIREBASE_URL}/user_labels/${k}.json`, trimmed
         ? { method: 'PUT', body: JSON.stringify(trimmed) }
         : { method: 'DELETE' });
+      setUserLabels(prev => { const n = { ...prev }; if (trimmed) n[k] = trimmed; else delete n[k]; return n; });
     } catch {}
   };
 
@@ -686,6 +687,8 @@ export default function App() {
           locks={locks}
           readOnly={currentUser?.role === 'guest'}
           isAdmin={currentUser?.role === 'admin'}
+          currentUserName={currentUser?.username || ''}
+          resolveName={(u) => userLabels[lockKey(u)] || u}
           codeModalOpen={adminAuthOpen || adminPanelOpen || statsAuthOpen || backupAuthOpen || restoreAuthOpen}
         />
       </View>
@@ -1058,6 +1061,8 @@ export default function App() {
       <Modal visible={showCustomers} animationType="slide" onRequestClose={() => setShowCustomers(false)}>
         <CustomersScreen
           isAdmin={currentUser?.role === 'admin'}
+          currentUserName={currentUser?.username || ''}
+          resolveName={(u) => userLabels[lockKey(u)] || u}
           customers={customers}
           setCustomers={setCustomers}
           customOrders={[]}

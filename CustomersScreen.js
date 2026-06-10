@@ -62,7 +62,7 @@ const fmtDate = (ts) => {
 
 const INIT = { name: '', phone: '', phone2: '', phone3: '', phoneViber: '', email: '', identifier: '', city: '', profession: '' };
 
-export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[], isAdmin=false }) {
+export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[], isAdmin=false, currentUserName='', resolveName=(u)=>u }) {
   const [form, setForm] = useState(prefillName ? { ...INIT, name: prefillName } : INIT);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
@@ -146,7 +146,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
 
       Alert.alert("VAICON", `Ο πελάτης ενημερώθηκε!\n${form.name}`);
     } else {
-      const newCustomer = { ...form, id: Date.now().toString(), createdAt: Date.now() };
+      const newCustomer = { ...form, id: Date.now().toString(), createdAt: Date.now(), enteredBy: currentUserName };
       setCustomers([newCustomer, ...customers]);
       await syncToCloud(newCustomer);
       Alert.alert("VAICON", `Πελάτης αποθηκεύτηκε!\n${form.name}`, [
@@ -388,6 +388,11 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
                       </View>
                     );
                   })()}
+                  {isAdmin && c.enteredBy ? (
+                    <View style={{ marginLeft:14, borderWidth:2, borderColor:'#cc0000', borderRadius:6, paddingHorizontal:8, paddingVertical:2 }}>
+                      <Text style={{ color:'#cc0000', fontWeight:'bold', fontSize:13 }}>✍️ {resolveName(c.enteredBy)}</Text>
+                    </View>
+                  ) : null}
                 </View>
                 {(()=>{
                   const items = [
