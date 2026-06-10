@@ -473,7 +473,7 @@ export default function App() {
   const doBackup = async () => {
     setBackupRunning(true);
     try {
-      const NODES = ['special_orders', 'customers', 'coatings', 'locks', 'user_labels', 'activity_log', 'msg_map', 'messages', 'app_lock', 'installers', 'installations', 'activity_log_install'];
+      const NODES = ['special_orders', 'customers', 'coatings', 'locks', 'user_labels', 'activity_log', 'msg_map', 'messages', 'app_lock', 'installers', 'installations', 'activity_log_install', 'order_files', 'upload_tokens'];
       const fullData = {};
       for (const p of NODES) {
         const r = await fetch(`${FIREBASE_URL}/${p}.json`);

@@ -1,0 +1,59 @@
+{
+  "rules": {
+    "special_orders": {
+      ".read":  "auth != null && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "customers": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "coatings": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "locks": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "user_labels": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && auth.token.email.beginsWith('admin@')"
+    },
+    "activity_log": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "msg_map": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "messages": {
+      ".read":  "auth != null && auth.token.email != null && auth.token.email.beginsWith('admin@')",
+      "$uk": {
+        ".read":  "auth != null && auth.token.email != null && (auth.token.email.beginsWith('admin@') || $uk === auth.token.email.replace('@vaicon.local','').toUpperCase())",
+        ".write": "auth != null && auth.token.email != null && (auth.token.email.beginsWith('admin@') || $uk === auth.token.email.replace('@vaicon.local','').toUpperCase())"
+      }
+    },
+    "app_lock": {
+      ".read":  "auth != null",
+      ".write": "auth != null && auth.token.email != null && auth.token.email.beginsWith('admin@')"
+    },
+    "installers": {
+      ".read":  "auth != null && (auth.token.email.beginsWith('admin@') || root.child('install_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('install_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "installations": {
+      ".read":  "auth != null && (auth.token.email.beginsWith('admin@') || root.child('install_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('install_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "activity_log_install": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('install_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('install_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "install_lock": {
+      ".read":  "auth != null",
+      ".write": "auth != null && auth.token.email != null && auth.token.email.beginsWith('admin@')"
+    }
+  }
+}

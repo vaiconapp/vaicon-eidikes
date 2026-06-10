@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, LayoutAnimation, Modal, Share, Dimensions, Platform, Keyboard, PanResponder, Animated } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, LayoutAnimation, Modal, Share, Dimensions, Platform, Keyboard, PanResponder, Animated, Image } from 'react-native';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 import { FIREBASE_URL } from './App';
 import { logActivity } from './activityLog';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import qrcode from 'qrcode-generator';
+
+const makeQrDataUrl = (text) => { const qr = qrcode(0, 'M'); qr.addData(text); qr.make(); return qr.createDataURL(6, 8); };
 import { findFormatItem, getFormatStyle, formatNamesHtml, wrapHtml } from './formatHelpers';
 
 // Helper εκτύπωσης — web: window.print(), mobile: expo-print + sharing
@@ -286,6 +289,7 @@ const buildOrderMessage = (o) => {
     tzami ? `Τζάμι: ${tzami}` : null,
     o.notes ? `Σημ: ${o.notes}` : null,
     '',
+    o.docCount > 0 ? 'Έχει επισυναφθεί το έγγραφο της παραγγελίας σας για επαλήθευση.' : null,
     'Παρακαλούμε ελέγξτε τα παραπάνω στοιχεία. Μετά την έναρξη παραγωγής δεν είναι δυνατές αλλαγές και η εταιρεία δεν φέρει ευθύνη για τυχόν διαφορές.',
     '',
     'Ευχαριστούμε — VAICON',
@@ -704,6 +708,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [prodBatch, setProdBatch] = useState([]); // καλάθι παραγγελιών για ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ
   const [programModal, setProgramModal] = useState({ visible: false, programNo: '' }); // modal αριθμού προγράμματος
   const [printProgramModal, setPrintProgramModal] = useState({ visible: false, programs: [], selected: null, phaseKey: null, readyOnly: false }); // modal επιλογής programNo για εκτύπωση ΠΡΟΓΡΑΜΜΑ / φάσεων
+  const [docQR, setDocQR] = useState({ visible:false, orderId:null, token:null, mode:'add', photoId:null, url:'', initial:null, status:'waiting' }); // QR ανεβάσματος εγγράφου
+  const [docViewer, setDocViewer] = useState({ visible:false, orderId:null, orderNo:'', photos:[], idx:0, loading:false }); // προβολή εγγράφων πελάτη
   const panPosition = useRef({ x: 0, y: 0 });
   const [panPos, setPanPos] = useState({ x: 0, y: 0 });
   const isDragging = useRef(false);
@@ -794,7 +800,70 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
 
 
   const syncToCloud = async (o) => { try { const r = await fetch(`${FIREBASE_URL}/special_orders/${o.id}.json`,{method:'PUT',body:JSON.stringify(o)}); return r.ok; } catch { return false; } };
-  const deleteFromCloud = async (id) => { try { await fetch(`${FIREBASE_URL}/special_orders/${id}.json`,{method:'DELETE'}); } catch(e){} };
+  const deleteFromCloud = async (id) => { try { await fetch(`${FIREBASE_URL}/special_orders/${id}.json`,{method:'DELETE'}); await fetch(`${FIREBASE_URL}/order_files/${id}.json`,{method:'DELETE'}); } catch(e){} };
+
+  // ---------- Έγγραφα πελάτη (φωτό μέσω κινητού με QR) ----------
+  const randToken = () => { const a = new Uint8Array(18); ((typeof globalThis!=='undefined'&&globalThis.crypto)||window.crypto).getRandomValues(a); return Array.from(a, b=>b.toString(16).padStart(2,'0')).join(''); };
+  const setDocCountLocal = (orderId, count) => {
+    setSpecialOrders(prev=>prev.map(o=>o.id===orderId?{...o, docCount:count}:o));
+    setSoldSpecialOrders(prev=>prev.map(o=>o.id===orderId?{...o, docCount:count}:o));
+  };
+  const loadOrderFiles = async (orderId) => {
+    const data = await (await fetch(`${FIREBASE_URL}/order_files/${orderId}.json`)).json();
+    return data ? Object.keys(data).map(k=>({ id:k, ...data[k] })).sort((a,b)=>(a.ts||0)-(b.ts||0)) : [];
+  };
+  const openDocQR = async (order, mode='add', photoId=null) => {
+    if (Platform.OS!=='web' || typeof window==='undefined') { Alert.alert('Έγγραφο πελάτη','Διαθέσιμο μόνο από υπολογιστή.'); return; }
+    const token = randToken();
+    const payload = { orderId:order.id, mode, exp:Date.now()+5*60*1000, by:currentUserName||'' };
+    if (mode==='replace' && photoId) payload.photoId = photoId;
+    try { const r = await fetch(`${FIREBASE_URL}/upload_tokens/${token}.json`,{method:'PUT',body:JSON.stringify(payload)}); if(!r.ok) throw new Error(); }
+    catch { Alert.alert('Σφάλμα','Αποτυχία δημιουργίας συνδέσμου.'); return; }
+    let initial=null; try { initial = await (await fetch(`${FIREBASE_URL}/order_files/${order.id}.json`)).text(); } catch {}
+    setDocQR({ visible:true, orderId:order.id, token, mode, photoId, url:`${window.location.origin}/.netlify/functions/upload-doc?t=${token}`, initial, status:'waiting' });
+  };
+  const openDocViewer = async (order) => {
+    setDocViewer({ visible:true, orderId:order.id, orderNo:order.orderNo||'', photos:[], idx:0, loading:true });
+    try { const photos = await loadOrderFiles(order.id); setDocViewer(v=>({...v, photos, idx:0, loading:false })); }
+    catch { setDocViewer(v=>({...v, loading:false })); }
+  };
+  const refreshDocViewer = async (orderId) => {
+    try { const photos = await loadOrderFiles(orderId); setDocViewer(v=>v.visible&&v.orderId===orderId?{...v, photos, idx:Math.max(0,Math.min(v.idx, photos.length-1)) }:v); } catch {}
+  };
+  const deleteDocPhoto = (orderId, photoId) => {
+    const doDel = async () => {
+      try {
+        await fetch(`${FIREBASE_URL}/order_files/${orderId}/${photoId}.json`,{method:'DELETE'});
+        const photos = await loadOrderFiles(orderId);
+        await fetch(`${FIREBASE_URL}/special_orders/${orderId}.json`,{method:'PATCH',body:JSON.stringify({docCount:photos.length})});
+        setDocCountLocal(orderId, photos.length);
+        setDocViewer(v=>({...v, photos, idx:Math.max(0,Math.min(v.idx, photos.length-1)) }));
+      } catch {}
+    };
+    if (Platform.OS==='web') { if (window.confirm('Διαγραφή αυτού του εγγράφου;')) doDel(); }
+    else Alert.alert('Διαγραφή','Διαγραφή εγγράφου;',[{text:'Όχι'},{text:'Ναι',style:'destructive',onPress:doDel}]);
+  };
+  const printDocPhotos = (photos, title) => {
+    if (!photos.length) return;
+    const imgs = photos.map(p=>`<img src="${p.img}" style="width:100%;max-width:780px;display:block;margin:0 auto;page-break-after:always;">`).join('');
+    printHTML(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="margin:0;padding:6px;">${imgs}</body></html>`, title);
+  };
+  useEffect(() => {
+    if (!docQR.visible || !docQR.orderId || docQR.status==='done') return;
+    let alive = true;
+    const iv = setInterval(async () => {
+      try {
+        const txt = await (await fetch(`${FIREBASE_URL}/order_files/${docQR.orderId}.json`)).text();
+        if (alive && txt !== docQR.initial) {
+          const photos = await loadOrderFiles(docQR.orderId);
+          setDocCountLocal(docQR.orderId, photos.length);
+          setDocQR(d=>d.visible?{...d, status:'done'}:d);
+          refreshDocViewer(docQR.orderId);
+        }
+      } catch {}
+    }, 3000);
+    return () => { alive=false; clearInterval(iv); };
+  }, [docQR.visible, docQR.orderId, docQR.initial, docQR.status]);
 
   // Πελάτης από όνομα παραγγελίας (για phone/email)
   const findCustomerOf = (o) => {
@@ -2678,6 +2747,16 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             </View>
             <PhaseBadges order={order} />
             {isReadyForTransfer && <View style={{marginTop:8}}><BlinkingReadyBadge onPress={()=>transferOrderToReady(order.id)} /></View>}
+            {order.docCount > 0 ? (
+              <TouchableOpacity onPress={()=>openDocViewer(order)} style={{flexDirection:'row',alignItems:'center',alignSelf:'flex-start',gap:6,marginTop:8,backgroundColor:'#e8f5e9',borderWidth:1,borderColor:'#43a047',borderRadius:8,paddingHorizontal:10,paddingVertical:6}}>
+                <Text style={{fontSize:13,fontWeight:'bold',color:'#2e7d32'}}>📎 ΠΡΟΒΟΛΗ ΕΓΓΡΑΦΟ ΠΕΛΑΤΗ</Text>
+                <View style={{backgroundColor:'#2e7d32',borderRadius:10,minWidth:20,paddingHorizontal:5,paddingVertical:1}}><Text style={{color:'#fff',fontSize:12,fontWeight:'900',textAlign:'center'}}>{order.docCount}</Text></View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={()=>openDocQR(order,'add')} style={{flexDirection:'row',alignItems:'center',alignSelf:'flex-start',gap:6,marginTop:8,backgroundColor:'#f5f5f5',borderWidth:1,borderColor:'#bbb',borderRadius:8,paddingHorizontal:10,paddingVertical:6}}>
+                <Text style={{fontSize:13,fontWeight:'bold',color:'#555'}}>📎 ΚΑΤΑΧΩΡΗΣΗ ΕΓΓΡΑΦΟ ΠΕΛΑΤΗ</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
         {!isArchive && anyChannel && (
@@ -3815,6 +3894,69 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <Text style={{fontWeight:'bold', color:'white', fontSize:14}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ΠΡΟΒΟΛΗ ΕΓΓΡΑΦΩΝ ΠΕΛΑΤΗ */}
+      <Modal visible={docViewer.visible} transparent animationType="slide" onRequestClose={()=>setDocViewer(v=>({...v,visible:false}))}>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.85)', justifyContent:'center', alignItems:'center', padding:16}}>
+          <View style={{backgroundColor:'#fff', borderRadius:16, padding:16, width:'92%', maxWidth:640, maxHeight:'92%'}}>
+            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
+              <Text style={{fontSize:16, fontWeight:'bold', color:'#1a1a1a'}}>📎 ΕΓΓΡΑΦΟ ΠΕΛΑΤΗ #{docViewer.orderNo}</Text>
+              <TouchableOpacity onPress={()=>setDocViewer(v=>({...v,visible:false}))}><Text style={{fontSize:22, color:'#888'}}>✕</Text></TouchableOpacity>
+            </View>
+            {docViewer.loading ? (
+              <Text style={{textAlign:'center', padding:30, color:'#888'}}>Φόρτωση…</Text>
+            ) : docViewer.photos.length===0 ? (
+              <View style={{alignItems:'center', padding:20}}>
+                <Text style={{color:'#888', marginBottom:16}}>Δεν υπάρχουν έγγραφα.</Text>
+                <TouchableOpacity style={{backgroundColor:'#1565C0', borderRadius:8, paddingHorizontal:18, paddingVertical:10}} onPress={()=>{ const o=[...specialOrders,...soldSpecialOrders].find(x=>x.id===docViewer.orderId); if(o) openDocQR(o,'add'); }}><Text style={{color:'#fff', fontWeight:'bold'}}>➕ ΠΡΟΣΘΗΚΗ</Text></TouchableOpacity>
+              </View>
+            ) : (
+              <View>
+                <Image source={{uri:docViewer.photos[docViewer.idx]?.img}} style={{width:'100%', height:380, borderRadius:8, backgroundColor:'#000'}} resizeMode="contain" />
+                <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginTop:8}}>
+                  <TouchableOpacity disabled={docViewer.idx<=0} onPress={()=>setDocViewer(v=>({...v,idx:v.idx-1}))} style={{padding:8, opacity:docViewer.idx<=0?0.3:1}}><Text style={{fontSize:20}}>◀</Text></TouchableOpacity>
+                  <Text style={{fontWeight:'bold', color:'#555'}}>{docViewer.idx+1} / {docViewer.photos.length}</Text>
+                  <TouchableOpacity disabled={docViewer.idx>=docViewer.photos.length-1} onPress={()=>setDocViewer(v=>({...v,idx:v.idx+1}))} style={{padding:8, opacity:docViewer.idx>=docViewer.photos.length-1?0.3:1}}><Text style={{fontSize:20}}>▶</Text></TouchableOpacity>
+                </View>
+                <View style={{flexDirection:'row', flexWrap:'wrap', gap:8, marginTop:10}}>
+                  <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#1565C0', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>{ const o=[...specialOrders,...soldSpecialOrders].find(x=>x.id===docViewer.orderId); if(o) openDocQR(o,'add'); }}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>➕ ΠΡΟΣΘΗΚΗ</Text></TouchableOpacity>
+                  <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#f9a825', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>{ const o=[...specialOrders,...soldSpecialOrders].find(x=>x.id===docViewer.orderId); const ph=docViewer.photos[docViewer.idx]; if(o&&ph) openDocQR(o,'replace',ph.id); }}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🔄 ΑΝΤΙΚΑΤΑΣΤΑΣΗ</Text></TouchableOpacity>
+                  <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#2e7d32', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>printDocPhotos([docViewer.photos[docViewer.idx]], `Έγγραφο #${docViewer.orderNo}`)}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🖨️ ΕΚΤΥΠΩΣΗ</Text></TouchableOpacity>
+                  {docViewer.photos.length>1 && <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#1b5e20', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>printDocPhotos(docViewer.photos, `Έγγραφα #${docViewer.orderNo}`)}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🖨️ ΟΛΑ</Text></TouchableOpacity>}
+                  <TouchableOpacity style={{flex:1, minWidth:120, backgroundColor:'#b71c1c', borderRadius:8, padding:10, alignItems:'center'}} onPress={()=>deleteDocPhoto(docViewer.orderId, docViewer.photos[docViewer.idx]?.id)}><Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>🗑 ΔΙΑΓΡΑΦΗ</Text></TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* QR ΑΝΕΒΑΣΜΑΤΟΣ ΕΓΓΡΑΦΟΥ */}
+      <Modal visible={docQR.visible} transparent animationType="fade" onRequestClose={()=>setDocQR(d=>({...d,visible:false}))}>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.7)', justifyContent:'center', alignItems:'center'}}>
+          <View style={{backgroundColor:'#fff', borderRadius:16, padding:22, width:'85%', maxWidth:440, alignItems:'center'}}>
+            <Text style={{fontSize:17, fontWeight:'bold', color:'#1a1a1a', marginBottom:6, textAlign:'center'}}>{docQR.mode==='replace'?'🔄 ΑΝΤΙΚΑΤΑΣΤΑΣΗ ΕΓΓΡΑΦΟΥ':'📎 ΚΑΤΑΧΩΡΗΣΗ ΕΓΓΡΑΦΟ ΠΕΛΑΤΗ'}</Text>
+            {docQR.status==='done' ? (
+              <View style={{alignItems:'center', width:'100%'}}>
+                <Text style={{fontSize:40, marginVertical:12}}>✅</Text>
+                <Text style={{fontSize:15, fontWeight:'bold', color:'#2e7d32', textAlign:'center', marginBottom:18}}>Η φωτό ανέβηκε!</Text>
+                <View style={{flexDirection:'row', gap:8, width:'100%'}}>
+                  <TouchableOpacity style={{flex:1, padding:12, borderRadius:10, alignItems:'center', backgroundColor:'#e0e0e0'}} onPress={()=>setDocQR(d=>({...d,visible:false}))}><Text style={{fontWeight:'bold', color:'#555'}}>ΚΛΕΙΣΙΜΟ</Text></TouchableOpacity>
+                  <TouchableOpacity style={{flex:1, padding:12, borderRadius:10, alignItems:'center', backgroundColor:'#2e7d32'}} onPress={()=>{ const id=docQR.orderId; setDocQR(d=>({...d,visible:false})); const o=[...specialOrders,...soldSpecialOrders].find(x=>x.id===id); if(o) openDocViewer(o); }}><Text style={{fontWeight:'bold', color:'#fff'}}>ΠΡΟΒΟΛΗ</Text></TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View style={{alignItems:'center', width:'100%'}}>
+                <Text style={{fontSize:13, color:'#666', textAlign:'center', marginBottom:14}}>Σκάναρε τον κωδικό με το κινητό για να τραβήξεις φωτό.</Text>
+                {docQR.url ? <Image source={{uri:makeQrDataUrl(docQR.url)}} style={{width:230, height:230}} resizeMode="contain" /> : null}
+                <Text style={{fontSize:12, color:'#888', marginTop:10, textAlign:'center'}}>Ισχύει 5 λεπτά ή για μία φωτό.</Text>
+                <Text style={{fontSize:13, color:'#1565C0', marginTop:8, fontWeight:'bold'}}>Αναμονή για φωτό…</Text>
+                <TouchableOpacity style={{marginTop:16, padding:12, borderRadius:10, alignItems:'center', backgroundColor:'#e0e0e0', width:'100%'}} onPress={()=>setDocQR(d=>({...d,visible:false}))}><Text style={{fontWeight:'bold', color:'#555'}}>ΑΚΥΡΟ</Text></TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
