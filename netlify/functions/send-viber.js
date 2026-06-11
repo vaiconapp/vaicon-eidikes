@@ -66,7 +66,7 @@ exports.handler = async (event) => {
 
   const viber = {
     sender,
-    text: message,
+    text: unsubUrl ? message + '\n\n\n' : message,
     validity: 4320,
   };
   if (unsubUrl) {

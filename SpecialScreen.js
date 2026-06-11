@@ -303,13 +303,60 @@ const buildSmsOrderMessage = (o) => {
   const dt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
   return `VAICON: ΚΑΤΑΧΩΡΗΘΗΚΕ Η ΠΑΡΑΓΓΕΛΙΑ ΝΟ ${o.orderNo||'-'} (${dt}). ΤΑ ΣΤΟΙΧΕΙΑ ΣΤΑΛΘΗΚΑΝ ΑΝΑΛΥΤΙΚΑ ΣΕ VIBER/EMAIL. ΜΕΤΑ ΤΗΝ ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ ΔΕΝ ΓΙΝΟΝΤΑΙ ΑΛΛΑΓΕΣ.`;
 };
+const COMPANY_SIGNATURE = [
+  'Με εκτίμηση,',
+  '',
+  'VAICON — Πόρτες Ασφαλείας · Πόρτες Εσωτερικές Laminate',
+  'Διεύθυνση εργοστασίου: Λούβαρη 11, Περιστέρι, Αθήνα',
+  'Τηλ.: 210 5774975 · 210 5774976 · 210 5752259',
+  'Viber: 6944 002082',
+  'Email: info@vairaktarakis.gr',
+  'Web: www.vaicon.gr · www.vairaktarakis.gr',
+  'Ωράριο: Δευτ-Παρ 08:00-16:00',
+].join('\n');
+const buildOrderEmail = (o) => {
+  const isStd = o.orderType === 'ΤΥΠΟΠΟΙΗΜΕΝΗ';
+  const coats = (o.coatings||[]).filter(c=>c&&String(c).trim()).join(', ');
+  const stav = (o.stavera||[]).filter(s=>s&&s.dim).map(s=>(s.qty?`${s.qty}τεμ `:'')+s.dim+(s.note?' '+s.note:'')).join(', ');
+  const tzami = (o.glassDim||'')+(o.glassNotes?' '+o.glassNotes:'');
+  return [
+    'Αγαπητοί συνεργάτες,',
+    '',
+    'Σας ευχαριστούμε για την παραγγελία σας. Ακολουθούν αναλυτικά τα στοιχεία της, όπως καταχωρήθηκαν:',
+    '',
+    `Αρ. παραγγελίας: ${o.orderNo||'-'}`,
+    `Διαστάσεις: ${o.h||''} x ${o.w||''}`,
+    `Πλευρά: ${o.side||''}`,
+    `Θωράκιση: ${o.armor||'ΜΟΝΗ'}`,
+    !isStd ? `Κάσα: ${o.caseType==='ΑΝΟΙΧΤΟΥ ΤΥΠΟΥ'?'ΑΝΟΙΧΤΗ':'ΚΛΕΙΣΤΗ'} | ${o.caseMaterial||'DKP'} | Μεντεσέδες: ${o.hinges||'2'}` : null,
+    `Κλειδαριά: ${o.lock||'—'}`,
+    coats ? `Επενδύσεις: ${coats}` : null,
+    stav ? `Σταθερό: ${stav}` : null,
+    tzami ? `Τζάμι: ${tzami}` : null,
+    o.notes ? `Σημειώσεις: ${o.notes}` : null,
+    '',
+    o.docCount > 0 ? 'Έχει επισυναφθεί το έγγραφο της παραγγελίας σας για επαλήθευση.' : null,
+    'Παρακαλούμε ελέγξτε προσεκτικά τα παραπάνω στοιχεία. Μετά την έναρξη της παραγωγής δεν είναι δυνατές αλλαγές και η εταιρεία δεν φέρει ευθύνη για τυχόν διαφορές.',
+    '',
+    COMPANY_SIGNATURE,
+  ].filter(v => v !== null).join('\n');
+};
+const buildReadyEmail = (o) => [
+  'Αγαπητοί συνεργάτες,',
+  '',
+  `Σας ενημερώνουμε ότι η παραγγελία σας Νο ${o.orderNo||'-'} είναι έτοιμη προς παραλαβή.`,
+  'Ώρες παραλαβής: εργάσιμες 08:00-16:00.',
+  '',
+  COMPANY_SIGNATURE,
+].join('\n');
+const emailMessageFor = (o) => o?.status === 'READY' ? buildReadyEmail(o) : buildOrderEmail(o);
 const messageFor = (o) => o?.status === 'READY' ? buildReadyMessage(o) : buildOrderMessage(o);
 const smsMessageFor = (o) => o?.status === 'READY' ? buildReadyMessage(o) : buildSmsOrderMessage(o);
 const openEmail = (email, msg, orderNo) => {
   if (!email) return;
   if (Platform.OS === 'web') {
     const a = document.createElement('a');
-    a.href = `mailto:${email}?subject=${encodeURIComponent('Παραγγελία Νο '+(orderNo||''))}&body=${encodeURIComponent(msg)}`;
+    a.href = `mailto:${email}?subject=${encodeURIComponent('Παραγγελία πόρτας ασφαλείας Νο '+(orderNo||''))}&body=${encodeURIComponent(msg)}`;
     a.click();
   }
 };
@@ -964,7 +1011,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     markNotified(o.id, 'viber');
     showSmsToast(res.test ? '✓ Test mode: Viber OK.' : '✓ Viber στάλθηκε.', 'ok');
   };
-  const notifyEmail = (o) => { const c = findCustomerOf(o); if (!c?.email) return; openEmail(c.email, messageFor(o), o.orderNo); markNotified(o.id, 'email'); };
+  const notifyEmail = (o) => { const c = findCustomerOf(o); if (!c?.email) return; openEmail(c.email, emailMessageFor(o), o.orderNo); markNotified(o.id, 'email'); };
   const notifySms = async (o) => {
     const c = findCustomerOf(o);
     const p = pickSmsPhone(c);
