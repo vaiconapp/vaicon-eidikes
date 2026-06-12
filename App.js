@@ -12,12 +12,21 @@ import MessagesScreen from './MessagesScreen';
 import StatsScreen from './StatsScreen';
 import { APP_VERSION } from './version';
 
-export const FIREBASE_URL = "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app";
+// DEV (expo start / localhost) → δοκιμαστική βάση vaicon-test
+// PROD (deployed build)         → κανονική βάση vaicon-eidikes
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-const STORAGE_KEY = "vaicon_special_auth_v1";
-const STORAGE_USER = "vaicon_special_user_v1";
-const STORAGE_TOKEN = "vaicon_special_token_v1";
-const FIREBASE_API_KEY = "AIzaSyDTAyLh1-Jrdpz_TRUFbpQhqZHNhfPg47U";
+export const FIREBASE_URL = IS_DEV
+  ? "https://vaicon-test-default-rtdb.europe-west1.firebasedatabase.app"
+  : "https://vaicon-eidikes-default-rtdb.europe-west1.firebasedatabase.app";
+
+// Στο dev χρησιμοποιούμε ξεχωριστά κλειδιά ώστε παλιά tokens (παραγωγής) να μην μπερδεύουν
+const STORAGE_KEY = IS_DEV ? "vaicon_special_auth_test" : "vaicon_special_auth_v1";
+const STORAGE_USER = IS_DEV ? "vaicon_special_user_test" : "vaicon_special_user_v1";
+const STORAGE_TOKEN = IS_DEV ? "vaicon_special_token_test" : "vaicon_special_token_v1";
+const FIREBASE_API_KEY = IS_DEV
+  ? "AIzaSyC2p46fX-FD5sszWHnkJB2hEJBN1bTkHWI"
+  : "AIzaSyDTAyLh1-Jrdpz_TRUFbpQhqZHNhfPg47U";
 const USER_DOMAIN = "@vaicon.local";
 
 const toEmail = (u) => String(u || '').trim().toLowerCase().replace(/\s+/g, '') + USER_DOMAIN;
@@ -299,8 +308,11 @@ export default function App() {
   useEffect(() => {
     if (!isLoggedIn) return;
 
-    if (Platform.OS !== 'web' || typeof EventSource === 'undefined') {
-      const interval = setInterval(() => { fetchData(true); }, 20000);
+    // Στο dev όλα τα apps μοιράζονται το ίδιο host (vaicon-test). Οι μόνιμες συνδέσεις
+    // EventSource εξαντλούν το όριο συνδέσεων του browser (6/host, κοινό για όλες τις
+    // καρτέλες), οπότε κάνουμε polling που ελευθερώνει τη σύνδεση μετά από κάθε κλήση.
+    if (IS_DEV || Platform.OS !== 'web' || typeof EventSource === 'undefined') {
+      const interval = setInterval(() => { fetchData(true); }, IS_DEV ? 8000 : 20000);
       return () => clearInterval(interval);
     }
 
@@ -330,14 +342,15 @@ export default function App() {
       try { const r = await fetch(`${FIREBASE_URL}/app_lock.json`); setLockedUsers((await r.json()) || {}); } catch {}
     };
     load();
-    if (Platform.OS === 'web' && typeof EventSource !== 'undefined') {
+    // Στο dev: polling αντί για EventSource (βλ. σχόλιο πιο πάνω για το όριο συνδέσεων).
+    if (!IS_DEV && Platform.OS === 'web' && typeof EventSource !== 'undefined') {
       const es = new EventSource(`${FIREBASE_URL}/app_lock.json` + (fbToken ? `?auth=${fbToken}` : ''));
       es.addEventListener('put', load);
       es.addEventListener('patch', load);
       const safety = setInterval(load, 15000);
       return () => { es.close(); clearInterval(safety); };
     }
-    const safety = setInterval(load, 5000);
+    const safety = setInterval(load, IS_DEV ? 10000 : 5000);
     return () => clearInterval(safety);
   }, [isLoggedIn, tokenVersion]);
 

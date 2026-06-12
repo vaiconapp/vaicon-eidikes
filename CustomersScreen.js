@@ -115,6 +115,36 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
     try { await fetch(`${FIREBASE_URL}/customers/${id}.json`, { method: 'DELETE' }); } catch(e) {}
   };
 
+  // Κοινή βάση: μετονομασία πελάτη ενημερώνει και τις ΤΥΠΟΠΟΙΗΜΕΝΕΣ παραγγελίες.
+  // Σε βάση χωρίς std_orders (παραγωγή vaicon-eidikes) είναι no-op.
+  const propagateRenameToStdOrders = async (oldName, newName, customerId) => {
+    if (!oldName || oldName === newName) return;
+    try {
+      const res = await fetch(`${FIREBASE_URL}/std_orders.json`);
+      const data = await res.json();
+      if (!data) return;
+      const patch = {};
+      for (const [oid, o] of Object.entries(data)) {
+        if (o && (o.customerId === customerId || o.customer === oldName)) {
+          patch[`${oid}/customer`] = newName;
+        }
+      }
+      if (Object.keys(patch).length) {
+        await fetch(`${FIREBASE_URL}/std_orders.json`, { method: 'PATCH', body: JSON.stringify(patch) });
+      }
+    } catch (e) { console.warn('Propagate rename to std_orders:', e); }
+  };
+
+  // Κοινή βάση: έλεγχος αν ο πελάτης έχει ΤΥΠΟΠΟΙΗΜΕΝΕΣ παραγγελίες πριν τη διαγραφή.
+  const hasStdOrders = async (customerId, customerName) => {
+    try {
+      const res = await fetch(`${FIREBASE_URL}/std_orders.json`);
+      const data = await res.json();
+      if (!data) return false;
+      return Object.values(data).some(o => o && (o.customerId === customerId || o.customer === customerName));
+    } catch { return false; }
+  };
+
   const saveCustomer = async () => {
     if (!form.name.trim()) return Alert.alert("Προσοχή", "Βάλτε Όνομα Πελάτη.");
     if (editingId) {
@@ -144,6 +174,9 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
         setSoldSpecialOrders(updatedSold);
       }
 
+      // Κοινή βάση: ενημέρωση και των τυποποιημένων παραγγελιών
+      await propagateRenameToStdOrders(oldName, updated.name, editingId);
+
       Alert.alert("VAICON", `Ο πελάτης ενημερώθηκε!\n${form.name}`);
     } else {
       const newCustomer = { ...form, id: Date.now().toString(), createdAt: Date.now(), enteredBy: currentUserName };
@@ -168,11 +201,13 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   };
 
-  const deleteCustomer = (id) => {
+  const deleteCustomer = async (id) => {
     const customer = customers.find(c => c.id === id);
     if (!customer) return;
     // Ελέγχουμε με όνομα — όχι customerId
-    const hasAnyOrders = allOrders.some(o => o.customer === customer.name);
+    let hasAnyOrders = allOrders.some(o => o.customer === customer.name);
+    // Κοινή βάση: έλεγχος και στις τυποποιημένες παραγγελίες
+    if (!hasAnyOrders) hasAnyOrders = await hasStdOrders(id, customer.name);
     if (hasAnyOrders) {
       setDeleteCustomerModal({ visible:true, customerId:null, customerName:customer.name, blocked:true });
       return;
