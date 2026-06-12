@@ -263,7 +263,7 @@ export default function App() {
   const [showInbox, setShowInbox] = useState(false);
   const [inbox, setInbox] = useState([]);
   const [unreadPrompt, setUnreadPrompt] = useState(0);
-  const promptAckRef = useRef(false);
+  const nextPromptAtRef = useRef(0);
   const [showStats, setShowStats] = useState(false);
   const [statsAuthOpen, setStatsAuthOpen] = useState(false);
   const [statsAuthPwd, setStatsAuthPwd] = useState('');
@@ -288,6 +288,7 @@ export default function App() {
   const [adminAuthPwd, setAdminAuthPwd] = useState('');
   const [adminAuthError, setAdminAuthError] = useState(false);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [userLabels, setUserLabels] = useState({});
   const [labelDrafts, setLabelDrafts] = useState({});
 
@@ -359,8 +360,9 @@ export default function App() {
     const myKey = lockKey(currentUser.username);
     const pickUnread = (data) => {
       const unread = Object.values(data || {}).filter(m => m && m.read === false);
-      if (!unread.length) { promptAckRef.current = false; setUnreadPrompt(0); return; }
-      if (!promptAckRef.current) setUnreadPrompt(unread.length);
+      if (!unread.length) { nextPromptAtRef.current = 0; setUnreadPrompt(0); return; }
+      // Επαναλαμβανόμενη υπενθύμιση: ξαναδείχνει το popup κάθε 5' μέχρι να διαβαστούν όλα.
+      if (Date.now() >= (nextPromptAtRef.current || 0)) setUnreadPrompt(unread.length);
     };
     const load = async () => { try { const r = await fetch(`${FIREBASE_URL}/messages/${myKey}.json`); pickUnread(await r.json()); } catch {} };
     load();
@@ -369,31 +371,64 @@ export default function App() {
   }, [isLoggedIn, currentUser, tokenVersion]);
 
   const dismissMsg = async () => {
-    const m = incomingMsg; setIncomingMsg(null);
-    if (!m || !currentUser?.username) return;
-    setInbox(prev => prev.map(x => x.id === m.id ? { ...x, read: true, readAt: m.readAt || Date.now() } : x));
-    if (m.read) return;
-    try { await fetch(`${FIREBASE_URL}/messages/${lockKey(currentUser.username)}/${m.id}.json`, { method: 'PATCH', body: JSON.stringify({ read: true, readAt: Date.now() }) }); } catch {}
+    const m = incomingMsg;
+    if (!m || !currentUser?.username) { setIncomingMsg(null); return; }
+    const wasUnread = m.read === false;
+    if (wasUnread) {
+      setInbox(prev => prev.map(x => x.id === m.id ? { ...x, read: true, readAt: Date.now() } : x));
+      try { await fetch(`${FIREBASE_URL}/messages/${lockKey(currentUser.username)}/${m.id}.json`, { method: 'PATCH', body: JSON.stringify({ read: true, readAt: Date.now() }) }); } catch {}
+    }
+    // Αναγκαστική ουρά: μόλις διαβαστεί, αναδύεται αυτόματα το επόμενο (παλαιότερο) αδιάβαστο.
+    const next = wasUnread
+      ? inbox.filter(x => x.id !== m.id && x.read === false).sort((a, b) => (a.ts || 0) - (b.ts || 0))[0]
+      : null;
+    setIncomingMsg(next || null);
+    if (!next) setUnreadPrompt(0);
   };
 
   const loadInbox = async () => {
-    if (!currentUser?.username) return;
+    if (!currentUser?.username) return [];
     try {
       const r = await fetch(`${FIREBASE_URL}/messages/${lockKey(currentUser.username)}.json`);
       const d = (await r.json()) || {};
       const arr = Object.keys(d).map(id => ({ id, ...d[id] }));
       [...arr].sort((a, b) => (a.ts || 0) - (b.ts || 0)).forEach((m, i) => { m._num = i + 1; });
-      setInbox(arr.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
-    } catch { setInbox([]); }
+      const sorted = arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      setInbox(sorted);
+      return sorted;
+    } catch { setInbox([]); return []; }
   };
 
-  const openInbox = () => { setMenuOpen(false); setShowInbox(true); loadInbox(); };
+  // Ανοίγει το inbox και αναδύει αυτόματα το παλαιότερο αδιάβαστο (αναγκαστική ανάγνωση).
+  const openInbox = async () => {
+    setMenuOpen(false);
+    setUnreadPrompt(0);
+    setShowInbox(true);
+    const arr = await loadInbox();
+    const oldestUnread = arr.filter(m => m.read === false).sort((a, b) => (a.ts || 0) - (b.ts || 0))[0];
+    if (oldestUnread) setIncomingMsg(oldestUnread);
+  };
 
   useEffect(() => {
     if (!showInbox) return;
     const iv = setInterval(loadInbox, 12000);
     return () => clearInterval(iv);
   }, [showInbox]);
+
+  // Φόρτωση ονομάτων χρηστών στο login (admin), ώστε να εμφανίζονται αμέσως δίπλα στις
+  // παραγγελίες χωρίς να χρειάζεται πρώτα να ανοίξει το panel Διαχειριστή ή τα Μηνύματα.
+  useEffect(() => {
+    if (!isLoggedIn || currentUser?.role !== 'admin') return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`${FIREBASE_URL}/user_labels.json`);
+        const data = (await r.json()) || {};
+        if (alive) { setUserLabels(data); setLabelDrafts(data); }
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, [isLoggedIn, currentUser]);
 
   useEffect(() => {
     if (!adminPanelOpen && !showMessages) return;
@@ -444,8 +479,16 @@ export default function App() {
   const tryOpenAdmin = async () => {
     if (await verifyAdminCode(adminAuthPwd)) {
       setAdminAuthOpen(false); setAdminAuthPwd(''); setAdminAuthError(false);
-      setOwnerOverride(true); setAdminPanelOpen(true);
+      setAdminUnlocked(true); setOwnerOverride(true); setAdminPanelOpen(true);
     } else { setAdminAuthError(true); setAdminAuthPwd(''); setTimeout(() => setAdminAuthError(false), 2000); }
+  };
+
+  // Άνοιγμα Διαχειριστή: ζητάει κωδικό μόνο την πρώτη φορά ανά session. Αφού ξεκλειδωθεί,
+  // ανοίγει κατευθείαν μέχρι να κλειδωθεί χειροκίνητα ή να κλείσει το πρόγραμμα.
+  const openAdmin = () => {
+    setMenuOpen(false);
+    if (adminUnlocked) { setOwnerOverride(true); setAdminPanelOpen(true); }
+    else { setAdminAuthPwd(''); setAdminAuthError(false); setAdminAuthOpen(true); }
   };
 
   useEffect(() => {
@@ -458,8 +501,8 @@ export default function App() {
       if (backupSuccess) { setBackupSuccess(null); return true; }
       if (restorePayload || restoreFileError) { setRestorePayload(null); setRestoreFileError(null); setRestoreConfirmText(''); return true; }
       if (showStats) { setShowStats(false); return true; }
-      if (incomingMsg) { dismissMsg(); return true; }
-      if (unreadPrompt > 0) { setUnreadPrompt(0); return true; }
+      if (incomingMsg) { return true; }
+      if (unreadPrompt > 0) { setUnreadPrompt(0); nextPromptAtRef.current = Date.now() + 5 * 60 * 1000; return true; }
       if (showInbox) { setShowInbox(false); return true; }
       if (showMessages) { setShowMessages(false); return true; }
       if (showActivity) { setShowActivity(false); return true; }
@@ -734,8 +777,8 @@ export default function App() {
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#eef4ff' }]} onPress={() => { setMenuOpen(false); setShowMessages(true); }}>
               <Text style={[styles.menuItemText, { color: '#1565C0' }]}>✉️ ΜΗΝΥΜΑΤΑ</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff7ec' }]} onPress={() => { setMenuOpen(false); setAdminAuthPwd(''); setAdminAuthError(false); setAdminAuthOpen(true); }}>
-              <Text style={[styles.menuItemText, { color: '#E65100' }]}>🛡️ ΔΙΑΧΕΙΡΙΣΤΗΣ</Text>
+            <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff7ec' }]} onPress={openAdmin}>
+              <Text style={[styles.menuItemText, { color: '#E65100' }]}>🛡️ ΔΙΑΧΕΙΡΙΣΤΗΣ{adminUnlocked ? ' 🔓' : ''}</Text>
             </TouchableOpacity>
             </>)}
             </>)}
@@ -743,7 +786,7 @@ export default function App() {
               <Text style={styles.menuItemText}>🔄 ΑΝΑΝΕΩΣΗ</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff0f0', marginTop: 12 }]} onPress={() => {
-              const doLogout = () => { forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); setMenuOpen(false); };
+              const doLogout = () => { forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); setMenuOpen(false); setAdminUnlocked(false); };
               if (Platform.OS === 'web') { if (window.confirm("Θέλεις να αποσυνδεθείς;")) doLogout(); }
               else Alert.alert("🔐 Αποσύνδεση", "Θέλεις να αποσυνδεθείς;", [
                 { text: "ΑΚΥΡΟ", style: "cancel" },
@@ -800,7 +843,7 @@ export default function App() {
         </View>
       </Modal>
 
-      <Modal visible={!!incomingMsg} transparent animationType="fade" onRequestClose={dismissMsg}>
+      <Modal visible={!!incomingMsg} transparent animationType="fade" onRequestClose={() => {}}>
         <View style={statsAuthStyles.overlay}>
           <View style={[statsAuthStyles.box, { maxWidth: 560, padding: 26, borderTopWidth: 10, borderTopColor: '#1565C0' }, showInbox && { marginBottom: 70, marginLeft: 40 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
@@ -817,14 +860,14 @@ export default function App() {
             <ScrollView style={{ maxHeight: 380, marginVertical: 22 }}>
               <Text style={{ fontSize: 27, color: '#222', textAlign: 'center', lineHeight: 38 }}>{incomingMsg?.text}</Text>
             </ScrollView>
-            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#1565C0', padding: 18 }]} onPress={dismissMsg}>
-              <Text style={[statsAuthStyles.btnTxt, { fontSize: 18 }]}>ΟΚ</Text>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#2e7d32', padding: 18 }]} onPress={dismissMsg}>
+              <Text style={[statsAuthStyles.btnTxt, { fontSize: 18 }]}>✓ ΔΙΑΒΑΣΤΗΚΕ</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <Modal visible={unreadPrompt > 0} transparent animationType="fade" onRequestClose={() => setUnreadPrompt(0)}>
+      <Modal visible={unreadPrompt > 0 && !incomingMsg} transparent animationType="fade" onRequestClose={() => { setUnreadPrompt(0); nextPromptAtRef.current = Date.now() + 5 * 60 * 1000; }}>
         <View style={statsAuthStyles.overlay}>
           <View style={[statsAuthStyles.box, { maxWidth: 420, padding: 28, borderTopWidth: 10, borderTopColor: '#1565C0', alignItems: 'center' }]}>
             <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#1565C0', alignItems: 'center', justifyContent: 'center', marginBottom: 12, elevation: 4, shadowColor: '#1565C0', shadowOpacity: 0.5, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}>
@@ -835,8 +878,13 @@ export default function App() {
             </Text>
             <TouchableOpacity
               style={[statsAuthStyles.btn, { backgroundColor: '#1565C0', padding: 16, alignSelf: 'stretch', marginTop: 20 }]}
-              onPress={() => { promptAckRef.current = true; setUnreadPrompt(0); openInbox(); }}>
+              onPress={() => { nextPromptAtRef.current = Date.now() + 5 * 60 * 1000; openInbox(); }}>
               <Text style={[statsAuthStyles.btnTxt, { fontSize: 17 }]}>ΔΙΑΒΑΣΕ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[statsAuthStyles.btn, { backgroundColor: '#999', padding: 12, alignSelf: 'stretch', marginTop: 10 }]}
+              onPress={() => { setUnreadPrompt(0); nextPromptAtRef.current = Date.now() + 5 * 60 * 1000; }}>
+              <Text style={[statsAuthStyles.btnTxt, { fontSize: 14 }]}>ΑΡΓΟΤΕΡΑ</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1064,7 +1112,11 @@ export default function App() {
             <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#E65100', marginTop: 8 }]} onPress={() => { setAdminPanelOpen(false); openRestoreFilePicker(); }}>
               <Text style={statsAuthStyles.btnTxt}>♻️ ΕΠΑΝΑΦΟΡΑ</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666', marginTop: 14 }]} onPress={() => setAdminPanelOpen(false)}>
+            <View style={{ height: 1, backgroundColor: '#eee', marginTop: 14, marginBottom: 10 }} />
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#8B0000' }]} onPress={() => { setAdminUnlocked(false); setAdminPanelOpen(false); }}>
+              <Text style={statsAuthStyles.btnTxt}>🔐 ΚΛΕΙΔΩΜΑ ΠΡΟΣΒΑΣΗΣ (απαιτεί κωδικό ξανά)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666', marginTop: 10 }]} onPress={() => setAdminPanelOpen(false)}>
               <Text style={statsAuthStyles.btnTxt}>ΚΛΕΙΣΙΜΟ</Text>
             </TouchableOpacity>
           </View>
