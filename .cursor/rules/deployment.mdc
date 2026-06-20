@@ -1,0 +1,45 @@
+---
+description: VAICON deployment workflow — version bump + git push (Netlify auto-deploy) για ΚΑΙ ΤΑ ΤΡΙΑ προγράμματα
+alwaysApply: true
+---
+
+# VAICON Deployment Workflow
+
+Και τα τρία προγράμματα είναι συνδεδεμένα με Netlify που κάνει **αυτόματο deploy σε κάθε push στο `main`**.
+
+| Πρόγραμμα | Φάκελος | GitHub repo |
+|-----------|---------|-------------|
+| vaicon-app (τυποποιημένες) | `C:\Users\xxxyy\Desktop\vaicon-app` | `vaiconapp/vaicon-app` |
+| vaicon-eidikes (ειδικές) | `C:\Users\xxxyy\Desktop\vaicon-eidikes` | `vaiconapp/vaicon-eidikes` |
+| vaicon-installations (τοποθετήσεις) | `C:\Users\xxxyy\Desktop\vaicon-installations` | `vaiconapp/vaicon-installations` |
+
+Build: `npx expo export -p web` (από το `netlify.toml`). Χρόνος: ~40 δευτ. από το push.
+
+## ΥΠΟΧΡΕΩΤΙΚΟ σε ΚΑΘΕ ανέβασμα / deploy / "ανέβασέ το live"
+
+ΠΑΝΤΑ τρέξε τη διαδικασία versioning ΠΡΙΝ το push, για το αντίστοιχο πρόγραμμα:
+
+```bash
+node scripts/bump-version.js   # αυξάνει το version.js (μορφή v.DDMMYY.N.TOTAL)
+git add -A
+git commit -m "<περιγραφικό μήνυμα>"
+git push                       # Netlify auto-deploy
+```
+
+- Το `version.js` δεν το πειράζουμε ποτέ χειροκίνητα — το ενημερώνει το `scripts/bump-version.js`.
+- Μετά το deploy, η νέα έκδοση φαίνεται στην κεφαλίδα της εφαρμογής (επαλήθευση ότι ανέβηκε).
+- Υπάρχει pre-push hook που μπορεί να ξανα-bump-άρει την έκδοση και να αφήσει ένα τοπικό commit "auto-bump" (αναπόφευκτο, φεύγει με το επόμενο push). Φυσιολογικό.
+
+❌ ΜΗΝ τρέξεις μετά το push: `deploy.bat`, `deploy-only.bat`, `npx expo export -p web`, `netlify deploy`.
+Αν τρέξεις git push ΚΑΙ τα scripts → διπλό deploy με διπλό version bump.
+
+## Κατάσταση versioning ανά πρόγραμμα
+
+- ✅ `vaicon-app` — έχει `scripts/bump-version.js` + `version.js`.
+- ✅ `vaicon-eidikes` — έχει `scripts/bump-version.js` + `version.js`.
+- ⚠️ `vaicon-installations` — ΔΕΝ έχει ακόμα `scripts/bump-version.js`/`version.js`. TODO: να στηθεί η ίδια διαδικασία versioning πριν το πρώτο deploy αλλαγών μας.
+
+## Άλλα scripts (μόνο αν ζητηθεί ρητά)
+
+- `deploy.bat` — local build + manual upload στο Netlify (fallback αν αποτύχει το auto-deploy).
+- `deploy-only.bat` — re-upload υπάρχοντος `dist/` χωρίς νέο build.

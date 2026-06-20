@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Platform } from 'react-native';
 import { FIREBASE_URL } from './App';
+import { custSortKey, findDuplicateCustomers } from './formatHelpers';
 
 // Helper εκτύπωσης — web: window.print(), mobile: expo-print + sharing
 const printHTML = async (html, title, existingWin=null) => {
@@ -60,15 +61,19 @@ const fmtDate = (ts) => {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
 };
 
-const INIT = { name: '', phone: '', phone2: '', phone3: '', phoneViber: '', email: '', identifier: '', city: '', profession: '' };
+const INIT = { name: '', phone: '', phone2: '', phone3: '', phoneViber: '', email: '', identifier: '', city: '', profession: '', seller: '' };
 
-export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[], isAdmin=false, currentUserName='', resolveName=(u)=>u }) {
+export default function CustomersScreen({ customers, setCustomers, onClose, prefillName, onCustomerAdded, customOrders=[], allOrders=[], setSpecialOrders, setSoldSpecialOrders, specialOrders=[], isAdmin=false, currentUserName='', resolveName=(u)=>u, sellers=[], resolveLabel=(u)=>u }) {
   const [form, setForm] = useState(prefillName ? { ...INIT, name: prefillName } : INIT);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
   const [sortMode, setSortMode] = useState('name'); // 'name' | 'orders'
   const [selectedCustomerOrders, setSelectedCustomerOrders] = useState(null); // πελάτης για εμφάνιση παραγγελιών
   const [deleteCustomerModal, setDeleteCustomerModal] = useState({ visible:false, customerId:null, customerName:'' });
+  const [dupModal, setDupModal] = useState({ visible:false, matches:[] });
+  const [sellerOpen, setSellerOpen] = useState(false);
+  const [filterSeller, setFilterSeller] = useState('');
+  const [filterSellerOpen, setFilterSellerOpen] = useState(false);
   const scrollRef = useRef(null);
 
   const uniqueCities = useMemo(() => {
@@ -153,6 +158,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
       const updated = { ...prevCustomer, ...form };
       setCustomers(customers.map(c => c.id === editingId ? updated : c));
       await syncToCloud(updated);
+      if ((form.seller || '') !== (prevCustomer?.seller || '')) await logSellerAssign(updated, form.seller || '');
 
       // Ενημέρωση παραγγελιών ειδικών (Firebase: /special_orders/) + τοπική κατάσταση
       if (setSpecialOrders && setSoldSpecialOrders) {
@@ -179,23 +185,41 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
 
       Alert.alert("VAICON", `Ο πελάτης ενημερώθηκε!\n${form.name}`);
     } else {
-      const newCustomer = { ...form, id: Date.now().toString(), createdAt: Date.now(), enteredBy: currentUserName };
-      setCustomers([newCustomer, ...customers]);
-      await syncToCloud(newCustomer);
-      Alert.alert("VAICON", `Πελάτης αποθηκεύτηκε!\n${form.name}`, [
-        { text:'ΟΚ', onPress:()=>{ if(onCustomerAdded) onCustomerAdded(newCustomer); } }
-      ]);
-      setForm(INIT); setEditingId(null); return;
+      const dups = findDuplicateCustomers(form, customers);
+      if (dups.length) { setDupModal({ visible:true, matches:dups }); return; }
+      await commitNewCustomer(); return;
     }
     setForm(INIT);
     setEditingId(null);
+  };
+
+  const lockKey = (u) => String(u || '').toUpperCase().replace(/\s+/g, '');
+  const logSellerAssign = async (customer, seller) => {
+    try {
+      await fetch(`${FIREBASE_URL}/seller_assign_log.json`, {
+        method: 'POST',
+        body: JSON.stringify({ customer: customer.name || '', customerId: customer.id, seller, by: currentUserName || '', at: Date.now() }),
+      });
+    } catch {}
+  };
+
+  const commitNewCustomer = async () => {
+    const newCustomer = { ...form, id: Date.now().toString(), createdAt: Date.now(), enteredBy: currentUserName };
+    setCustomers([newCustomer, ...customers]);
+    await syncToCloud(newCustomer);
+    if (form.seller) await logSellerAssign(newCustomer, form.seller);
+    setDupModal({ visible:false, matches:[] });
+    Alert.alert("VAICON", `Πελάτης αποθηκεύτηκε!\n${form.name}`, [
+      { text:'ΟΚ', onPress:()=>{ if(onCustomerAdded) onCustomerAdded(newCustomer); } }
+    ]);
+    setForm(INIT); setEditingId(null);
   };
 
   const editCustomer = (c) => {
     setForm({
       name: c.name || '', phone: c.phone || '', phone2: c.phone2 || '', phone3: c.phone3 || '',
       phoneViber: c.phoneViber || '', email: c.email || '', identifier: c.identifier || '',
-      city: c.city || '', profession: c.profession || '',
+      city: c.city || '', profession: c.profession || '', seller: c.seller || '',
     });
     setEditingId(c.id);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -260,6 +284,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
   };
 
   const filtered = customers
+    .filter(c => !filterSeller || (c.seller || '') === filterSeller)
     .filter(c => {
       if (!search) return true;
       const q = search.toLowerCase();
@@ -284,9 +309,9 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
         const aCount = allOrders.filter(o => o.customer === a.name).length;
         const bCount = allOrders.filter(o => o.customer === b.name).length;
         if (bCount !== aCount) return bCount - aCount;
-        return (a.name || '').localeCompare(b.name || '', 'el');
+        return custSortKey(a).localeCompare(custSortKey(b), 'el');
       }
-      return (a.name || '').localeCompare(b.name || '', 'el');
+      return custSortKey(a).localeCompare(custSortKey(b), 'el');
     });
 
   return (
@@ -315,7 +340,33 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
               <Text style={styles.editBannerTxt}>Επεξεργάζεσαι υπάρχοντα πελάτη</Text>
             </View>
           )}
-          <TextInput style={styles.input} placeholder="Όνομα Πελάτη *" value={form.name} onChangeText={v => setForm({...form, name:v})} />
+          <View style={{flexDirection:'row', gap:6, alignItems:'flex-start', zIndex:20}}>
+            <TextInput style={[styles.input, {flex:1, marginBottom:8}]} placeholder="Όνομα Πελάτη *" value={form.name} onChangeText={v => setForm({...form, name:v})} />
+            {sellers.length > 0 && (
+              <View style={{width:240}}>
+                <TouchableOpacity onPress={()=>setSellerOpen(o=>!o)}
+                  style={[styles.input, {marginBottom:0, flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingVertical:11}, form.seller && {borderColor:'#1565C0', backgroundColor:'#e3f2fd'}]}>
+                  <Text style={{fontWeight:'bold', fontSize:16, color: form.seller?'#1565C0':'#777'}} numberOfLines={1}>
+                    {form.seller ? (resolveLabel(form.seller) || form.seller) : 'Πωλητής'}
+                  </Text>
+                  <Text style={{color:'#888', fontSize:14, fontWeight:'bold'}}>{sellerOpen?'▲':'▼'}</Text>
+                </TouchableOpacity>
+                {sellerOpen && (
+                  <View style={{position:'absolute', top:48, left:0, right:0, backgroundColor:'#fff', borderWidth:1, borderColor:'#1565C0', borderRadius:8, zIndex:30, elevation:8, shadowColor:'#000', shadowOffset:{width:0,height:3}, shadowOpacity:0.25, shadowRadius:6}}>
+                    <TouchableOpacity onPress={()=>{ setForm(f=>({...f, seller:''})); setSellerOpen(false); }} style={{paddingVertical:11, paddingHorizontal:12, borderBottomWidth:1, borderBottomColor:'#eee'}}>
+                      <Text style={{color:'#888', fontWeight:'bold', fontSize:15}}>— (κανένας)</Text>
+                    </TouchableOpacity>
+                    {sellers.map(s => { const k = lockKey(s); return (
+                      <TouchableOpacity key={k} onPress={()=>{ setForm(f=>({...f, seller:k})); setSellerOpen(false); }}
+                        style={{paddingVertical:11, paddingHorizontal:12, borderBottomWidth:1, borderBottomColor:'#eee', backgroundColor: form.seller===k?'#e3f2fd':'#fff'}}>
+                        <Text style={{color:'#1a1a1a', fontWeight:'bold', fontSize:15}}>{resolveLabel(k) || s}</Text>
+                      </TouchableOpacity>
+                    ); })}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
           <View style={{flexDirection:'row', gap:6, marginBottom:8}}>
             <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Τηλ #1" keyboardType="phone-pad" value={form.phone} onChangeText={v => setForm({...form, phone:v})} />
             <TextInput style={[styles.input, {flex:1, marginBottom:0}]} placeholder="Τηλ #2" keyboardType="phone-pad" value={form.phone2} onChangeText={v => setForm({...form, phone2:v})} />
@@ -371,7 +422,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
             </TouchableOpacity>
           </View>
 
-          <View style={{ flexDirection:'row', alignItems:'center', marginTop:24, marginBottom:10, gap:6 }}>
+          <View style={{ flexDirection:'row', alignItems:'center', marginTop:24, marginBottom:10, gap:6, zIndex:20, position:'relative' }}>
             <Text style={[styles.sectionTitle, { marginBottom:0 }]}>ΛΙΣΤΑ ΠΕΛΑΤΩΝ ({customers.length})</Text>
             <TouchableOpacity
               onPress={()=>setSortMode('name')}
@@ -384,11 +435,34 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
               <Text style={{ color: sortMode==='orders' ? 'white' : '#555', fontWeight:'bold', fontSize:12 }}>🔢 #↓</Text>
             </TouchableOpacity>
             <TextInput
-              style={{ marginLeft:10, backgroundColor:'#fff', paddingHorizontal:10, paddingVertical:6, borderRadius:8, borderWidth:1, borderColor:'#ddd', fontSize:13, width:180 }}
+              style={{ marginLeft:10, backgroundColor:'#fff', paddingHorizontal:12, paddingVertical:11, borderRadius:8, borderWidth:1, borderColor:'#ddd', fontSize:16, width:280 }}
               placeholder="🔍 Αναζήτηση"
               value={search}
               onChangeText={setSearch}
             />
+            {sellers.length > 0 && (
+              <View style={{ marginLeft:10, width:230, zIndex:30 }}>
+                <TouchableOpacity onPress={()=>setFilterSellerOpen(o=>!o)}
+                  style={{ backgroundColor: filterSeller?'#e3f2fd':'#fff', paddingHorizontal:12, paddingVertical:11, borderRadius:8, borderWidth:1, borderColor: filterSeller?'#1565C0':'#ddd', flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
+                  <Text style={{ fontWeight:'bold', fontSize:15, color: filterSeller?'#1565C0':'#777' }} numberOfLines={1}>
+                    {filterSeller ? `🧑‍💼 ${resolveLabel(filterSeller) || filterSeller}` : '🧑‍💼 Πωλητής'}
+                  </Text>
+                  <Text style={{ color:'#888', fontSize:13, fontWeight:'bold' }}>{filterSellerOpen?'▲':'▼'}</Text>
+                </TouchableOpacity>
+                {filterSellerOpen && (
+                  <View style={{ position:'absolute', top:50, left:0, right:0, backgroundColor:'#fff', borderWidth:1, borderColor:'#1565C0', borderRadius:8, zIndex:50, elevation:12, shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.3, shadowRadius:8 }}>
+                    <TouchableOpacity onPress={()=>{ setFilterSeller(''); setFilterSellerOpen(false); }} style={{ paddingVertical:12, paddingHorizontal:12, borderBottomWidth:1, borderBottomColor:'#eee' }}>
+                      <Text style={{ color:'#555', fontWeight:'bold', fontSize:15 }}>— Όλοι</Text>
+                    </TouchableOpacity>
+                    {sellers.map(s => { const k = lockKey(s); return (
+                      <TouchableOpacity key={k} onPress={()=>{ setFilterSeller(k); setFilterSellerOpen(false); }} style={{ paddingVertical:12, paddingHorizontal:12, borderBottomWidth:1, borderBottomColor:'#eee', backgroundColor: filterSeller===k?'#e3f2fd':'#fff' }}>
+                        <Text style={{ color:'#1a1a1a', fontWeight:'bold', fontSize:15 }}>{resolveLabel(k) || s}</Text>
+                      </TouchableOpacity>
+                    ); })}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
           <Text style={styles.hint}>💡 Κράτα 3 δευτ. για επεξεργασία • Κράτα το ✕ 2 δευτ. για διαγραφή</Text>
 
@@ -403,6 +477,11 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
               <View style={{ flex:1 }}>
                 <View style={{ flexDirection:'row', alignItems:'center', flexWrap:'wrap', gap:6, marginBottom:4 }}>
                   <Text style={styles.customerName}>{c.name}</Text>
+                  {c.seller ? (
+                    <View style={{ backgroundColor:'#e3f2fd', borderColor:'#1565C0', borderWidth:1, borderRadius:6, paddingHorizontal:8, paddingVertical:2 }}>
+                      <Text style={{ color:'#1565C0', fontWeight:'bold', fontSize:12 }}>🏷 {resolveLabel(c.seller) || c.seller}</Text>
+                    </View>
+                  ) : null}
                   {(()=>{
                     const activeOrders = specialOrders.filter(o=>o.customer===c.name);
                     const soldOrders = allOrders.filter(o=>o.customer===c.name && o.status==='SOLD');
@@ -513,6 +592,37 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
         </View>
       </Modal>
 
+      {/* MODAL ΠΙΘΑΝΟΥ ΔΙΠΛΟΤΥΠΟΥ ΠΕΛΑΤΗ */}
+      <Modal visible={dupModal.visible} transparent animationType="fade" onRequestClose={()=>setDupModal({visible:false, matches:[]})}>
+        <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.6)', justifyContent:'center', alignItems:'center', padding:16}}>
+          <View style={{backgroundColor:'#fff', borderRadius:16, padding:20, width:'90%', maxWidth:440, maxHeight:'85%'}}>
+            <Text style={{fontSize:17, fontWeight:'bold', color:'#e65100', marginBottom:6, textAlign:'center'}}>⚠️ Πιθανό Διπλότυπο</Text>
+            <Text style={{fontSize:13, color:'#444', marginBottom:12, textAlign:'center'}}>
+              Βρέθηκε {dupModal.matches.length>1?'ήδη καταχωρημένοι πελάτες':'ήδη καταχωρημένος πελάτης'} με κοινό στοιχείο:
+            </Text>
+            <ScrollView style={{maxHeight:320}}>
+              {dupModal.matches.map(c => (
+                <View key={c.id} style={{backgroundColor:'#fafafa', borderRadius:8, padding:12, marginBottom:8, borderLeftWidth:4, borderLeftColor:'#e65100'}}>
+                  <Text style={{fontSize:15, fontWeight:'bold', color:'#1a1a1a'}}>{c.name}</Text>
+                  {[c.phone, c.phone2, c.phone3].filter(Boolean).length ? <Text style={styles.customerDetail}>📞 {[c.phone, c.phone2, c.phone3].filter(Boolean).join(' · ')}</Text> : null}
+                  {c.phoneViber ? <Text style={styles.customerDetail}>📱 Viber: {c.phoneViber}</Text> : null}
+                  {c.email ? <Text style={styles.customerDetail}>✉️ {c.email}</Text> : null}
+                  {c.identifier ? <Text style={styles.customerDetail}>🏷 {c.identifier}</Text> : null}
+                  {(c.city || c.profession) ? <Text style={styles.customerDetail}>{c.city ? `📍 ${c.city}` : ''}{c.city && c.profession ? '   ' : ''}{c.profession ? `💼 ${c.profession}` : ''}</Text> : null}
+                  <Text style={styles.customerDate}>📅 {fmtDate(c.createdAt)}</Text>
+                </View>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={{backgroundColor:'#8B0000', padding:14, borderRadius:10, alignItems:'center', marginTop:10, marginBottom:8}} onPress={commitNewCustomer}>
+              <Text style={{color:'white', fontWeight:'bold', fontSize:14}}>ΑΠΟΘΗΚΕΥΣΗ ΟΥΤΩΣ Ή ΑΛΛΩΣ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{backgroundColor:'#f5f5f5', padding:14, borderRadius:10, alignItems:'center', borderWidth:1, borderColor:'#ddd'}} onPress={()=>setDupModal({visible:false, matches:[]})}>
+              <Text style={{color:'#555', fontWeight:'bold', fontSize:14}}>ΑΚΥΡΟ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* MODAL ΔΙΑΓΡΑΦΗΣ ΠΕΛΑΤΗ */}
       <Modal visible={!!deleteCustomerModal.visible} transparent animationType="fade">
         <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.6)', justifyContent:'center', alignItems:'center'}}>
@@ -568,6 +678,10 @@ const styles = StyleSheet.create({
   editBannerTxt: { color:'#856404', fontWeight:'bold', fontSize:13 },
   input: { backgroundColor:'#fff', padding:12, borderRadius:8, marginBottom:8, borderWidth:1, borderColor:'#ddd', fontSize:14 },
   saveBtn: { backgroundColor:'#8B0000', padding:16, borderRadius:8, alignItems:'center', marginTop:4, marginBottom:8 },
+  sellerChip: { paddingHorizontal:12, paddingVertical:7, borderRadius:8, borderWidth:1.5, borderColor:'#bbb', backgroundColor:'#fff' },
+  sellerChipOn: { borderColor:'#1565C0', backgroundColor:'#1565C0' },
+  sellerChipTxt: { color:'#555', fontWeight:'bold', fontSize:13 },
+  sellerChipTxtOn: { color:'#fff' },
   customerCard: { backgroundColor:'#fff', borderRadius:8, padding:14, marginBottom:8, flexDirection:'row', alignItems:'center', borderLeftWidth:5, borderLeftColor:'#8B0000', elevation:2 },
   customerCardEditing: { borderLeftColor:'#ffbb33', backgroundColor:'#fffdf0' },
   customerName: { fontSize:16, fontWeight:'bold', color:'#1a1a1a', marginBottom:4 },

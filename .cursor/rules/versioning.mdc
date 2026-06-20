@@ -1,0 +1,23 @@
+---
+description: Υποχρεωτικό version bump + κανόνες deploy πριν κάθε push (vaicon-eidikes)
+alwaysApply: true
+---
+
+# Versioning & Deployment — vaicon-eidikes (Ειδικές)
+
+## ΥΠΟΧΡΕΩΤΙΚΟ: πριν από ΚΑΘΕ push/deploy
+1. Τρέξε: `node scripts/bump-version.js` (ενημερώνει το `version.js`).
+2. `git add -A` → commit → `git push`.
+- ΜΗΝ επεξεργάζεσαι το `version.js` χειροκίνητα (το γράφει το script).
+- Μορφή έκδοσης: `v.DDMMYY.N.TOTAL` (N = push της ημέρας, TOTAL = τοπικός μετρητής deploys).
+
+## PowerShell (Windows) — git commit
+- ΔΕΝ δέχεται `&&` ούτε heredoc (`<<'EOF'`).
+- Commit message με ελληνικά/πολλές γραμμές: γράψε το μήνυμα σε προσωρινό αρχείο και
+  `git commit -F <file>`, μετά σβήσε το αρχείο.
+- Απλά commits: `git add -A; git commit -m "..."` (με `;`, όχι `&&`).
+
+## Dev/Prod
+- DEV (expo start) → βάση `vaicon-test`.
+- PROD (Netlify) → βάση `vaicon-eidikes` (+ auth interceptor). Ρύθμιση: `App.js` (`IS_DEV`, `FIREBASE_URL`).
+- Μην ενεργοποιείς migration/αλλαγές παραγωγής χωρίς ρητή άδεια του χρήστη.

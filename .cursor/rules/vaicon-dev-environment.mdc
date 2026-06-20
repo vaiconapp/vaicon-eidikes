@@ -1,0 +1,35 @@
+---
+description: Vaicon dev setup, shared test DB, and the browser connection-limit gotcha
+alwaysApply: true
+---
+
+# Vaicon — Περιβάλλον & Γνωστές Παγίδες
+
+## Τα 3 apps
+- `vaicon-app` (8081): Τυποποιημένες παραγγελίες — Firebase JS SDK (1 WebSocket).
+- `vaicon-eidikes` (8082): Ειδικές παραγγελίες — EventSource (REST streaming).
+- `vaicon-installations` (8083): Τοποθετήσεις — EventSource (REST streaming).
+
+## Dev / Prod
+- `__DEV__` (μεταβλητή `IS_DEV`) ελέγχει πού δείχνει η βάση.
+- **Dev**: και τα 3 apps χτυπούν την ΙΔΙΑ βάση `vaicon-test`.
+- **Prod**: κάθε app έχει ΔΙΚΗ του βάση (vaiconcloud / vaicon-eidikes / vaicon-installations).
+- Μην αγγίζεις την παραγωγή — οι αλλαγές δοκιμάζονται μόνο στο dev/`vaicon-test`.
+
+## ΚΡΙΤΙΚΗ ΠΑΓΙΔΑ: εξάντληση συνδέσεων browser (μην ξαναχαθεί χρόνος εδώ)
+**Σύμπτωμα**: στο dev ένα app (συνήθως 8083) κολλάει σε spinner· όλα τα `fetch` προς το Firebase
+κάνουν stall ~12s και κόβονται με `AbortError: signal is aborted without reason`, ενώ ο server
+απαντά κανονικά (π.χ. PowerShell/curl παίρνει άμεσα απάντηση).
+
+**Αιτία**: ο browser έχει όριο ~6 συνδέσεων ανά host, ΚΟΙΝΟ για όλες τις καρτέλες. Στο dev και τα 3
+apps δείχνουν στο ΙΔΙΟ host (`vaicon-test`). Οι μόνιμες συνδέσεις EventSource (μία ανά path) εξαντλούν
+το όριο, οπότε δεν μένει σύνδεση για τα `fetch` των άλλων καρτελών.
+
+**Λύση (ΕΦΑΡΜΟΣΜΕΝΗ — μην την αναιρέσεις)**: στο dev, eidikes & installations κάνουν **polling**
+(setInterval) αντί για EventSource. Σε `streamPaths` / streaming effects ισχύει
+`if (IS_DEV || Platform.OS !== 'web' || ...) { setInterval(...) }`. Στην prod μένει EventSource.
+**Μην ξαναβάλεις EventSource στο dev** και μην κάνεις πολλές παράλληλες μόνιμες συνδέσεις στο ίδιο host.
+
+## Restart dev servers (Windows PowerShell)
+- Καθάρισμα: `taskkill /F /IM node.exe /T`
+- Εκκίνηση (από κάθε φάκελο): `npm run web` (8081), `npx expo start --web --port 8082`, `... --port 8083`.

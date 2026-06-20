@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { FIREBASE_URL } from './App';
-import { SIZE_OPTIONS, COLOR_OPTIONS, COLOR_MAP, getFormatStyle } from './formatHelpers';
+import { SIZE_OPTIONS, COLOR_OPTIONS, COLOR_MAP, getFormatStyle, sortCoatingsGrouped, canMoveCoatingInGroup } from './formatHelpers';
 
 export default function CoatingsScreen({ coatings, setCoatings, onClose }) {
   const [form, setForm] = useState('');
@@ -24,9 +24,9 @@ export default function CoatingsScreen({ coatings, setCoatings, onClose }) {
   };
 
   const moveCoating = async (index, direction) => {
-    const newList = [...coatings];
+    const newList = [...sorted];
     const swapIndex = index + direction;
-    if (swapIndex < 0 || swapIndex >= newList.length) return;
+    if (!canMoveCoatingInGroup(newList, index, direction)) return;
     [newList[index], newList[swapIndex]] = [newList[swapIndex], newList[index]];
     // Αποθήκευση νέας σειράς με order field
     const withOrder = newList.map((c, i) => ({ ...c, order: i }));
@@ -36,6 +36,8 @@ export default function CoatingsScreen({ coatings, setCoatings, onClose }) {
 
   const saveCoating = async () => {
     if (!form.trim()) return Alert.alert("Προσοχή", "Βάλτε όνομα επένδυσης.");
+    const badChar = (form.match(/[.#$/\[\]]/) || [])[0];
+    if (badChar) return Alert.alert("Μη επιτρεπτός χαρακτήρας", `Το όνομα «${form.trim()}» έχει τον χαρακτήρα « ${badChar} » που δεν επιτρέπεται ( . / # $ [ ] ).\nΑφαίρεσέ τον (π.χ. «PVC. ΕΞΩ» → «PVC ΕΞΩ»).`);
     if (editingId) {
       const updated = { ...coatings.find(c => c.id === editingId), name: form.trim(), bold: fmtBold, size: fmtSize, color: fmtColor };
       setCoatings(coatings.map(c => c.id === editingId ? updated : c));
@@ -84,7 +86,7 @@ export default function CoatingsScreen({ coatings, setCoatings, onClose }) {
     if (n.includes('έξω') || n.includes('εξω')) return '#FFCC80';
     return '#007AFF';
   };
-  const sorted = [...coatings].sort((a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt));
+  const sorted = sortCoatingsGrouped(coatings);
   const filtered = sorted.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -161,14 +163,16 @@ export default function CoatingsScreen({ coatings, setCoatings, onClose }) {
         <Text style={styles.count}>Σύνολο: {coatings.length} επενδύσεις</Text>
 
         <ScrollView>
-          {filtered.map((c, index) => (
+          {filtered.map((c) => {
+            const sortedIdx = sorted.indexOf(c);
+            return (
             <View key={c.id} style={[styles.card, {backgroundColor: getCoatingBg(c.name), borderLeftColor: getCoatingBorder(c.name)}]}>
               <View style={styles.orderBtns}>
-                <TouchableOpacity onPress={() => moveCoating(sorted.indexOf(c), -1)} disabled={sorted.indexOf(c) === 0}>
-                  <Text style={[styles.orderBtn, sorted.indexOf(c) === 0 && {opacity:0.2}]}>▲</Text>
+                <TouchableOpacity onPress={() => moveCoating(sortedIdx, -1)} disabled={!canMoveCoatingInGroup(sorted, sortedIdx, -1)}>
+                  <Text style={[styles.orderBtn, !canMoveCoatingInGroup(sorted, sortedIdx, -1) && {opacity:0.2}]}>▲</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => moveCoating(sorted.indexOf(c), 1)} disabled={sorted.indexOf(c) === sorted.length - 1}>
-                  <Text style={[styles.orderBtn, sorted.indexOf(c) === sorted.length - 1 && {opacity:0.2}]}>▼</Text>
+                <TouchableOpacity onPress={() => moveCoating(sortedIdx, 1)} disabled={!canMoveCoatingInGroup(sorted, sortedIdx, 1)}>
+                  <Text style={[styles.orderBtn, !canMoveCoatingInGroup(sorted, sortedIdx, 1) && {opacity:0.2}]}>▼</Text>
                 </TouchableOpacity>
               </View>
               <Text style={[styles.cardName, { fontWeight: c.bold ? 'bold' : 'normal' }, getFormatStyle(c, 14)]}>{c.name}</Text>
@@ -181,7 +185,7 @@ export default function CoatingsScreen({ coatings, setCoatings, onClose }) {
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
+          );})}
           {filtered.length === 0 && <Text style={styles.empty}>Δεν βρέθηκαν επενδύσεις.</Text>}
         </ScrollView>
       </View>

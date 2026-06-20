@@ -8,6 +8,10 @@ import CustomersScreen from './CustomersScreen';
 import CoatingsScreen from './CoatingsScreen';
 import LocksScreen from './LocksScreen';
 import ActivityScreen from './ActivityScreen';
+import SellerLogScreen from './SellerLogScreen';
+import ApprovalScreen from './ApprovalScreen';
+import ApprovalHistoryScreen from './ApprovalHistoryScreen';
+import SellerSubmissionsScreen from './SellerSubmissionsScreen';
 import MessagesScreen from './MessagesScreen';
 import StatsScreen from './StatsScreen';
 import { APP_VERSION } from './version';
@@ -31,8 +35,10 @@ const USER_DOMAIN = "@vaicon.local";
 
 const toEmail = (u) => String(u || '').trim().toLowerCase().replace(/\s+/g, '') + USER_DOMAIN;
 const roleForEmail = (e) => e.startsWith('admin') ? 'admin' : e.startsWith('guest') ? 'guest' : 'user';
+const isSellerEmail = (e) => String(e || '').toLowerCase().startsWith('seller');
 
-const APP_USERS = ['USER 10', 'USER 12', 'USER 14', 'USER 16', 'USER 18', 'GUEST', 'ADMIN'];
+const APP_USERS = ['USER 10', 'USER 12', 'USER 14', 'USER 16', 'USER 18', 'SELLER 1', 'SELLER 2', 'SELLER 3', 'SELLER 4', 'SELLER 5', 'GUEST', 'ADMIN'];
+const SELLERS = ['SELLER 1', 'SELLER 2', 'SELLER 3', 'SELLER 4', 'SELLER 5'];
 const lockKey = (u) => String(u || '').toUpperCase().replace(/\s+/g, '');
 
 const rawFetch = globalThis.fetch.bind(globalThis);
@@ -74,6 +80,23 @@ const ensureFreshToken = async () => {
   return fbToken;
 };
 
+// Φύλακας ετικετών Firebase: η βάση απορρίπτει . / # $ [ ] σε ΟΝΟΜΑΤΑ πεδίων/διαδρομής
+// (όχι σε τιμές). Εντοπίζουμε το πρόβλημα πριν φύγει, ώστε να μη χάνεται η εγγραφή με κρυπτικό 400.
+const FB_BAD_KEY = /[.#$/\[\]]/;
+const firstBadFbKey = (val) => {
+  if (Array.isArray(val)) { for (const v of val) { const b = firstBadFbKey(v); if (b) return b; } return null; }
+  if (val && typeof val === 'object') {
+    for (const k of Object.keys(val)) { if (FB_BAD_KEY.test(k)) return k; const b = firstBadFbKey(val[k]); if (b) return b; }
+  }
+  return null;
+};
+const badKeyInWrite = (url, body) => {
+  const path = String(url).split('?')[0].replace(FIREBASE_URL, '').replace(/\.json$/, '').replace(/^\//, '');
+  for (const seg of path.split('/')) { if (seg && FB_BAD_KEY.test(decodeURIComponent(seg))) return decodeURIComponent(seg); }
+  if (typeof body === 'string' && body) { try { return firstBadFbKey(JSON.parse(body)); } catch {} }
+  return null;
+};
+
 // Οι κανόνες ασφαλείας της βάσης απαιτούν ταυτότητα· προσθέτουμε ?auth=<idToken>
 // αυτόματα σε κάθε κλήση προς το FIREBASE_URL, αντί σε ~20 ξεχωριστά σημεία.
 if (globalThis.fetch && !globalThis.__fbAuthPatched) {
@@ -81,6 +104,14 @@ if (globalThis.fetch && !globalThis.__fbAuthPatched) {
   globalThis.fetch = async (input, init) => {
     let url = typeof input === 'string' ? input : (input && input.url);
     if (url && url.indexOf(FIREBASE_URL) === 0 && url.indexOf('auth=') === -1) {
+      const method = ((init && init.method) || (typeof input !== 'string' && input && input.method) || 'GET').toUpperCase();
+      if (method !== 'GET' && method !== 'DELETE') {
+        const bad = badKeyInWrite(url, init && init.body);
+        if (bad) {
+          if (typeof window !== 'undefined' && window.alert) window.alert(`⚠️ Δεν αποθηκεύτηκε.\nΤο πεδίο «${bad}» έχει χαρακτήρα που δεν επιτρέπεται ( . / # $ [ ] ).\nΔιόρθωσέ το (π.χ. «PVC. ΕΞΩ» → «PVC ΕΞΩ»).`);
+          return new Response(JSON.stringify({ error: 'invalid key' }), { status: 400 });
+        }
+      }
       await ensureFreshToken();
       if (fbToken) {
         url += (url.indexOf('?') === -1 ? '?' : '&') + 'auth=' + fbToken;
@@ -258,6 +289,14 @@ export default function App() {
   const [showCoatings, setShowCoatings] = useState(false);
   const [showLocks, setShowLocks] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [showSellerLog, setShowSellerLog] = useState(false);
+  const [showApprovals, setShowApprovals] = useState(false);
+  const [showApprovalHistory, setShowApprovalHistory] = useState(false);
+  const [showApprovalRights, setShowApprovalRights] = useState(false);
+  const [showSellerSubs, setShowSellerSubs] = useState(false);
+  const [approvalRights, setApprovalRights] = useState({});
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [editSubmission, setEditSubmission] = useState(null);
   const [showMessages, setShowMessages] = useState(false);
   const [incomingMsg, setIncomingMsg] = useState(null);
   const [showInbox, setShowInbox] = useState(false);
@@ -443,6 +482,21 @@ export default function App() {
     return () => { alive = false; };
   }, [adminPanelOpen, showMessages]);
 
+  // Δικαιώματα έγκρισης + αριθμός παραγγελιών προς έγκριση (Ειδικές).
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const load = async () => {
+      try { const r = await fetch(`${FIREBASE_URL}/approval_rights.json`); setApprovalRights((await r.json()) || {}); } catch {}
+      try {
+        const r = await fetch(`${FIREBASE_URL}/seller_submissions.json`); const d = await r.json();
+        setPendingApprovalCount(d ? Object.values(d).filter(s => s.status === 'PENDING' && s.orderType === 'ΕΙΔΙΚΗ').length : 0);
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, [isLoggedIn]);
+
   const saveLabel = async (k, val) => {
     const trimmed = (val || '').trim();
     if ((userLabels[k] || '') === trimmed) return;
@@ -455,6 +509,9 @@ export default function App() {
   };
 
   const myLockKey = currentUser ? lockKey(currentUser.username) : null;
+  const isSeller = isSellerEmail(currentUser?.email);
+  const sellerKey = isSeller && currentUser?.username ? lockKey(currentUser.username) : null;
+  const canApprove = !isSeller && currentUser?.role !== 'guest' && (currentUser?.role === 'admin' || (!!myLockKey && !!approvalRights[myLockKey]));
   const amLocked = !!(myLockKey && lockedUsers && lockedUsers[myLockKey] && !ownerOverride);
 
   const writeLock = async (key, val) => {
@@ -714,12 +771,20 @@ export default function App() {
         <Text style={styles.headerVersion}>{APP_VERSION}</Text>
         {currentUser?.username ? <Text style={styles.headerUser}>👤 {currentUser.username}</Text> : null}
         <View style={{ flex: 1 }} />
-        {currentUser?.role !== 'guest' && currentUser?.role !== 'admin' && (
+        {currentUser?.role !== 'guest' && currentUser?.role !== 'admin' && !isSeller && (
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, marginRight: 8 }}
             onPress={openInbox}>
             <Text style={{ fontSize: 18 }}>✉️</Text>
             <Text style={{ color: 'white', fontSize: 14, fontWeight: 'bold', letterSpacing: 0.5 }}>ΜΗΝΥΜΑΤΑ</Text>
+          </TouchableOpacity>
+        )}
+        {canApprove && pendingApprovalCount > 0 && (
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ff9800', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, marginRight: 8 }}
+            onPress={() => setShowApprovals(true)}>
+            <Text style={{ fontSize: 16 }}>🔔</Text>
+            <Text style={{ color: 'white', fontSize: 14, fontWeight: 'bold' }}>ΠΡΟΣ ΕΓΚΡΙΣΗ ({pendingApprovalCount})</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity style={styles.menuBtn} onPress={() => setMenuOpen(true)}>
@@ -743,6 +808,12 @@ export default function App() {
           locks={locks}
           readOnly={currentUser?.role === 'guest'}
           isAdmin={currentUser?.role === 'admin'}
+          isSeller={isSeller}
+          sellerKey={sellerKey}
+          sellers={SELLERS}
+          onOpenSubmissions={() => setShowSellerSubs(true)}
+          editSubmission={editSubmission}
+          onEditSubmissionDone={() => setEditSubmission(null)}
           currentUserName={currentUser?.username || ''}
           resolveName={(u) => userLabels[lockKey(u)] || u}
           codeModalOpen={adminAuthOpen || adminPanelOpen || statsAuthOpen || backupAuthOpen || restoreAuthOpen}
@@ -753,7 +824,7 @@ export default function App() {
         <TouchableOpacity style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
           <View style={styles.menuPanel}>
             <Text style={styles.menuTitle}>ΜΕΝΟΥ</Text>
-            {currentUser?.role !== 'guest' && (<>
+            {currentUser?.role !== 'guest' && !isSeller && (<>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowCustomers(true); }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={styles.menuItemText}>👥 ΠΕΛΑΤΕΣ</Text>
@@ -773,7 +844,16 @@ export default function App() {
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowActivity(true); }}>
               <Text style={styles.menuItemText}>📜 ΙΣΤΟΡΙΚΟ ΚΙΝΗΣΕΩΝ</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowApprovalHistory(true); }}>
+              <Text style={styles.menuItemText}>📋 ΙΣΤΟΡΙΚΟ ΕΓΚΡΙΣΕΩΝ</Text>
+            </TouchableOpacity>
             {currentUser?.role === 'admin' && (<>
+            <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#eef4ff' }]} onPress={() => { setMenuOpen(false); setShowSellerLog(true); }}>
+              <Text style={[styles.menuItemText, { color: '#1565C0' }]}>📒 ΑΝΑΘΕΣΕΙΣ ΠΩΛΗΤΩΝ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#eef4ff' }]} onPress={() => { setMenuOpen(false); setShowApprovalRights(true); }}>
+              <Text style={[styles.menuItemText, { color: '#1565C0' }]}>✅ ΕΓΚΡΙΣΕΙΣ ΠΑΡΑΓΓΕΛΙΩΝ</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#eef4ff' }]} onPress={() => { setMenuOpen(false); setShowMessages(true); }}>
               <Text style={[styles.menuItemText, { color: '#1565C0' }]}>✉️ ΜΗΝΥΜΑΤΑ</Text>
             </TouchableOpacity>
@@ -801,6 +881,56 @@ export default function App() {
 
       <Modal visible={showActivity} animationType="slide" onRequestClose={() => setShowActivity(false)}>
         <ActivityScreen onClose={() => setShowActivity(false)} />
+      </Modal>
+
+      <Modal visible={showSellerLog} animationType="slide" onRequestClose={() => setShowSellerLog(false)}>
+        <SellerLogScreen onClose={() => setShowSellerLog(false)} resolveLabel={(k) => userLabels[k] || (SELLERS.find(s => lockKey(s) === k) || k)} />
+      </Modal>
+
+      <Modal visible={showApprovals} animationType="slide" onRequestClose={() => setShowApprovals(false)}>
+        <ApprovalScreen onClose={() => setShowApprovals(false)} currentUserName={currentUser?.username ? (userLabels[lockKey(currentUser.username)] || currentUser.username) : ''} resolveLabel={(k) => userLabels[k] || (SELLERS.find(s => lockKey(s) === k) || k)} coatings={coatings} locks={locks} />
+      </Modal>
+
+      <Modal visible={showApprovalHistory} animationType="slide" onRequestClose={() => setShowApprovalHistory(false)}>
+        <ApprovalHistoryScreen onClose={() => setShowApprovalHistory(false)} resolveLabel={(k) => userLabels[k] || (SELLERS.find(s => lockKey(s) === k) || k)} />
+      </Modal>
+
+      <Modal visible={showSellerSubs} animationType="slide" onRequestClose={() => setShowSellerSubs(false)}>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#8B0000', paddingHorizontal: 16, paddingVertical: 14 }}>
+            <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold' }}>📤 ΟΙ ΥΠΟΒΟΛΕΣ ΜΟΥ</Text>
+            <TouchableOpacity onPress={() => setShowSellerSubs(false)}><Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold' }}>✕</Text></TouchableOpacity>
+          </View>
+          <SellerSubmissionsScreen sellerKey={sellerKey} coatings={coatings} locks={locks} onEditSubmission={(sub) => { setShowSellerSubs(false); setEditSubmission(sub); }} />
+        </View>
+      </Modal>
+
+      <Modal visible={showApprovalRights} transparent animationType="fade" onRequestClose={() => setShowApprovalRights(false)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { maxWidth: 460 }]}>
+            <Text style={[statsAuthStyles.title, { color: '#1565C0' }]}>✅ Δικαιώματα Έγκρισης</Text>
+            <Text style={statsAuthStyles.subtitle}>Τσέκαρε ποιοι χρήστες μπορούν να εγκρίνουν παραγγελίες πωλητών. (Ο διαχειριστής εγκρίνει πάντα.)</Text>
+            {APP_USERS.filter(u => u !== 'GUEST' && u !== 'ADMIN' && !SELLERS.includes(u)).map((u) => {
+              const k = lockKey(u);
+              const on = !!approvalRights[k];
+              return (
+                <TouchableOpacity key={k} style={adminStyles.row} onPress={async () => {
+                  const next = !on;
+                  setApprovalRights(prev => ({ ...prev, [k]: next }));
+                  try { await fetch(`${FIREBASE_URL}/approval_rights/${k}.json`, next ? { method: 'PUT', body: 'true' } : { method: 'DELETE' }); } catch {}
+                }}>
+                  <Text style={[adminStyles.name, { width: 120 }]}>{userLabels[k] || u}</Text>
+                  <View style={{ marginLeft: 'auto', width: 26, height: 26, borderRadius: 6, borderWidth: 2, borderColor: on ? '#1565C0' : '#bbb', backgroundColor: on ? '#1565C0' : '#fff', alignItems: 'center', justifyContent: 'center' }}>
+                    {on && <Text style={{ color: '#fff', fontWeight: 'bold' }}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#1565C0', marginTop: 14 }]} onPress={() => setShowApprovalRights(false)}>
+              <Text style={statsAuthStyles.btnTxt}>ΕΝΤΑΞΕΙ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       <Modal visible={showMessages} animationType="slide" onRequestClose={() => setShowMessages(false)}>
@@ -1128,6 +1258,8 @@ export default function App() {
           isAdmin={currentUser?.role === 'admin'}
           currentUserName={currentUser?.username || ''}
           resolveName={(u) => userLabels[lockKey(u)] || u}
+          sellers={SELLERS}
+          resolveLabel={(k) => userLabels[k] || (SELLERS.find(s => lockKey(s) === k) || k)}
           customers={customers}
           setCustomers={setCustomers}
           customOrders={[]}
