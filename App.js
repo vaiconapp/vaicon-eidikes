@@ -41,6 +41,16 @@ const APP_USERS = ['USER 10', 'USER 12', 'USER 14', 'USER 16', 'USER 18', 'SELLE
 const SELLERS = ['SELLER 1', 'SELLER 2', 'SELLER 3', 'SELLER 4', 'SELLER 5'];
 const lockKey = (u) => String(u || '').toUpperCase().replace(/\s+/g, '');
 
+// Καρτέλες με ελεγχόμενα δικαιώματα ανά χρήστη (view = hide, edit = readonly) — Τυποποιημένες
+const RIGHT_TABS = [
+  { key: 'customNew', label: 'Καταχώρηση', edit: false },
+  { key: 'customMoni', label: 'Μονή θωράκιση', edit: true },
+  { key: 'customDipli', label: 'Διπλή θωράκιση', edit: true },
+  { key: 'sasi', label: 'Stock Σασί', edit: true },
+  { key: 'cases', label: 'Stock Κάσα', edit: true },
+  { key: 'deliveries', label: 'Παραδόσεις', edit: false },
+];
+
 const rawFetch = globalThis.fetch.bind(globalThis);
 
 let fbToken = null, fbRefresh = null, fbTokenExp = 0, fbRefreshing = null;
@@ -293,6 +303,11 @@ export default function App() {
   const [showApprovals, setShowApprovals] = useState(false);
   const [showApprovalHistory, setShowApprovalHistory] = useState(false);
   const [showApprovalRights, setShowApprovalRights] = useState(false);
+  const [tabRights, setTabRights] = useState({});
+  const [showTabRights, setShowTabRights] = useState(false);
+  const [tabRightsUser, setTabRightsUser] = useState(null);
+  const [tabRightsProg, setTabRightsProg] = useState('std');
+  const tabRightsDirty = useRef(0);
   const [showSellerSubs, setShowSellerSubs] = useState(false);
   const [approvalRights, setApprovalRights] = useState({});
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
@@ -393,6 +408,15 @@ export default function App() {
     const safety = setInterval(load, IS_DEV ? 10000 : 5000);
     return () => clearInterval(safety);
   }, [isLoggedIn, tokenVersion]);
+
+  // Δικαιώματα καρτελών ανά χρήστη (tab_rights) — κοινά με τις Τυποποιημένες.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const load = async () => { if (Date.now() < tabRightsDirty.current) return; try { const r = await fetch(`${FIREBASE_URL}/tab_rights.json`); setTabRights((await r.json()) || {}); } catch {} };
+    load();
+    const iv = setInterval(load, 6000);
+    return () => clearInterval(iv);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (!isLoggedIn || !currentUser?.username || currentUser.role === 'guest' || currentUser.role === 'admin') return;
@@ -521,6 +545,21 @@ export default function App() {
         : { method: 'DELETE' });
     } catch {}
   };
+  const writeTabRight = async (userKey, dim, tab, restricted) => {
+    tabRightsDirty.current = Date.now() + 8000;
+    const n = { ...tabRights }; const u = { ...(n[userKey] || {}) }; const d = { ...(u[dim] || {}) };
+    if (restricted) d[tab] = true; else delete d[tab];
+    if (Object.keys(d).length) u[dim] = d; else delete u[dim];
+    const nextUser = Object.keys(u).length ? u : null;
+    if (nextUser) n[userKey] = u; else delete n[userKey];
+    setTabRights(n);
+    try {
+      const res = await fetch(`${FIREBASE_URL}/tab_rights/${userKey}.json`,
+        nextUser ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nextUser) }
+                 : { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+    } catch { if (Platform.OS === 'web') window.alert('Η αλλαγή δεν αποθηκεύτηκε. Δοκίμασε ξανά.'); }
+  };
   const lockAll = async () => {
     const obj = {}; APP_USERS.forEach(u => { obj[lockKey(u)] = true; });
     try { await fetch(`${FIREBASE_URL}/app_lock.json`, { method: 'PUT', body: JSON.stringify(obj) }); } catch {}
@@ -586,7 +625,7 @@ export default function App() {
   const doBackup = async () => {
     setBackupRunning(true);
     try {
-      const NODES = ['special_orders', 'customers', 'coatings', 'locks', 'user_labels', 'activity_log', 'msg_map', 'messages', 'app_lock', 'installers', 'installations', 'activity_log_install', 'order_files', 'upload_tokens'];
+      const NODES = ['special_orders', 'customers', 'coatings', 'locks', 'user_labels', 'activity_log', 'msg_map', 'messages', 'app_lock', 'installers', 'installations', 'activity_log_install', 'order_files', 'upload_tokens', 'tab_rights'];
       const fullData = {};
       for (const p of NODES) {
         const r = await fetch(`${FIREBASE_URL}/${p}.json`);
@@ -1233,7 +1272,10 @@ export default function App() {
               <Text style={statsAuthStyles.btnTxt}>🔒 ΚΛΕΙΔΩΣΕ ΚΙ ΑΥΤΟ ΤΟ PC</Text>
             </TouchableOpacity>
             <View style={{ height: 1, backgroundColor: '#eee', marginTop: 14, marginBottom: 10 }} />
-            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#1976d2' }]} onPress={() => { setAdminPanelOpen(false); setShowStats(true); }}>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#6a1b9a' }]} onPress={() => { setAdminPanelOpen(false); setTabRightsProg('std'); setTabRightsUser(null); setShowTabRights(true); }}>
+              <Text style={statsAuthStyles.btnTxt}>🔑 ΔΙΚΑΙΩΜΑΤΑ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#1976d2', marginTop: 8 }]} onPress={() => { setAdminPanelOpen(false); setShowStats(true); }}>
               <Text style={statsAuthStyles.btnTxt}>📊 ΣΤΑΤΙΣΤΙΚΑ</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#2e7d32', marginTop: 8 }]} onPress={() => { setAdminPanelOpen(false); doBackup(); }}>
@@ -1247,6 +1289,84 @@ export default function App() {
               <Text style={statsAuthStyles.btnTxt}>🔐 ΚΛΕΙΔΩΜΑ ΠΡΟΣΒΑΣΗΣ (απαιτεί κωδικό ξανά)</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666', marginTop: 10 }]} onPress={() => setAdminPanelOpen(false)}>
+              <Text style={statsAuthStyles.btnTxt}>ΚΛΕΙΣΙΜΟ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showTabRights} transparent animationType="fade" onRequestClose={() => setShowTabRights(false)}>
+        <View style={statsAuthStyles.overlay}>
+          <View style={[statsAuthStyles.box, { maxWidth: 540 }]}>
+            <Text style={[statsAuthStyles.title, { color: '#6a1b9a' }]}>🔑 Δικαιώματα Χρηστών</Text>
+            <Text style={statsAuthStyles.subtitle}>👁 Βλέπει = εμφανίζεται η καρτέλα · ✏️ Επεξεργάζεται = μπορεί να την αλλάξει.</Text>
+            <ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ paddingBottom: 6 }}>
+              {[{ key: 'std', label: 'Τυποποιημένες' }, { key: 'eid', label: 'Ειδικές' }, { key: 'inst', label: 'Τοποθετήσεις' }].map(prog => {
+                const open = tabRightsProg === prog.key;
+                return (
+                  <View key={prog.key} style={{ marginBottom: 8, borderWidth: 1, borderColor: '#e0d4ee', borderRadius: 10, overflow: 'hidden' }}>
+                    <TouchableOpacity onPress={() => { setTabRightsProg(open ? null : prog.key); setTabRightsUser(null); }}
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: open ? '#6a1b9a' : '#f3e9fb', paddingHorizontal: 14, paddingVertical: 12 }}>
+                      <Text style={{ fontSize: 15, fontWeight: 'bold', color: open ? '#fff' : '#4a148c' }}>{prog.label}</Text>
+                      <Text style={{ fontSize: 16, color: open ? '#fff' : '#4a148c' }}>{open ? '▾' : '▸'}</Text>
+                    </TouchableOpacity>
+                    {open && prog.key !== 'std' && (
+                      <Text style={{ textAlign: 'center', color: '#999', padding: 16, fontStyle: 'italic' }}>Σύντομα</Text>
+                    )}
+                    {open && prog.key === 'std' && (
+                      <View style={{ padding: 8 }}>
+                        {APP_USERS.filter(u => u !== 'GUEST' && u !== 'ADMIN' && !SELLERS.includes(u)).map(u => {
+                          const k = lockKey(u);
+                          const uOpen = tabRightsUser === k;
+                          const r = tabRights[k] || {};
+                          const restricted = !!((r.hide && Object.keys(r.hide).length) || (r.readonly && Object.keys(r.readonly).length));
+                          return (
+                            <View key={k} style={{ marginBottom: 6, borderWidth: 1, borderColor: '#eee', borderRadius: 8, overflow: 'hidden' }}>
+                              <TouchableOpacity onPress={() => setTabRightsUser(uOpen ? null : k)}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: uOpen ? '#ede7f6' : '#fafafa', paddingHorizontal: 12, paddingVertical: 10 }}>
+                                <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#333' }}>{userLabels[k] ? `${userLabels[k]} (${u})` : u}</Text>
+                                <Text style={{ fontSize: 12, color: restricted ? '#c62828' : '#2e7d32', fontWeight: 'bold' }}>{restricted ? 'Περιορισμένος' : 'Πλήρης'}</Text>
+                              </TouchableOpacity>
+                              {uOpen && (
+                                <View style={{ padding: 8 }}>
+                                  <View style={{ flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 6 }}>
+                                    <View style={{ flex: 1 }} />
+                                    <Text style={{ width: 70, textAlign: 'center', fontSize: 11, fontWeight: 'bold', color: '#666' }}>👁</Text>
+                                    <Text style={{ width: 70, textAlign: 'center', fontSize: 11, fontWeight: 'bold', color: '#666' }}>✏️</Text>
+                                  </View>
+                                  {RIGHT_TABS.map(t => {
+                                    const hidden = !!(r.hide && r.hide[t.key]);
+                                    const readonly = !!(r.readonly && r.readonly[t.key]);
+                                    return (
+                                      <View key={t.key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 6, borderTopWidth: 1, borderTopColor: '#f3f3f3' }}>
+                                        <Text style={{ flex: 1, fontSize: 13, color: '#333' }}>{t.label}</Text>
+                                        <TouchableOpacity onPress={() => writeTabRight(k, 'hide', t.key, !hidden)} style={{ width: 70, alignItems: 'center' }}>
+                                          <Text style={{ fontSize: 20 }}>{hidden ? '⬜' : '✅'}</Text>
+                                        </TouchableOpacity>
+                                        <View style={{ width: 70, alignItems: 'center' }}>
+                                          {t.edit ? (
+                                            <TouchableOpacity disabled={hidden} onPress={() => writeTabRight(k, 'readonly', t.key, !readonly)}>
+                                              <Text style={{ fontSize: 20, opacity: hidden ? 0.25 : 1 }}>{(readonly || hidden) ? '⬜' : '✅'}</Text>
+                                            </TouchableOpacity>
+                                          ) : (
+                                            <Text style={{ fontSize: 15, color: '#bbb' }}>—</Text>
+                                          )}
+                                        </View>
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                              )}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={[statsAuthStyles.btn, { backgroundColor: '#666', marginTop: 12 }]} onPress={() => { if (tabRightsUser) setTabRightsUser(null); else setShowTabRights(false); }}>
               <Text style={statsAuthStyles.btnTxt}>ΚΛΕΙΣΙΜΟ</Text>
             </TouchableOpacity>
           </View>
