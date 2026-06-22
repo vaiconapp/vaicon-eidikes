@@ -1543,7 +1543,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     if (isSeller || readOnly) return;
     const doors = q.groupId ? specialQuotes.filter(x => x.groupId === q.groupId) : [q];
     const doDel = async () => {
-      for (const d of doors) await fetch(`${FIREBASE_URL}/special_quotes/${d.id}.json`, { method: 'DELETE' }).catch(() => {});
+      for (const d of doors) {
+        const r = await fetch(`${FIREBASE_URL}/special_quotes/${d.id}.json`, { method: 'DELETE' });
+        if (!r.ok) {
+          Alert.alert('Σφάλμα', 'Η διαγραφή ΔΕΝ έγινε στη βάση.\nΗ εγγραφή θα ξαναεμφανιστεί όταν κλείσεις το πρόγραμμα.\n(Πιθανό πρόβλημα δικαιωμάτων — special_quotes στο Firebase.)');
+          return;
+        }
+      }
       setSpecialQuotes(prev => prev.filter(x => q.groupId ? x.groupId !== q.groupId : x.id !== q.id));
     };
     if (Platform.OS === 'web') { if (window.confirm(doors.length > 1 ? `Διαγραφή προσφοράς (${doors.length} πόρτες);` : 'Διαγραφή προσφοράς;')) doDel(); }

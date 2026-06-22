@@ -4,6 +4,32 @@
       ".read":  "auth != null && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
       ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
     },
+    "special_quotes": {
+      ".read":  "auth != null && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "order_files": {
+      ".read":  "auth != null && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "upload_tokens": {
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"
+    },
+    "order_seq": {
+      ".read":  "auth != null",
+      ".write": "auth != null && auth.token.email != null && auth.token.email.beginsWith('admin@')",
+      "$num": {
+        ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true) && !data.exists() && newData.exists()"
+      }
+    },
+    "seller_submissions": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@')",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@')"
+    },
+    "approval_log": {
+      ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@')",
+      ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@')"
+    },
     "customers": {
       ".read":  "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)",
       ".write": "auth != null && auth.token.email != null && !auth.token.email.beginsWith('guest@') && (auth.token.email.beginsWith('admin@') || root.child('app_lock').child(auth.token.email.replace('@vaicon.local','').toUpperCase()).val() != true)"

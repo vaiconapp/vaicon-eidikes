@@ -363,34 +363,10 @@ export default function App() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-
-    // Στο dev όλα τα apps μοιράζονται το ίδιο host (vaicon-test). Οι μόνιμες συνδέσεις
-    // EventSource εξαντλούν το όριο συνδέσεων του browser (6/host, κοινό για όλες τις
-    // καρτέλες), οπότε κάνουμε polling που ελευθερώνει τη σύνδεση μετά από κάθε κλήση.
-    if (IS_DEV || Platform.OS !== 'web' || typeof EventSource === 'undefined') {
-      const interval = setInterval(() => { fetchData(true); }, IS_DEV ? 8000 : 20000);
-      return () => clearInterval(interval);
-    }
-
-    const timers = [];
-    const sources = ['special_orders', 'special_quotes', 'customers', 'coatings', 'locks'].map((p, i) => {
-      const es = new EventSource(`${FIREBASE_URL}/${p}.json` + (fbToken ? `?auth=${fbToken}` : ''));
-      const refresh = () => {
-        clearTimeout(timers[i]);
-        timers[i] = setTimeout(() => fetchData(true, [p]), 300);
-      };
-      es.addEventListener('put', refresh);
-      es.addEventListener('patch', refresh);
-      return es;
-    });
-    const safety = setInterval(() => fetchData(true), 3 * 60 * 1000);
-
-    return () => {
-      timers.forEach(clearTimeout);
-      clearInterval(safety);
-      sources.forEach(es => es.close());
-    };
-  }, [isLoggedIn, tokenVersion]);
+    // Browser: ~6 connections/host. Permanent EventSource streams block fetchData (spinner).
+    const interval = setInterval(() => { fetchData(true); }, IS_DEV ? 8000 : 20000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -398,14 +374,6 @@ export default function App() {
       try { const r = await fetch(`${FIREBASE_URL}/app_lock.json`); setLockedUsers((await r.json()) || {}); } catch {}
     };
     load();
-    // Στο dev: polling αντί για EventSource (βλ. σχόλιο πιο πάνω για το όριο συνδέσεων).
-    if (!IS_DEV && Platform.OS === 'web' && typeof EventSource !== 'undefined') {
-      const es = new EventSource(`${FIREBASE_URL}/app_lock.json` + (fbToken ? `?auth=${fbToken}` : ''));
-      es.addEventListener('put', load);
-      es.addEventListener('patch', load);
-      const safety = setInterval(load, 15000);
-      return () => { es.close(); clearInterval(safety); };
-    }
     const safety = setInterval(load, IS_DEV ? 10000 : 5000);
     return () => clearInterval(safety);
   }, [isLoggedIn, tokenVersion]);
@@ -731,6 +699,9 @@ export default function App() {
   const fetchData = async (silent=false, only=null) => {
     const want = (p) => !only || only.includes(p);
     if (!silent) setLoading(true);
+    let finished = false;
+    const endLoad = () => { if (!finished) { finished = true; setLoading(false); } };
+    const guard = silent ? null : setTimeout(endLoad, 20000);
     try {
       if (want('special_orders')) {
         const resS = await fetch(`${FIREBASE_URL}/special_orders.json`);
@@ -778,7 +749,8 @@ export default function App() {
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      if (guard) clearTimeout(guard);
+      endLoad();
     }
   };
 
