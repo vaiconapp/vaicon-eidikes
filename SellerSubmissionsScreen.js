@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator
 import { FIREBASE_URL } from './App';
 import { groupSubmissions } from './formatHelpers';
 import { SpecialOrderPreview } from './OrderPreview';
+import { fmtDateTime } from './utils';
 
 // Εγκεκριμένες υποβολές φαίνονται μόνο την ημέρα της έγκρισης· την επόμενη μέρα καθαρίζονται.
 const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
@@ -45,7 +46,7 @@ export default function SellerSubmissionsScreen({ sellerKey, onEditSubmission, c
 
   const renderEntries = (list, kind) => groupSubmissions(list).map(entry => entry.type === 'group' ? (
     <View key={entry.groupId} style={styles.groupBox}>
-      <Text style={styles.groupHeader}>🔗 Συνδεδεμένη παραγγελία — {entry.subs[0].customer || '—'} ({entry.subs.length} πόρτες)</Text>
+      <Text style={styles.groupHeader}>{entry.subs[0].isQuote ? '💼 Προσφορά' : '🔗 Συνδεδεμένη παραγγελία'} — {entry.subs[0].customer || '—'} ({entry.subs.length} πόρτες)</Text>
       {entry.subs.map(s => renderCard(s, kind, true))}
     </View>
   ) : renderCard(entry.sub, kind, false));
@@ -55,10 +56,12 @@ export default function SellerSubmissionsScreen({ sellerKey, onEditSubmission, c
     return (
     <View key={sub._sid} style={[styles.card, { borderLeftColor: isRejected ? '#c62828' : isApproved ? '#2e7d32' : '#ff9800' }]}>
       <View style={{ flex: 1 }}>
+        {sub.isQuote ? <Text style={styles.quoteTag}>💼 ΠΡΟΣΦΟΡΑ</Text> : null}
         <SpecialOrderPreview order={sub} coatings={coatings} locks={locks} showCustomer={!inGroup} />
+        {sub.submittedAt ? <Text style={styles.timeTag}>📤 Στάλθηκε: {fmtDateTime(sub.submittedAt)}</Text> : null}
         {isRejected && sub.rejectNote ? <Text style={styles.note}>📝 {sub.rejectNote}</Text> : null}
-        {isApproved ? <Text style={styles.approvedTag}>✅ Εγκρίθηκε{sub.approvedOrderNo ? ` — Νο ${sub.approvedOrderNo}` : ''}</Text>
-          : isRejected ? <Text style={styles.rejectedTag}>↩️ Απορρίφθηκε{sub.rejectedBy ? ` από ${sub.rejectedBy}` : ''}</Text>
+        {isApproved ? <Text style={styles.approvedTag}>✅ Εγκρίθηκε{sub.approvedAt ? `: ${fmtDateTime(sub.approvedAt)}` : ''}{sub.approvedOrderNo ? ` — Νο ${sub.approvedOrderNo}` : ''}{sub.approvedBy ? ` · ${sub.approvedBy}` : ''}</Text>
+          : isRejected ? <Text style={styles.rejectedTag}>↩️ Απορρίφθηκε{sub.rejectedAt ? `: ${fmtDateTime(sub.rejectedAt)}` : ''}{sub.rejectedBy ? ` · ${sub.rejectedBy}` : ''}</Text>
           : <Text style={styles.pendingTag}>⏳ Αναμονή έγκρισης</Text>}
       </View>
       <View style={{ gap: 8, justifyContent: 'center' }}>
@@ -93,11 +96,13 @@ const styles = StyleSheet.create({
   empty: { color: '#999', fontStyle: 'italic', marginBottom: 8 },
   groupBox: { borderWidth: 1, borderColor: '#7b1fa2', borderRadius: 10, padding: 6, marginBottom: 8, backgroundColor: '#faf5fc' },
   groupHeader: { fontSize: 13, fontWeight: 'bold', color: '#7b1fa2', marginBottom: 4, marginLeft: 2 },
+  quoteTag: { alignSelf: 'flex-start', backgroundColor: '#f3e5f5', color: '#6a1b9a', borderWidth: 1, borderColor: '#8e24aa', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, fontWeight: 'bold', fontSize: 12, marginBottom: 4 },
   card: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, borderLeftWidth: 5, elevation: 1, gap: 8 },
   customer: { fontSize: 16, fontWeight: 'bold', color: '#1a1a1a' },
   detail: { fontSize: 13, color: '#555', marginTop: 2 },
   note: { fontSize: 13, color: '#c62828', fontWeight: 'bold', marginTop: 4 },
   pendingTag: { fontSize: 12, color: '#e65100', fontWeight: 'bold', marginTop: 4 },
+  timeTag: { fontSize: 12, color: '#555', marginTop: 4 },
   approvedTag: { fontSize: 13, color: '#2e7d32', fontWeight: 'bold', marginTop: 4 },
   rejectedTag: { fontSize: 12, color: '#c62828', fontWeight: 'bold', marginTop: 4 },
   editBtn: { backgroundColor: '#1565C0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, alignItems: 'center', minWidth: 110 },

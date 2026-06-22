@@ -13,9 +13,10 @@ const fmtDateTime = (ts) => { if (!ts) return ''; const d = new Date(ts); return
 const withBlank = (arr) => { const a = (arr && arr.length) ? [...arr] : []; const last = a[a.length - 1]; if (!last || last.label || last.value) a.push({ label: '', value: '' }); return a; };
 
 // Μετακινούμενο παράθυρο λίστας τιμών (περιγραφή αριστερά, τιμή δεξιά, αυτόματο σύνολο).
-export default function PriceListModal({ visible, initialItems = [], initialDiscount = '', log = [], title = 'Καταχώρηση τιμών', startLocked = false, readOnly = false, onSave, onClose }) {
+export default function PriceListModal({ visible, initialItems = [], initialDiscount = '', initialNote = '', log = [], title = 'Καταχώρηση τιμών', startLocked = false, readOnly = false, onSave, onClose }) {
   const [items, setItems] = useState([]);
   const [discount, setDiscount] = useState('');
+  const [note, setNote] = useState('');
   const [locked, setLocked] = useState(false);
   const pan = useRef(new Animated.ValueXY()).current;
 
@@ -24,6 +25,7 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
     const seed = (initialItems || []).map(it => ({ label: it.label || '', value: it.value != null ? String(it.value) : '' }));
     setItems((startLocked || readOnly) ? (seed.length ? seed : [{ label: '', value: '' }]) : withBlank(seed));
     setDiscount(initialDiscount != null && initialDiscount !== '' ? String(initialDiscount) : '');
+    setNote(initialNote || '');
     setLocked(readOnly || !!startLocked);
     pan.setValue({ x: 0, y: 0 });
   }, [visible]);
@@ -76,7 +78,7 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
           </ScrollView>
           <View style={styles.summary}>
             <View style={styles.sumRow}>
-              <Text style={styles.sumLabel}>Σύνολο γραμμών</Text>
+              <Text style={styles.sumLabel}>Σύνολο γραμμών (προ-ΦΠΑ)</Text>
               <Text style={styles.sumVal}>{fmtEuro(subtotal)}</Text>
             </View>
             <View style={styles.sumRow}>
@@ -87,10 +89,16 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
               </View>
             </View>
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Σύνολο</Text>
+              <Text style={styles.totalLabel}>Σύνολο (χωρίς ΦΠΑ)</Text>
               <Text style={styles.totalVal}>{fmtEuro(total)}</Text>
             </View>
           </View>
+          {(!locked || note) ? (
+            <View style={styles.noteBox}>
+              <Text style={styles.noteLabel}>📝 Σημείωση</Text>
+              <TextInput editable={!locked} style={[styles.noteInput, locked && styles.lockedInput]} placeholder="Προαιρετικό σημείωμα…" placeholderTextColor="#aaa" multiline value={note} onChangeText={setNote} />
+            </View>
+          ) : null}
           {(log && log.length) ? (
             <View style={styles.logBox}>
               <View style={styles.logHeadRow}>
@@ -118,7 +126,7 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
             ) : (
               <>
                 <TouchableOpacity style={[styles.btn, { backgroundColor: '#e0e0e0' }]} onPress={onClose}><Text style={{ color: '#555', fontWeight: 'bold' }}>Άκυρο</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.btn, { backgroundColor: '#8B0000' }]} onPress={() => onSave(clean, discount)}><Text style={{ color: '#fff', fontWeight: 'bold' }}>Αποθήκευση</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.btn, { backgroundColor: '#8B0000' }]} onPress={() => onSave(clean, discount, note.trim())}><Text style={{ color: '#fff', fontWeight: 'bold' }}>Αποθήκευση</Text></TouchableOpacity>
               </>
             )}
           </View>
@@ -152,6 +160,9 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, marginTop: 2, borderTopWidth: 1, borderTopColor: '#e0e0e0' },
   totalLabel: { fontSize: 15, fontWeight: 'bold', color: '#333' },
   totalVal: { fontSize: 18, fontWeight: '900', color: '#8B0000' },
+  noteBox: { marginHorizontal: 10, marginBottom: 4, borderWidth: 1, borderColor: '#90CAF9', backgroundColor: '#E8F0FE', borderRadius: 10, paddingHorizontal: 10, paddingTop: 6, paddingBottom: 8 },
+  noteLabel: { fontSize: 12, color: '#1565C0', fontWeight: 'bold', marginBottom: 4 },
+  noteInput: { minHeight: 54, borderWidth: 1, borderColor: '#bbd7f5', borderRadius: 8, backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 6, fontSize: 13, color: '#1a1a1a', textAlignVertical: 'top' },
   logBox: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 4, borderTopWidth: 1, borderTopColor: '#eee' },
   logHeadRow: { flexDirection: 'row', paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: '#eee' },
   logH: { fontSize: 11, color: '#888', fontWeight: 'bold' },

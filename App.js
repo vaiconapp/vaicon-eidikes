@@ -291,6 +291,7 @@ export default function App() {
 
   const [specialOrders, setSpecialOrders] = useState([]);
   const [soldSpecialOrders, setSoldSpecialOrders] = useState([]);
+  const [specialQuotes, setSpecialQuotes] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [coatings, setCoatings] = useState([]);
   const [locks, setLocks] = useState([]);
@@ -372,7 +373,7 @@ export default function App() {
     }
 
     const timers = [];
-    const sources = ['special_orders', 'customers', 'coatings', 'locks'].map((p, i) => {
+    const sources = ['special_orders', 'special_quotes', 'customers', 'coatings', 'locks'].map((p, i) => {
       const es = new EventSource(`${FIREBASE_URL}/${p}.json` + (fbToken ? `?auth=${fbToken}` : ''));
       const refresh = () => {
         clearTimeout(timers[i]);
@@ -625,7 +626,7 @@ export default function App() {
   const doBackup = async () => {
     setBackupRunning(true);
     try {
-      const NODES = ['special_orders', 'customers', 'coatings', 'locks', 'user_labels', 'activity_log', 'msg_map', 'messages', 'app_lock', 'installers', 'installations', 'activity_log_install', 'order_files', 'upload_tokens', 'tab_rights'];
+      const NODES = ['special_orders', 'special_quotes', 'customers', 'coatings', 'locks', 'user_labels', 'activity_log', 'msg_map', 'messages', 'app_lock', 'installers', 'installations', 'activity_log_install', 'order_files', 'upload_tokens', 'tab_rights'];
       const fullData = {};
       for (const p of NODES) {
         const r = await fetch(`${FIREBASE_URL}/${p}.json`);
@@ -710,7 +711,7 @@ export default function App() {
     if (!restorePayload?.data) return;
     setRestoreRunning(true);
     try {
-      const knownPaths = ['special_orders', 'customers', 'coatings', 'locks', 'activity_log'];
+      const knownPaths = ['special_orders', 'special_quotes', 'customers', 'coatings', 'locks', 'activity_log'];
       for (const p of knownPaths) {
         if (!(p in restorePayload.data)) continue;
         await fetch(`${FIREBASE_URL}/${p}.json`, {
@@ -752,6 +753,12 @@ export default function App() {
           setSpecialOrders(loadedS.filter(o => o.status !== 'SOLD'));
           setSoldSpecialOrders(loadedS.filter(o => o.status === 'SOLD'));
         }
+      }
+      if (want('special_quotes')) {
+        const resQ = await fetch(`${FIREBASE_URL}/special_quotes.json`);
+        const dataQ = await resQ.json();
+        const fixQ = (o) => ({ ...o, stavera: o.stavera ? (Array.isArray(o.stavera) ? o.stavera : Object.values(o.stavera)) : [], coatings: o.coatings ? (Array.isArray(o.coatings) ? o.coatings : Object.values(o.coatings)) : [] });
+        setSpecialQuotes(dataQ ? Object.keys(dataQ).map(key => fixQ({ id: key, ...dataQ[key] })) : []);
       }
       if (want('customers')) {
         const res4 = await fetch(`${FIREBASE_URL}/customers.json`);
@@ -837,6 +844,8 @@ export default function App() {
           setSpecialOrders={setSpecialOrders}
           soldSpecialOrders={soldSpecialOrders}
           setSoldSpecialOrders={setSoldSpecialOrders}
+          specialQuotes={specialQuotes}
+          setSpecialQuotes={setSpecialQuotes}
           customers={customers}
           onRequestAddCustomer={(name, cb) => {
             setPendingCustomer(name);
