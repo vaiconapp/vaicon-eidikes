@@ -774,6 +774,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [pendingSearch, setPendingSearch] = useState('');
   const [prodSearch, setProdSearch] = useState('');
   const [readySearch, setReadySearch] = useState('');
+  const [quoteSearch, setQuoteSearch] = useState('');
   const [archivePage, setArchivePage] = useState(0);
   const [archiveView, setArchiveView] = useState('calendar');
   const [archiveSearch, setArchiveSearch] = useState('');
@@ -809,12 +810,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const custIsDragging = useRef(false);
   const custDragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
   const [lookupStdOrders, setLookupStdOrders] = useState([]);
+  const [lookupStdQuotes, setLookupStdQuotes] = useState([]);
   useEffect(() => {
     if (!showCustomerLookup || lookupStdOrders.length) return;
     (async () => {
       try {
-        const data = await (await fetch(`${FIREBASE_URL}/std_orders.json`)).json();
-        if (data) setLookupStdOrders(Object.entries(data).map(([id,v])=>({ id: v?.id||id, ...v })));
+        const [od, qd] = await Promise.all([
+          fetch(`${FIREBASE_URL}/std_orders.json`).then(r=>r.json()),
+          fetch(`${FIREBASE_URL}/std_quotes.json`).then(r=>r.json()),
+        ]);
+        if (od) setLookupStdOrders(Object.entries(od).map(([id,v])=>({ id: v?.id||id, ...v })));
+        if (qd) setLookupStdQuotes(Object.entries(qd).map(([id,v])=>({ id: v?.id||id, ...v })));
       } catch {}
     })();
   }, [showCustomerLookup]);
@@ -4579,6 +4585,28 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           ? (lookupStdOrders||[]).filter(o => notSold(o)&&nameMatch(o, selectedCust)).sort((a,b) => (b.createdAt||0) - (a.createdAt||0))
           : [];
         const totalCustomerOrders = customerOrders.length + stdCustomerOrders.length;
+        const qSort = (a,b)=>(b.quotedAt||b.createdAt||0)-(a.quotedAt||a.createdAt||0);
+        const specialCustomerQuotes = selectedCust ? (specialQuotes||[]).filter(o=>nameMatch(o, selectedCust)).sort(qSort) : [];
+        const stdCustomerQuotes = selectedCust ? (lookupStdQuotes||[]).filter(o=>nameMatch(o, selectedCust)).sort(qSort) : [];
+        const totalCustomerQuotes = specialCustomerQuotes.length + stdCustomerQuotes.length;
+        const renderQuoteRow = (o, isStd) => {
+          const createdFmt = (o.quotedAt||o.createdAt) ? new Date(o.quotedAt||o.createdAt).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '';
+          return (
+            <TouchableOpacity key={o.id} onPress={()=>setLookupOrderModal({ visible:true, order: isStd ? {...o, _std:true} : o })}
+              style={{padding:10, borderBottomWidth:1, borderBottomColor:'#eee', backgroundColor: isStd?'#ede7f6':'#f3e5f5'}}>
+              <View style={{flexDirection:'row', alignItems:'center', gap:8}}>
+                <Text style={{fontSize:14, fontWeight:'900', color:'#1a1a1a', minWidth:54}}>#{o.orderNo||'—'}</Text>
+                <Text style={{fontSize:12, color:'#1a1a1a', fontWeight:'bold'}}>{o.h||'—'}×{o.w||'—'}</Text>
+                <Text style={{fontSize:11, color:'#555'}}>{o.side||'—'}</Text>
+                <Text style={{fontSize:11, color:'#555'}}>{isStd ? (o.sasiType==='ΔΙΠΛΗ ΘΩΡΑΚΙΣΗ'?'ΔΙΠΛΗ':'ΜΟΝΗ') : (o.armor||'—')}</Text>
+                <View style={{backgroundColor:'#8e24aa', borderRadius:4, paddingHorizontal:6, paddingVertical:1, marginLeft:'auto'}}>
+                  <Text style={{color:'white', fontWeight:'bold', fontSize:10}}>💼 ΠΡΟΣΦΟΡΑ</Text>
+                </View>
+              </View>
+              {createdFmt ? <Text style={{fontSize:11, color:'#888', marginTop:3}}>📅 {createdFmt}</Text> : null}
+            </TouchableOpacity>
+          );
+        };
         return (
           <View style={{
             position:'absolute', top: 80 + custPanPos.y, left: `calc(50% - 220px + ${custPanPos.x}px)`,
@@ -4622,7 +4650,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                     <View style={{flex:1}}>
                       <Text style={{fontSize:15, fontWeight:'bold', color:'#0d47a1'}}>👤 {selectedCust.name}</Text>
                       {selectedCust.phone ? <Text style={{fontSize:12, color:'#555'}}>📞 {selectedCust.phone}</Text> : null}
-                      <Text style={{fontSize:11, color:'#777', marginTop:2}}>{totalCustomerOrders} παραγγελ{totalCustomerOrders===1?'ία':'ίες'} · ⭐ {customerOrders.length} / 🛡️ {stdCustomerOrders.length}</Text>
+                      <Text style={{fontSize:11, color:'#777', marginTop:2}}>{totalCustomerOrders} παραγγελ{totalCustomerOrders===1?'ία':'ίες'} · ⭐ {customerOrders.length} / 🛡️ {stdCustomerOrders.length}{totalCustomerQuotes>0?` · 💼 ${totalCustomerQuotes} προσφ.`:''}</Text>
                     </View>
                     <TouchableOpacity onPress={()=>setLookupCustInfo(true)} style={{backgroundColor:'#0d47a1', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}>
                       <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>ℹ ΣΤΟΙΧΕΙΑ</Text>
@@ -4670,7 +4698,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       <Text style={{color:'#aaa', fontSize:12, textAlign:'center', padding:20}}>Δεν βρέθηκαν πελάτες.</Text>
                     )}
                     {filteredCustomers.map(c => {
-                      const orderCount = (specialOrders||[]).filter(o => notSold(o)&&nameMatch(o,c)).length + (lookupStdOrders||[]).filter(o => notSold(o)&&nameMatch(o,c)).length;
+                      const orderCount = (specialOrders||[]).filter(o => notSold(o)&&nameMatch(o,c)).length + (lookupStdOrders||[]).filter(o => notSold(o)&&nameMatch(o,c)).length + (specialQuotes||[]).filter(o=>nameMatch(o,c)).length + (lookupStdQuotes||[]).filter(o=>nameMatch(o,c)).length;
                       return (
                         <TouchableOpacity key={c.id}
                           onPress={()=>setLookupCustomerId(c.id)}
@@ -4691,8 +4719,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 {/* Αν έχει επιλεγεί πελάτης → δείξε τις παραγγελίες του περιληπτικά */}
                 {selectedCust && (
                   <>
-                    {totalCustomerOrders === 0 && (
-                      <Text style={{color:'#aaa', fontSize:12, textAlign:'center', padding:20}}>Ο πελάτης δεν έχει παραγγελίες.</Text>
+                    {totalCustomerOrders === 0 && totalCustomerQuotes === 0 && (
+                      <Text style={{color:'#aaa', fontSize:12, textAlign:'center', padding:20}}>Ο πελάτης δεν έχει παραγγελίες ή προσφορές.</Text>
                     )}
                     {customerOrders.length > 0 && (
                       <View style={{backgroundColor:'#ef6c00', borderRadius:6, paddingHorizontal:8, paddingVertical:4, marginTop:6, marginBottom:2}}>
@@ -4754,6 +4782,18 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                         </TouchableOpacity>
                       );
                     })}
+                    {specialCustomerQuotes.length > 0 && (
+                      <View style={{backgroundColor:'#8e24aa', borderRadius:6, paddingHorizontal:8, paddingVertical:4, marginTop:10, marginBottom:2}}>
+                        <Text style={{color:'#fff', fontWeight:'bold', fontSize:12}}>💼 ΠΡΟΣΦΟΡΕΣ ΕΙΔΙΚΩΝ ({specialCustomerQuotes.length})</Text>
+                      </View>
+                    )}
+                    {specialCustomerQuotes.map(o=>renderQuoteRow(o, false))}
+                    {stdCustomerQuotes.length > 0 && (
+                      <View style={{backgroundColor:'#6a1b9a', borderRadius:6, paddingHorizontal:8, paddingVertical:4, marginTop:10, marginBottom:2}}>
+                        <Text style={{color:'#fff', fontWeight:'bold', fontSize:12}}>💼 ΠΡΟΣΦΟΡΕΣ ΤΥΠΟΠΟΙΗΜΕΝΩΝ ({stdCustomerQuotes.length})</Text>
+                      </View>
+                    )}
+                    {stdCustomerQuotes.map(o=>renderQuoteRow(o, true))}
                   </>
                 )}
               </ScrollView>
@@ -6646,8 +6686,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <View style={[styles.listHeader,{backgroundColor:'#8e24aa'}]}>
                 <Text style={styles.listHeaderText}>💼 ΠΡΟΣΦΟΡΕΣ{isSeller?' (οι δικές μου)':''} ({specialQuotes.filter(sellerOwnsOrder).length})</Text>
               </View>
+              <View style={{flexDirection:'row', alignItems:'center', alignSelf:'flex-start', width:'33%', minWidth:200, backgroundColor:'#fff', borderRadius:8, borderWidth:1.5, borderColor:'#ddd', paddingHorizontal:8, paddingVertical:4, marginVertical:8}}>
+                <Text style={{fontSize:14, marginRight:4, color:'#aaa'}}>🔍</Text>
+                <TextInput style={{flex:1, fontSize:13, color:'#1a1a1a', padding:0}} placeholder="Αναζήτηση πελάτη..." placeholderTextColor="#bbb" autoComplete="off" value={quoteSearch} onChangeText={setQuoteSearch} clearButtonMode="while-editing" />
+                {quoteSearch.length>0 && <TouchableOpacity onPress={()=>setQuoteSearch('')}><Text style={{color:'#aaa', fontSize:16, fontWeight:'bold', paddingLeft:4}}>✕</Text></TouchableOpacity>}
+              </View>
               {(() => {
-                const mine = specialQuotes.filter(sellerOwnsOrder);
+                const mine = specialQuotes.filter(sellerOwnsOrder).filter(q=>matchesSearch(q, quoteSearch));
                 if (mine.length === 0) return <Text style={{textAlign:'center', color:'#999', marginTop:30}}>Δεν υπάρχουν προσφορές.</Text>;
                 const groupsMap = {}; const singles = [];
                 mine.forEach(q => { if (q.groupId) (groupsMap[q.groupId] = groupsMap[q.groupId] || []).push(q); else singles.push(q); });
