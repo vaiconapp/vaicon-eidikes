@@ -781,6 +781,12 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [archiveMonth, setArchiveMonth] = useState(()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); });
   const [archiveFrom, setArchiveFrom] = useState(null);
   const [archiveTo, setArchiveTo] = useState(null);
+  const [readyMonth, setReadyMonth] = useState(()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); });
+  const [readyFrom, setReadyFrom] = useState(null);
+  const [readyTo, setReadyTo] = useState(null);
+  const [calPos, setCalPos] = useState({ x: 0, y: 0 });
+  const calDragStart = useRef({ mx:0, my:0, px:0, py:0 });
+  const calDragging = useRef(false);
 
   const [printSelected, setPrintSelected] = useState({});
   const [montReadyFilter, setMontReadyFilter] = useState(false);
@@ -914,6 +920,25 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     window.addEventListener('mouseup', onUp);
     window.addEventListener('touchmove', onMove);
     window.addEventListener('touchend', onUp);
+  };
+
+  // Σύρσιμο πλωτού ημερολογίου ΕΤΟΙΜΩΝ (ανεξάρτητο από το panPos)
+  const handleCalDragStart = (e) => {
+    calDragging.current = true;
+    calDragStart.current = { mx: e.clientX || e.touches?.[0]?.clientX || 0, my: e.clientY || e.touches?.[0]?.clientY || 0, px: calPos.x, py: calPos.y };
+    const onMove = (ev) => {
+      if (!calDragging.current) return;
+      const cx = ev.clientX || ev.touches?.[0]?.clientX || 0;
+      const cy = ev.clientY || ev.touches?.[0]?.clientY || 0;
+      setCalPos({ x: calDragStart.current.px + (cx - calDragStart.current.mx), y: calDragStart.current.py + (cy - calDragStart.current.my) });
+    };
+    const onUp = () => {
+      calDragging.current = false;
+      window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onUp);
+    };
+    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove); window.addEventListener('touchend', onUp);
   };
 
   // ── Δεδομένα ημερολογίων (τεμάχια = άθροισμα qty) ──
@@ -4005,7 +4030,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             <View style={{padding:8, borderTopWidth:1, borderTopColor:'#e0e0e0'}}>
               <MiniCalendar
                 title={`ΟΛΟΚΛΗΡΩΣΕΙΣ — ${(PHASES.find(p=>p.key===activeProdPhase)?.label||'').replace(/🔴|🟡|🔵|⚫|🟠|🟢/g,'').trim()}`}
-                series={[{ color:'#2e7d32', data: calData([...specialOrders, ...soldSpecialOrders], o=>phaseDoneAt(o, activeProdPhase)) }]}
+                series={[{ color:'#2e7d32', data: calData([...specialOrders, ...soldSpecialOrders].filter(sellerOwnsOrder), o=>phaseDoneAt(o, activeProdPhase)) }]}
                 selectedTs={dayModal.mode==='prod'?dayModal.ts:null}
                 onPickDay={(ts)=>setDayModal({visible:true, ts, mode:'prod', phaseKey:activeProdPhase})}
               />
@@ -4326,6 +4351,57 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </View>
         </View>
       )}
+
+      {/* FLOATING ΗΜΕΡΟΛΟΓΙΟ ΕΤΟΙΜΩΝ (σερνόμενο) */}
+      {activeSection==='ready' && (()=>{
+        const monthNames=['Ιανουάριος','Φεβρουάριος','Μάρτιος','Απρίλιος','Μάιος','Ιούνιος','Ιούλιος','Αύγουστος','Σεπτέμβριος','Οκτώβριος','Νοέμβριος','Δεκέμβριος'];
+        const startOfDay=(ts)=>{const d=new Date(ts);return new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();};
+        const mDate=new Date(readyMonth); const year=mDate.getFullYear(), month=mDate.getMonth();
+        const readyList=specialOrders.filter(o=>o.status==='READY'&&sellerOwnsOrder(o)&&o.readyAt);
+        const counts={}; readyList.forEach(o=>{const d=new Date(o.readyAt); if(d.getFullYear()===year&&d.getMonth()===month) counts[d.getDate()]=(counts[d.getDate()]||0)+1;});
+        const firstDow=(new Date(year,month,1).getDay()+6)%7; const daysInMonth=new Date(year,month+1,0).getDate();
+        const cells=[]; for(let i=0;i<firstDow;i++)cells.push(null); for(let d=1;d<=daysInMonth;d++)cells.push(d);
+        const years=[...new Set(readyList.map(o=>new Date(o.readyAt).getFullYear()))].sort((a,b)=>b-a);
+        const lo=readyFrom, hi=readyTo!=null?readyTo:readyFrom;
+        const pickDay=(ts)=>{ if(readyFrom==null||readyTo!=null){setReadyFrom(ts);setReadyTo(null);} else if(ts<readyFrom){setReadyTo(readyFrom);setReadyFrom(ts);} else setReadyTo(ts); };
+        const selCount=lo!=null?readyList.filter(o=>{const t=startOfDay(o.readyAt);return t>=lo&&t<=hi;}).length:0;
+        return (
+          <View style={{position:'absolute', top:120+calPos.y, left:`calc(100% - 372px + ${calPos.x}px)`, width:352, backgroundColor:'#fff', borderRadius:12, elevation:24, zIndex:1500, shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.4, shadowRadius:10, borderWidth:1, borderColor:'#00C851'}}>
+            <View style={{backgroundColor:'#00C851', borderTopLeftRadius:12, borderTopRightRadius:12, paddingHorizontal:10, paddingVertical:9, flexDirection:'row', alignItems:'center', justifyContent:'space-between', cursor:'grab'}}
+              {...(Platform.OS==='web'?{onMouseDown:handleCalDragStart, onTouchStart:handleCalDragStart}:{})}>
+              <Text style={{color:'#fff', fontWeight:'bold', fontSize:13}}>📅 ΗΜΕΡΟΛΟΓΙΟ ΕΤΟΙΜΩΝ{lo!=null?` · ${selCount}`:''}</Text>
+              {lo!=null && <TouchableOpacity onPress={()=>{setReadyFrom(null);setReadyTo(null);}}><Text style={{color:'#fff', fontWeight:'bold', fontSize:12}}>✕ Καθάρισμα</Text></TouchableOpacity>}
+            </View>
+            <View style={{padding:10}}>
+              <View style={{flexDirection:'row', alignItems:'center', marginBottom:6}}>
+                <TouchableOpacity onPress={()=>setReadyMonth(new Date(year,month-1,1).getTime())} style={{paddingHorizontal:10,paddingVertical:6,borderRadius:8,backgroundColor:'#333'}}><Text style={{color:'white',fontWeight:'bold'}}>◀</Text></TouchableOpacity>
+                <Text style={{fontSize:14,fontWeight:'bold',color:'#333',marginHorizontal:6,flex:1,textAlign:'center'}}>{monthNames[month]} {year}</Text>
+                <TouchableOpacity onPress={()=>setReadyMonth(new Date(year,month+1,1).getTime())} style={{paddingHorizontal:10,paddingVertical:6,borderRadius:8,backgroundColor:'#333'}}><Text style={{color:'white',fontWeight:'bold'}}>▶</Text></TouchableOpacity>
+                <TouchableOpacity onPress={()=>setReadyMonth(new Date().getTime())} style={{paddingHorizontal:10,paddingVertical:6,borderRadius:8,backgroundColor:'#2e7d32',marginLeft:6}}><Text style={{color:'white',fontWeight:'bold',fontSize:12}}>Σήμερα</Text></TouchableOpacity>
+              </View>
+              {years.length>1 && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:6}} contentContainerStyle={{gap:6, alignItems:'center'}}>
+                {years.map(y=>(<TouchableOpacity key={y} onPress={()=>setReadyMonth(new Date(y,month,1).getTime())} style={{paddingHorizontal:10,paddingVertical:5,borderRadius:16,backgroundColor:y===year?'#333':'#e0e0e0'}}><Text style={{color:y===year?'white':'#555',fontWeight:'bold',fontSize:12}}>{y}</Text></TouchableOpacity>))}
+              </ScrollView>}
+              <View style={{flexDirection:'row'}}>
+                {['Δε','Τρ','Τε','Πε','Πα','Σα','Κυ'].map(w=>(<View key={w} style={{flex:1,alignItems:'center',paddingVertical:2}}><Text style={{fontSize:10,fontWeight:'bold',color:'#888'}}>{w}</Text></View>))}
+              </View>
+              <View style={{flexDirection:'row',flexWrap:'wrap'}}>
+                {cells.map((d,i)=>{
+                  if(d===null) return <View key={'e'+i} style={{width:`${100/7}%`,padding:2}} />;
+                  const c=counts[d]||0; const cellTs=new Date(year,month,d).getTime();
+                  const inRange=readyFrom!=null&&cellTs>=lo&&cellTs<=hi; const isToday=cellTs===startOfDay(Date.now());
+                  return (<View key={d} style={{width:`${100/7}%`,padding:2}}>
+                    <TouchableOpacity disabled={c===0} onPress={()=>pickDay(cellTs)} style={{minHeight:34,borderRadius:6,alignItems:'center',justifyContent:'center',backgroundColor:inRange?'#333':(isToday?'#2e7d32':(c>0?'#e8f5e9':'#f5f5f5')),borderWidth:(c>0||isToday)?1.5:1,borderColor:inRange?'#333':(isToday?'#2e7d32':(c>0?'#a5d6a7':'#eee'))}}>
+                      <Text style={{fontSize:12,fontWeight:'bold',color:(inRange||isToday)?'white':'#333'}}>{d}</Text>
+                      {c>0&&<Text style={{fontSize:13,fontWeight:'900',color:(inRange||isToday)?'#fff':'#2e7d32'}}>{c}</Text>}
+                    </TouchableOpacity>
+                  </View>);
+                })}
+              </View>
+            </View>
+          </View>
+        );
+      })()}
 
       {/* MODAL ΑΡΙΘΜΟΥ ΠΡΟΓΡΑΜΜΑΤΟΣ */}
       <Modal visible={programModal.visible} transparent animationType="fade" onRequestClose={()=>setProgramModal({visible:false,programNo:''})}>
@@ -6043,8 +6119,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               <MiniCalendar
                 title="ΗΜΕΡΟΛΟΓΙΟ (ΤΕΜΑΧΙΑ)"
                 series={[
-                  { color:'#1565c0', label:'Καταχωρήσεις', data: calData([...specialOrders, ...soldSpecialOrders], o=>o.createdAt) },
-                  { color:'#c62828', label:'Παραγωγή',     data: calData([...specialOrders, ...soldSpecialOrders], o=>o.prodAt) },
+                  { color:'#1565c0', label:'Καταχωρήσεις', data: calData([...specialOrders, ...soldSpecialOrders].filter(sellerOwnsOrder), o=>o.createdAt) },
+                  { color:'#c62828', label:'Παραγωγή',     data: calData([...specialOrders, ...soldSpecialOrders].filter(sellerOwnsOrder), o=>o.prodAt) },
                 ]}
                 selectedTs={dayModal.mode==='pending'?dayModal.ts:null}
                 onPickDay={(ts)=>setDayModal({visible:true, ts, mode:'pending', phaseKey:null})}
@@ -6819,7 +6895,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   <Text style={{color:'#00C851', fontSize:11, fontWeight:'bold'}}>🖨️ ΕΚΤΥΠΩΣΗ</Text>
                 </TouchableOpacity>}
               </View>
-              {[...specialOrders.filter(o=>o.status==='READY'&&sellerOwnsOrder(o))].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)).filter(o=>matchesSearch(o, readySearch)).map(o=>renderOrderCard(o, false, false, readySearch))}
+              {[...specialOrders.filter(o=>o.status==='READY'&&sellerOwnsOrder(o))].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)).filter(o=>matchesSearch(o, readySearch)).filter(o=>{ if(readyFrom==null) return true; if(!o.readyAt) return false; const d=new Date(o.readyAt); const day=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(); const hi=readyTo!=null?readyTo:readyFrom; return day>=readyFrom&&day<=hi; }).map(o=>renderOrderCard(o, false, false, readySearch))}
             </View>
           )}
 
