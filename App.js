@@ -827,6 +827,7 @@ export default function App() {
           coatings={coatings}
           locks={locks}
           readOnly={currentUser?.role === 'guest'}
+          isForeman={myLockKey === 'USER14'}
           isAdmin={currentUser?.role === 'admin'}
           isSeller={isSeller}
           sellerKey={sellerKey}
