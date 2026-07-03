@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Platform } from 'react-native';
 import { FIREBASE_URL } from './App';
 import { SIZE_OPTIONS, COLOR_OPTIONS, COLOR_MAP, getFormatStyle } from './formatHelpers';
 
 export default function LocksScreen({ locks, setLocks, onClose }) {
   const [form, setForm] = useState('');
+  const [formPrice, setFormPrice] = useState('');
   const [fmtBold, setFmtBold] = useState(false);
   const [fmtSize, setFmtSize] = useState('M');
   const [fmtColor, setFmtColor] = useState('black');
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
 
-  const resetForm = () => { setForm(''); setFmtBold(false); setFmtSize('M'); setFmtColor('black'); setEditingId(null); };
+  const resetForm = () => { setForm(''); setFormPrice(''); setFmtBold(false); setFmtSize('M'); setFmtColor('black'); setEditingId(null); };
 
   const syncToCloud = async (lock) => {
     try {
@@ -36,14 +37,14 @@ export default function LocksScreen({ locks, setLocks, onClose }) {
   const saveLock = async () => {
     if (!form.trim()) return Alert.alert("Προσοχή", "Βάλτε όνομα κλειδαριάς.");
     if (editingId) {
-      const updated = { ...locks.find(l => l.id === editingId), name: form.trim(), bold: fmtBold, size: fmtSize, color: fmtColor };
+      const updated = { ...locks.find(l => l.id === editingId), name: form.trim(), price: formPrice.trim(), bold: fmtBold, size: fmtSize, color: fmtColor };
       setLocks(locks.map(l => l.id === editingId ? updated : l));
       await syncToCloud(updated);
       Alert.alert("VAICON", `Η κλειδαριά ενημερώθηκε!\n${form.trim()}`);
     } else {
       const exists = locks.some(l => l.name.toLowerCase() === form.trim().toLowerCase());
       if (exists) return Alert.alert("Προσοχή", "Αυτή η κλειδαριά υπάρχει ήδη.");
-      const newLock = { id: Date.now().toString(), name: form.trim(), createdAt: Date.now(), order: locks.length, bold: fmtBold, size: fmtSize, color: fmtColor };
+      const newLock = { id: Date.now().toString(), name: form.trim(), price: formPrice.trim(), createdAt: Date.now(), order: locks.length, bold: fmtBold, size: fmtSize, color: fmtColor };
       setLocks([...locks, newLock]);
       await syncToCloud(newLock);
       Alert.alert("VAICON", `Κλειδαριά αποθηκεύτηκε!\n${form.trim()}`);
@@ -53,10 +54,20 @@ export default function LocksScreen({ locks, setLocks, onClose }) {
 
   const editLock = (lock) => {
     setForm(lock.name);
+    setFormPrice(lock.price || '');
     setFmtBold(!!lock.bold);
     setFmtSize(lock.size || 'M');
     setFmtColor(lock.color || 'black');
     setEditingId(lock.id);
+  };
+
+  const printList = () => {
+    if (Platform.OS !== 'web') return;
+    const esc = s => String(s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const rows = sorted.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.name)}</td><td class="p">${l.price ? '€' + esc(l.price) : ''}</td></tr>`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>ΚΛΕΙΔΑΡΙΕΣ</title><style>body{font-family:Arial,sans-serif;margin:12mm;color:#000}h1{font-size:20px;margin:0 0 12px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ddd;padding:5px 6px;font-size:13px}th{text-align:left;border-bottom:2px solid #999}.p{text-align:right;font-weight:bold;white-space:nowrap}@media print{@page{size:A4 portrait;margin:12mm}}</style></head><body><h1>🔒 ΚΛΕΙΔΑΡΙΕΣ — ΛΙΣΤΑ (${locks.length})</h1><table><tr><th>#</th><th>Κλειδαριά</th><th class="p">Τιμή</th></tr>${rows || '<tr><td colspan="3">Καμία εγγραφή.</td></tr>'}</table><script>window.onload=()=>setTimeout(()=>window.print(),300)</script></body></html>`;
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (win) { win.document.write(html); win.document.close(); }
   };
 
   const deleteLock = (id) => {
@@ -84,6 +95,7 @@ export default function LocksScreen({ locks, setLocks, onClose }) {
         <Text style={styles.label}>{editingId ? 'ΕΠΕΞΕΡΓΑΣΙΑ ΚΛΕΙΔΑΡΙΑΣ' : 'ΝΕΑ ΚΛΕΙΔΑΡΙΑ'}</Text>
         <View style={styles.inputRow}>
           <TextInput style={styles.input} placeholder="π.χ. Cisa 3 σημεία, Yale, Mottura..." value={form} onChangeText={setForm} autoCapitalize="characters" />
+          <TextInput style={styles.priceInput} placeholder="€" value={formPrice} onChangeText={setFormPrice} keyboardType="numeric" />
           <TouchableOpacity style={styles.saveBtn} onPress={saveLock}>
             <Text style={styles.saveTxt}>{editingId ? '✓' : '+'}</Text>
           </TouchableOpacity>
@@ -133,7 +145,10 @@ export default function LocksScreen({ locks, setLocks, onClose }) {
             <Text style={styles.cancelTxt}>ΑΚΥΡΟ</Text>
           </TouchableOpacity>
         )}
-        <TextInput style={styles.search} placeholder="🔍 Αναζήτηση..." value={search} onChangeText={setSearch} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <TextInput style={[styles.search, { flex: 1, marginBottom: 0 }]} placeholder="🔍 Αναζήτηση..." value={search} onChangeText={setSearch} />
+          {Platform.OS === 'web' && <TouchableOpacity style={styles.printBtn} onPress={printList}><Text style={styles.printTxt}>🖨️ ΕΚΤΥΠΩΣΗ</Text></TouchableOpacity>}
+        </View>
         <Text style={styles.count}>Σύνολο: {locks.length} κλειδαριές</Text>
         <ScrollView>
           {filtered.map((l, index) => (
@@ -147,6 +162,7 @@ export default function LocksScreen({ locks, setLocks, onClose }) {
                 </TouchableOpacity>
               </View>
               <Text style={[styles.cardName, { fontWeight: l.bold ? 'bold' : 'normal' }, getFormatStyle(l, 14)]}>{l.name}</Text>
+              {!!String(l.price || '').trim() && <Text style={styles.cardPrice}>€{l.price}</Text>}
               <View style={styles.cardBtns}>
                 <TouchableOpacity style={styles.editBtn} onPress={() => editLock(l)}>
                   <Text style={styles.editTxt}>✏️</Text>
@@ -174,6 +190,10 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: 'bold', color: '#555', marginBottom: 6 },
   inputRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   input: { flex: 1, backgroundColor: 'white', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#ddd', fontSize: 14 },
+  priceInput: { width: 70, backgroundColor: 'white', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#ddd', fontSize: 14, textAlign: 'center' },
+  printBtn: { backgroundColor: '#eef4ff', borderWidth: 1, borderColor: '#1565C0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  printTxt: { color: '#1565C0', fontWeight: 'bold', fontSize: 12 },
+  cardPrice: { fontSize: 13, fontWeight: 'bold', color: '#8B0000', marginRight: 8 },
   saveBtn: { backgroundColor: '#8B0000', borderRadius: 8, width: 48, justifyContent: 'center', alignItems: 'center' },
   saveTxt: { color: 'white', fontSize: 22, fontWeight: 'bold' },
   cancelEdit: { alignSelf: 'flex-start', marginBottom: 8 },

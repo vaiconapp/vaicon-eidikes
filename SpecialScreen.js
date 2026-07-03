@@ -1319,9 +1319,19 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const extraH = Math.max(0, (parseInt(src.hinges, 10) || 0) - 2);
     if (extraH > 0) addLink('hinges3', extraH * doors);
     if (src.kypri === 'ΝΑΙ') addLink('kypri', doors);
-    if (src.cylinder) {
-      const it = (cylinders || []).find(x => x && x.name === src.cylinder);
-      if (it && pNum(it.price) > 0 && !lines.some(l => l.label === it.name)) lines.push({ label: it.name, value: String(it.price), qty: String(doors) });
+    // Η κλειδαριά/άφαλος αποθηκεύονται με δυνατότητα ελεύθερου κειμένου (όνομα λίστας + επιπλέον),
+    // οπότε ταιριάζουμε το πιο μακρύ όνομα λίστας με το οποίο ξεκινά η τιμή του πεδίου.
+    const bestMatch = (arr, val) => {
+      const v = String(val || '').trim(); if (!v) return null;
+      return (arr || []).filter(x => x && x.name && (v === x.name || v.startsWith(x.name)))
+        .sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0))[0] || null;
+    };
+    // Κλειδαριά/άφαλος: γραμμή πάντα όταν επιλεγεί — τιμή αν υπάρχει, αλλιώς κενή (κόκκινη υπενθύμιση).
+    for (const [arr, val] of [[locks, src.lock], [cylinders, src.cylinder]]) {
+      if (!String(val || '').trim()) continue;
+      const it = bestMatch(arr, val);
+      const lbl = it ? it.name : String(val).trim();
+      if (!lines.some(l => l.label === lbl)) lines.push({ label: lbl, value: (it && pNum(it.price) > 0) ? String(it.price) : '', qty: String(doors) });
     }
     for (const nm of (src.misc || [])) {
       const it = (misc || []).find(x => x && x.name === nm);
@@ -5399,6 +5409,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                           <Text style={{fontSize:12,color:'#000',fontWeight:'600'}}>{l.name}</Text>
                           {l.type?<Text style={{fontSize:11,color:'#666'}}>{l.type}</Text>:null}
                         </View>
+                        {!!String(l.price||'').trim()&&<Text style={{fontSize:11,fontWeight:'700',color:'#8B0000',marginHorizontal:4}}>€{l.price}</Text>}
                         {(customForm.lock||'').startsWith(base)&&<Text style={{color:'#00C851',fontSize:14}}>✓</Text>}
                       </TouchableOpacity>
                     );})}
@@ -5417,6 +5428,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       <TouchableOpacity key={c.id} style={{paddingVertical:7,paddingHorizontal:9,borderBottomWidth:1,borderBottomColor:'#eee',flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}
                         onPress={()=>{setCylEditText(c.name);setCustomForm(f=>({...f,cylinder:c.name}));}}>
                         <Text style={{fontSize:12,color:'#000',fontWeight:'600',flex:1}}>{c.name}</Text>
+                        {!!String(c.price||'').trim()&&<Text style={{fontSize:11,fontWeight:'700',color:'#8B0000',marginHorizontal:4}}>€{c.price}</Text>}
                         {(customForm.cylinder||'').startsWith(c.name)&&<Text style={{color:'#00C851',fontSize:14}}>✓</Text>}
                       </TouchableOpacity>
                     ))}
