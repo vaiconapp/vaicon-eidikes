@@ -7,6 +7,8 @@ import SpecialScreen from './SpecialScreen';
 import CustomersScreen from './CustomersScreen';
 import CoatingsScreen from './CoatingsScreen';
 import LocksScreen from './LocksScreen';
+import PricedListScreen from './PricedListScreen';
+import PriceCatalogScreen from './PriceCatalogScreen';
 import ActivityScreen from './ActivityScreen';
 import SellerLogScreen from './SellerLogScreen';
 import ApprovalScreen from './ApprovalScreen';
@@ -295,10 +297,15 @@ export default function App() {
   const [customers, setCustomers] = useState([]);
   const [coatings, setCoatings] = useState([]);
   const [locks, setLocks] = useState([]);
+  const [misc, setMisc] = useState([]);
+  const [cylinders, setCylinders] = useState([]);
 
   const [showCustomers, setShowCustomers] = useState(false);
   const [showCoatings, setShowCoatings] = useState(false);
   const [showLocks, setShowLocks] = useState(false);
+  const [showMisc, setShowMisc] = useState(false);
+  const [showCylinders, setShowCylinders] = useState(false);
+  const [showPriceCatalog, setShowPriceCatalog] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [showSellerLog, setShowSellerLog] = useState(false);
   const [showApprovals, setShowApprovals] = useState(false);
@@ -573,11 +580,14 @@ export default function App() {
       if (showActivity) { setShowActivity(false); return true; }
       if (showCoatings) { setShowCoatings(false); return true; }
       if (showLocks) { setShowLocks(false); return true; }
+      if (showMisc) { setShowMisc(false); return true; }
+      if (showCylinders) { setShowCylinders(false); return true; }
+      if (showPriceCatalog) { setShowPriceCatalog(false); return true; }
       if (showCustomers) { setShowCustomers(false); return true; }
       return false;
     });
     return () => handler.remove();
-  }, [menuOpen, showActivity, showMessages, showInbox, incomingMsg, unreadPrompt, showCoatings, showLocks, showCustomers, showStats, statsAuthOpen, backupAuthOpen, restoreAuthOpen, backupSuccess, restorePayload, restoreFileError]);
+  }, [menuOpen, showActivity, showMessages, showInbox, incomingMsg, unreadPrompt, showCoatings, showLocks, showMisc, showCylinders, showPriceCatalog, showCustomers, showStats, statsAuthOpen, backupAuthOpen, restoreAuthOpen, backupSuccess, restorePayload, restoreFileError]);
 
   const downloadBlob = (text, filename) => {
     const blob = new Blob([text], { type: 'application/json' });
@@ -746,6 +756,16 @@ export default function App() {
         const data7 = await res7.json();
         if (data7) setLocks(Object.keys(data7).map(key => ({ id: key, ...data7[key] })));
       }
+      if (want('misc')) {
+        const res8 = await fetch(`${FIREBASE_URL}/misc.json`);
+        const data8 = await res8.json();
+        if (data8) setMisc(Object.keys(data8).map(key => ({ id: key, ...data8[key] })));
+      }
+      if (want('cylinders')) {
+        const res9 = await fetch(`${FIREBASE_URL}/cylinders.json`);
+        const data9 = await res9.json();
+        if (data9) setCylinders(Object.keys(data9).map(key => ({ id: key, ...data9[key] })));
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -826,6 +846,8 @@ export default function App() {
           }}
           coatings={coatings}
           locks={locks}
+          misc={misc}
+          cylinders={cylinders}
           readOnly={currentUser?.role === 'guest'}
           isForeman={myLockKey === 'USER14'}
           isAdmin={currentUser?.role === 'admin'}
@@ -862,6 +884,17 @@ export default function App() {
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowLocks(true); }}>
               <Text style={styles.menuItemText}>🔒 ΚΛΕΙΔΑΡΙΕΣ</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowCylinders(true); }}>
+              <Text style={styles.menuItemText}>🗝️ ΑΦΑΛΟΙ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowMisc(true); }}>
+              <Text style={styles.menuItemText}>📦 ΔΙΑΦΟΡΑ</Text>
+            </TouchableOpacity>
+            {currentUser?.role === 'admin' && (
+              <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#eef4ff' }]} onPress={() => { setMenuOpen(false); setShowPriceCatalog(true); }}>
+                <Text style={[styles.menuItemText, { color: '#1565C0' }]}>💶 ΤΙΜΟΚΑΤΑΛΟΓΟΣ</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowActivity(true); }}>
               <Text style={styles.menuItemText}>📜 ΙΣΤΟΡΙΚΟ ΚΙΝΗΣΕΩΝ</Text>
             </TouchableOpacity>
@@ -1193,6 +1226,18 @@ export default function App() {
 
       <Modal visible={showLocks} animationType="slide" onRequestClose={() => setShowLocks(false)}>
         <LocksScreen locks={locks} setLocks={setLocks} onClose={() => setShowLocks(false)} />
+      </Modal>
+
+      <Modal visible={showCylinders} animationType="slide" onRequestClose={() => setShowCylinders(false)}>
+        <PricedListScreen title="ΑΦΑΛΟΙ" icon="🗝️" items={cylinders} setItems={setCylinders} fbNode="cylinders" placeholder="π.χ. ISEO R-50 με 5 κλειδιά..." showFlags={false} onClose={() => setShowCylinders(false)} />
+      </Modal>
+
+      <Modal visible={showMisc} animationType="slide" onRequestClose={() => setShowMisc(false)}>
+        <PricedListScreen title="ΔΙΑΦΟΡΑ" icon="📦" items={misc} setItems={setMisc} fbNode="misc" onClose={() => setShowMisc(false)} />
+      </Modal>
+
+      <Modal visible={showPriceCatalog} animationType="slide" onRequestClose={() => setShowPriceCatalog(false)}>
+        <PriceCatalogScreen coatings={coatings} onClose={() => setShowPriceCatalog(false)} />
       </Modal>
 
       <Modal visible={adminAuthOpen} transparent animationType="fade" onRequestClose={() => setAdminAuthOpen(false)}>

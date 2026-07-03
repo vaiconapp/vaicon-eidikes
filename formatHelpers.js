@@ -119,6 +119,23 @@ export const suggestNextOrderNo = (presentNos = [], ledgerNos = [], startAt = 1)
 // ── Ομαδοποίηση πορτών ίδιου πελάτη: βασικός αριθμός + παύλα-σειρά (145-1, 145-2, …) ──
 export const groupOrderNo = (base, seq) => `${String(base).trim()}-${seq}`;
 
+// Βασικός αριθμός χωρίς παύλα-σειρά ("4521-2" → "4521")
+export const splitBaseNo = (orderNo) => String(orderNo).split('-')[0].trim();
+
+// Επόμενη ελεύθερη παύλα-σειρά κάτω από base (π.χ. base "4521" με ["4521-1"] → 2)
+export const nextGroupSuffix = (base, nos = []) => {
+  const b = String(base).trim();
+  let max = 0;
+  for (const no of nos) {
+    const s = String(no);
+    if (s.startsWith(b + '-')) {
+      const n = parseInt(s.slice(b.length + 1), 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+  }
+  return max + 1;
+};
+
 // Ομαδοποίηση υποβολών πωλητή σε εγγραφές (μεμονωμένη ή ομάδα κατά groupId),
 // διατηρώντας τη σειρά εισόδου· οι πόρτες ομάδας ταξινομούνται κατά groupSeq.
 export const groupSubmissions = (list = []) => {

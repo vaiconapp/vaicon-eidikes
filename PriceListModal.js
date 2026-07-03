@@ -8,6 +8,8 @@ export const priceListTotal = (items = []) =>
 
 export const parseNum = (v) => parseFloat(String(v ?? '').replace(',', '.')) || 0;
 export const priceFinalTotal = (items = [], discount = 0) => priceListTotal(items) - parseNum(discount);
+export const priceCatalogTotal = (items = []) =>
+  (items || []).reduce((s, it) => s + (String(it?.def ?? '').trim() !== '' ? parseNum(it.def) : parseNum(it.value)) * rowQty(it), 0);
 
 const fmtEuro = (n) => `${(Math.round(n * 100) / 100).toFixed(2).replace('.', ',')}€`;
 const pad = (n) => String(n).padStart(2, '0');
@@ -28,6 +30,7 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
       label: it.label || '',
       value: it.value != null ? String(it.value) : '',
       qty: (it.qty != null && String(it.qty).trim() !== '') ? String(it.qty) : '',
+      def: it.def != null ? String(it.def) : '',
     }));
     setItems((startLocked || readOnly) ? (seed.length ? seed : [{ label: '', value: '', qty: '' }]) : withBlank(seed));
     setDiscount(initialDiscount != null && initialDiscount !== '' ? String(initialDiscount) : '');
@@ -60,10 +63,11 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
   };
 
   const clean = items
-    .map(it => ({ label: String(it.label || '').trim(), value: String(it.value || '').trim(), qty: String(it.qty || '').trim() }))
+    .map(it => { const o = { label: String(it.label || '').trim(), value: String(it.value || '').trim(), qty: String(it.qty || '').trim() }; if (String(it.def ?? '').trim() !== '') o.def = String(it.def).trim(); return o; })
     .filter(it => it.label || it.value);
   const subtotal = priceListTotal(items);
   const total = subtotal - parseNum(discount);
+  const adjustment = items.reduce((s, it) => String(it.def ?? '').trim() === '' ? s : s + (parseNum(it.value) - parseNum(it.def)) * rowQty(it), 0);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -74,11 +78,14 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
             <TouchableOpacity onPress={onClose}><Text style={styles.close}>✕</Text></TouchableOpacity>
           </View>
           {locked ? <Text style={styles.lockNote}>{readOnly ? '🔒 Μόνο προβολή (πουλημένη παραγγελία)' : '🔒 Κλειδωμένο — πάτα «Επεξεργασία» για αλλαγές'}</Text> : null}
-          <ScrollView style={[styles.itemsBox, { maxHeight: 340 }]} contentContainerStyle={{ padding: 10 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={[styles.itemsBox, { maxHeight: 480 }]} contentContainerStyle={{ padding: 10 }} keyboardShouldPersistTaps="handled">
             {items.map((it, i) => {
               const unitVal = parseFloat(String(it.value || '').replace(',', '.')) || 0;
               const qty = rowQty(it);
               const rowTotal = unitVal * qty;
+              const missingPrice = !!String(it.label || '').trim() && !String(it.value || '').trim();
+              const defNum = parseNum(it.def);
+              const changed = String(it.def ?? '').trim() !== '' && String(it.def).trim() !== String(it.value ?? '').trim();
               return (
                 <View key={i} style={styles.row}>
                   <TextInput
@@ -93,19 +100,22 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
                     blurOnSubmit={false}
                     onSubmitEditing={() => focusKey(`${i}-value`)}
                   />
-                  <TextInput
-                    ref={el => rowRefs.current[`${i}-value`] = el}
-                    editable={!locked}
-                    style={[styles.valueInput, locked && styles.lockedInput]}
-                    placeholder="0"
-                    placeholderTextColor="#aaa"
-                    keyboardType="numeric"
-                    value={it.value}
-                    onChangeText={t => setRow(i, 'value', t)}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => focusKey(`${i}-qty`)}
-                  />
+                  <View style={styles.valueCell}>
+                    {changed ? <Text style={[styles.defTxt, unitVal < defNum ? styles.defDown : styles.defUp]} numberOfLines={1}>{String(it.def).replace('.', ',')}</Text> : null}
+                    <TextInput
+                      ref={el => rowRefs.current[`${i}-value`] = el}
+                      editable={!locked}
+                      style={[styles.valueInput, locked && styles.lockedInput, missingPrice && styles.valueMissing]}
+                      placeholder="0"
+                      placeholderTextColor="#aaa"
+                      keyboardType="numeric"
+                      value={it.value}
+                      onChangeText={t => setRow(i, 'value', t)}
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      onSubmitEditing={() => focusKey(`${i}-qty`)}
+                    />
+                  </View>
                   <Text style={styles.opSign}>×</Text>
                   <TextInput
                     ref={el => rowRefs.current[`${i}-qty`] = el}
@@ -129,9 +139,15 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
           </ScrollView>
           <View style={styles.summary}>
             <View style={styles.sumRow}>
-              <Text style={styles.sumLabel}>Σύνολο γραμμών (προ-ΦΠΑ)</Text>
-              <Text style={styles.sumVal}>{fmtEuro(subtotal)}</Text>
+              <Text style={styles.sumLabel}>Σύνολο προ επιβαρύνσεων/εκπτώσεων</Text>
+              <Text style={styles.sumVal}>{fmtEuro(subtotal - adjustment)}</Text>
             </View>
+            {Math.abs(adjustment) > 0.005 ? (
+              <View style={styles.sumRow}>
+                <Text style={styles.sumLabel}>Εκπτώσεις / Επιβαρύνσεις</Text>
+                <Text style={[styles.sumVal, adjustment < 0 ? styles.defDown : styles.defUp]}>{adjustment < 0 ? '−' : '+'}{fmtEuro(Math.abs(adjustment))}</Text>
+              </View>
+            ) : null}
             <View style={styles.sumRow}>
               <Text style={styles.sumLabel}>Έκπτωση</Text>
               <View style={styles.discountWrap}>
@@ -189,7 +205,7 @@ export default function PriceListModal({ visible, initialItems = [], initialDisc
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 16 },
-  panel: { width: '100%', maxWidth: 460, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 6, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  panel: { width: '100%', maxWidth: 640, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 6, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#8B0000', paddingHorizontal: 14, paddingVertical: 10 },
   headerTxt: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   close: { color: '#fff', fontSize: 20, fontWeight: 'bold', paddingHorizontal: 4 },
@@ -197,7 +213,12 @@ const styles = StyleSheet.create({
   lockNote: { fontSize: 12, color: '#8B0000', fontWeight: 'bold', textAlign: 'center', paddingTop: 8 },
   lockedInput: { backgroundColor: '#f3f3f3', color: '#333', borderColor: '#e5e5e5' },
   labelInput: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, fontSize: 13 },
+  valueCell: { width: 112, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
   valueInput: { width: 66, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 7, fontSize: 13, textAlign: 'right' },
+  valueMissing: { borderColor: '#c62828', borderWidth: 1.5, backgroundColor: '#ffebee' },
+  defTxt: { fontSize: 11, fontWeight: '800' },
+  defDown: { color: '#c62828' },
+  defUp: { color: '#2e7d32' },
   qtyInput: { width: 44, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 7, fontSize: 13, textAlign: 'center' },
   opSign: { fontSize: 14, color: '#555', fontWeight: 'bold' },
   rowResult: { width: 72, fontSize: 13, fontWeight: 'bold', color: '#2e7d32', textAlign: 'right' },
