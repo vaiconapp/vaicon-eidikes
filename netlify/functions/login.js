@@ -65,7 +65,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { ok: false });
   let p; try { p = JSON.parse(event.body || '{}'); } catch { return json(400, { ok: false, error: 'bad json' }); }
   const { username, password, code } = p;
-  if (!username || !password || !code) return json(400, { ok: false, error: 'Λείπουν στοιχεία.' });
+  if (!username || !password) return json(400, { ok: false, error: 'Λείπουν στοιχεία.' });
 
   const email = toEmail(username);
   const role = email.startsWith('admin') ? 'admin' : email.startsWith('guest') ? 'guest' : 'user';
