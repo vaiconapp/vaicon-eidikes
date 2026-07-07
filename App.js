@@ -17,6 +17,7 @@ import SellerSubmissionsScreen from './SellerSubmissionsScreen';
 import MessagesScreen from './MessagesScreen';
 import StatsScreen from './StatsScreen';
 import { APP_VERSION } from './version';
+import { IS_DEV as IS_DEV_TF, start2FA, verify2FA, loginDirect, verifyPasswordOnly } from './twoFactor';
 
 // DEV (expo start / localhost) → δοκιμαστική βάση vaicon-test
 // PROD (deployed build)         → κανονική βάση vaicon-eidikes
@@ -42,6 +43,13 @@ const isSellerEmail = (e) => String(e || '').toLowerCase().startsWith('seller');
 const APP_USERS = ['USER 10', 'USER 12', 'USER 14', 'USER 16', 'USER 18', 'SELLER 1', 'SELLER 2', 'SELLER 3', 'SELLER 4', 'SELLER 5', 'GUEST', 'ADMIN'];
 const SELLERS = ['SELLER 1', 'SELLER 2', 'SELLER 3', 'SELLER 4', 'SELLER 5'];
 const lockKey = (u) => String(u || '').toUpperCase().replace(/\s+/g, '');
+
+// 2FA: όλοι πλην διαχειριστή/guest χρειάζονται κωδικό μιας χρήσης σε φρέσκο login.
+const TWOFA_SS = 'vaicon_2fa_ok';
+const needsTwoFactor = (u) => !!u && u.role !== 'admin' && u.role !== 'guest';
+const twofaSessionOk = (u) => { try { return sessionStorage.getItem(TWOFA_SS) === lockKey(u.username); } catch { return false; } };
+const markTwofa = (u) => { try { sessionStorage.setItem(TWOFA_SS, lockKey(u.username)); } catch {} };
+const clearTwofa = () => { try { sessionStorage.removeItem(TWOFA_SS); } catch {} };
 
 // Καρτέλες με ελεγχόμενα δικαιώματα ανά χρήστη (view = hide, edit = readonly) — Τυποποιημένες
 const RIGHT_TABS = [
@@ -147,6 +155,17 @@ async function firebaseSignIn(email, password) {
   return data;
 }
 
+async function exchangeCustomToken(customToken) {
+  const res = await rawFetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${FIREBASE_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.idToken) throw new Error(data?.error?.message || 'TOKEN_EXCHANGE_FAILED');
+  return data;
+}
+
 const isRemembered = () => {
   if (Platform.OS !== 'web') return false;
   try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
@@ -183,18 +202,44 @@ function LoginScreen({ onSuccess, locked = false }) {
     if (!code) return;
     if (locked) {
       setBusy(true);
-      try { const u = await firebaseSignIn('admin' + USER_DOMAIN, code); saveTokens(u.idToken, u.refreshToken, u.expiresIn); onSuccess(); }
-      catch { fail('Λάθος κωδικός διαχειριστή.'); }
+      try {
+        if (IS_DEV_TF) {
+          const u = await firebaseSignIn('admin' + USER_DOMAIN, code);
+          saveTokens(u.idToken, u.refreshToken, u.expiresIn);
+        } else {
+          const res = await loginDirect('ADMIN', code);
+          if (!res.ok) { fail(res.error || 'Λάθος κωδικός.'); return; }
+          const tok = await exchangeCustomToken(res.customToken);
+          saveTokens(tok.idToken, tok.refreshToken, tok.expiresIn);
+        }
+        onSuccess();
+      } catch { fail('Λάθος κωδικός διαχειριστή.'); }
       finally { setBusy(false); }
       return;
     }
     if (!username.trim()) { fail('Δώστε όνομα χρήστη.'); return; }
     const email = toEmail(username);
+    const ukey = username.trim().toUpperCase();
     setBusy(true);
     try {
-      const u = await firebaseSignIn(email, code);
-      saveTokens(u.idToken, u.refreshToken, u.expiresIn);
-      onSuccess({ username: username.trim().toUpperCase(), role: roleForEmail(email), email, uid: u.localId });
+      if (IS_DEV_TF) {
+        const u = await firebaseSignIn(email, code);
+        saveTokens(u.idToken, u.refreshToken, u.expiresIn);
+        onSuccess({ username: ukey, role: roleForEmail(email), email, uid: u.localId });
+      } else {
+        const isAdminOrGuest = ukey.startsWith('ADMIN') || ukey.startsWith('GUEST');
+        if (isAdminOrGuest) {
+          const res = await loginDirect(ukey, code);
+          if (!res.ok) { fail(res.error || 'Λάθος κωδικός.'); return; }
+          const tok = await exchangeCustomToken(res.customToken);
+          saveTokens(tok.idToken, tok.refreshToken, tok.expiresIn);
+          onSuccess({ username: ukey, role: res.role, email: res.email });
+        } else {
+          const r = await start2FA(ukey, code);
+          if (!r.ok) { fail(r.error || 'Λάθος κωδικός.'); return; }
+          onSuccess({ username: ukey, role: roleForEmail(email), email, _password: code });
+        }
+      }
     } catch {
       fail('Λάθος όνομα ή κωδικός.');
     } finally {
@@ -247,6 +292,85 @@ function LoginScreen({ onSuccess, locked = false }) {
   );
 }
 
+function TwoFactorScreen({ user, onSuccess, onLogout }) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [devCode, setDevCode] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(300);
+
+  const send = async () => {
+    setError(''); setBusy(true); setDevCode(null); setTimeLeft(300);
+    const r = await start2FA(user.username, user._password || '');
+    setBusy(false);
+    if (r.ok) setDevCode(r.devCode || null);
+    else setError(r.error || 'Αποτυχία αποστολής κωδικού.');
+  };
+  useEffect(() => { send(); }, []);
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const t = setTimeout(() => setTimeLeft(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [timeLeft]);
+
+  const submit = async () => {
+    if (busy || code.trim().length < 6) return;
+    setError(''); setBusy(true);
+    const r = await verify2FA(user.username, code, user._password || '');
+    setBusy(false);
+    if (r.ok) onSuccess(r);
+    else { setError(r.error || 'Λάθος κωδικός.'); setCode(''); }
+  };
+
+  const mm = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+  const ss = String(timeLeft % 60).padStart(2, '0');
+  const expired = timeLeft <= 0;
+
+  return (
+    <View style={loginStyles.bg}>
+      <View style={loginStyles.card}>
+        <View style={loginStyles.logoBox}>
+          <Text style={loginStyles.logoText}>VAICON</Text>
+          <Text style={loginStyles.logoSub}>Κωδικός επιβεβαίωσης</Text>
+        </View>
+        <Text style={{ fontSize: 14, color: '#555', textAlign: 'center', marginBottom: 8, lineHeight: 20 }}>
+          Καλέστε τον διαχειριστή συστήματος.{'\n'}Ζητήστε τον εξαψήφιο κωδικό και γράψτε τον εδώ.
+        </Text>
+        <Text style={{ fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 14, color: expired ? '#c62828' : timeLeft < 60 ? '#e65100' : '#2e7d32' }}>
+          ⏱ {expired ? 'Έληξε — ζητήστε νέο' : `${mm}:${ss}`}
+        </Text>
+        {devCode ? (
+          <View style={{ backgroundColor: '#fff8e1', borderColor: '#ffb300', borderWidth: 2, borderRadius: 10, padding: 12, marginBottom: 14, alignItems: 'center' }}>
+            <Text style={{ fontSize: 12, color: '#a67c00' }}>ΔΟΚΙΜΗ (τοπικά) — κωδικός:</Text>
+            <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#a67c00', letterSpacing: 6 }}>{devCode}</Text>
+          </View>
+        ) : null}
+        <View style={loginStyles.inputRow}>
+          <TextInput
+            style={[loginStyles.input, { textAlign: 'center' }, error && loginStyles.inputError]}
+            placeholder="______"
+            placeholderTextColor="#ccc"
+            keyboardType="number-pad"
+            maxLength={6}
+            value={code}
+            onChangeText={v => { setCode(v.replace(/\D/g, '')); setError(''); }}
+            onSubmitEditing={submit}
+            autoFocus
+          />
+        </View>
+        {error ? <Text style={loginStyles.errorTxt}>❌ {error}</Text> : null}
+        <TouchableOpacity style={[loginStyles.btn, busy && { opacity: 0.6 }]} onPress={submit} disabled={busy}>
+          <Text style={loginStyles.btnTxt}>{busy ? '⏳ ΕΛΕΓΧΟΣ...' : '✓ ΕΠΙΒΕΒΑΙΩΣΗ'}</Text>
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 }}>
+          <TouchableOpacity onPress={send} disabled={busy}><Text style={{ color: '#1565C0', fontWeight: 'bold', fontSize: 13 }}>↻ Νέος κωδικός</Text></TouchableOpacity>
+          <TouchableOpacity onPress={onLogout}><Text style={{ color: '#999', fontSize: 13 }}>Ακύρωση</Text></TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const loginStyles = StyleSheet.create({
   bg: { flex: 1, backgroundColor: '#8B0000', justifyContent: 'center', alignItems: 'center' },
   card: { backgroundColor: 'white', borderRadius: 20, padding: 32, width: '90%', maxWidth: 400, elevation: 10 },
@@ -286,8 +410,10 @@ function PwdInput({ value, onChangeText, error, onSubmit, autoFocus = true }) {
 }
 
 export default function App() {
+  const [pendingLogin, setPendingLogin] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(isRemembered());
   const [currentUser, setCurrentUser] = useState(loadUser());
+  const [twofaPassed, setTwofaPassed] = useState(() => { const u = loadUser(); return u ? (!needsTwoFactor(u) || twofaSessionOk(u)) : false; });
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -346,6 +472,7 @@ export default function App() {
   const [tokenVersion, setTokenVersion] = useState(0);
   const [lockedUsers, setLockedUsers] = useState({});
   const [ownerOverride, setOwnerOverride] = useState(false);
+  const [twofaPending, setTwofaPending] = useState({});
   const [adminAuthOpen, setAdminAuthOpen] = useState(false);
   const [adminAuthPwd, setAdminAuthPwd] = useState('');
   const [adminAuthError, setAdminAuthError] = useState(false);
@@ -457,7 +584,7 @@ export default function App() {
   // Φόρτωση ονομάτων χρηστών στο login (admin), ώστε να εμφανίζονται αμέσως δίπλα στις
   // παραγγελίες χωρίς να χρειάζεται πρώτα να ανοίξει το panel Διαχειριστή ή τα Μηνύματα.
   useEffect(() => {
-    if (!isLoggedIn || currentUser?.role !== 'admin') return;
+    if (!isLoggedIn || isSellerEmail(currentUser?.email) || currentUser?.role === 'guest') return;
     let alive = true;
     (async () => {
       try {
@@ -487,6 +614,7 @@ export default function App() {
     if (!isLoggedIn) return;
     const load = async () => {
       try { const r = await fetch(`${FIREBASE_URL}/approval_rights.json`); setApprovalRights((await r.json()) || {}); } catch {}
+      if (isSellerEmail(currentUser?.email)) { setPendingApprovalCount(0); return; }
       try {
         const r = await fetch(`${FIREBASE_URL}/seller_submissions.json`); const d = await r.json();
         setPendingApprovalCount(d ? Object.values(d).filter(s => s.status === 'PENDING' && s.orderType === 'ΕΙΔΙΚΗ').length : 0);
@@ -712,9 +840,11 @@ export default function App() {
     let finished = false;
     const endLoad = () => { if (!finished) { finished = true; setLoading(false); } };
     const guard = silent ? null : setTimeout(endLoad, 20000);
+    // Πωλητής: φέρνει από τη βάση ΜΟΝΟ τα δικά του (seller == sellerKey).
+    const sellerQ = (isSeller && sellerKey) ? `?orderBy=${encodeURIComponent('"seller"')}&equalTo=${encodeURIComponent(`"${sellerKey}"`)}` : '';
     try {
       if (want('special_orders')) {
-        const resS = await fetch(`${FIREBASE_URL}/special_orders.json`);
+        const resS = await fetch(`${FIREBASE_URL}/special_orders.json${sellerQ}`);
         const dataS = await resS.json();
         if (dataS) {
           const fixOrder = (o) => ({
@@ -736,13 +866,13 @@ export default function App() {
         }
       }
       if (want('special_quotes')) {
-        const resQ = await fetch(`${FIREBASE_URL}/special_quotes.json`);
+        const resQ = await fetch(`${FIREBASE_URL}/special_quotes.json${sellerQ}`);
         const dataQ = await resQ.json();
         const fixQ = (o) => ({ ...o, stavera: o.stavera ? (Array.isArray(o.stavera) ? o.stavera : Object.values(o.stavera)) : [], coatings: o.coatings ? (Array.isArray(o.coatings) ? o.coatings : Object.values(o.coatings)) : [] });
         setSpecialQuotes(dataQ ? Object.keys(dataQ).map(key => fixQ({ id: key, ...dataQ[key] })) : []);
       }
       if (want('customers')) {
-        const res4 = await fetch(`${FIREBASE_URL}/customers.json`);
+        const res4 = await fetch(`${FIREBASE_URL}/customers.json${sellerQ}`);
         const data4 = await res4.json();
         if (data4) setCustomers(Object.keys(data4).map(key => ({ id: key, ...data4[key] })));
       }
@@ -774,9 +904,57 @@ export default function App() {
     }
   };
 
-  const verifyAdminCode = async (code) => {
-    try { await firebaseSignIn('admin' + USER_DOMAIN, code); return true; } catch { return false; }
+  // ΕΡΓΑΛΕΙΟ ΜΙΑΣ ΧΡΗΣΗΣ: σφραγίδα πωλητή στις παλιές ειδικές παραγγελίες/προσφορές (από τον πελάτη τους). Αφαιρείται μετά.
+  const stampSellersOnOldOrders = async () => {
+    if (Platform.OS === 'web' && !window.confirm('Να μπει η σφραγίδα πωλητή σε όλες τις παλιές ειδικές παραγγελίες & προσφορές;')) return;
+    const [ordRaw, qRaw, custRaw] = await Promise.all([
+      fetch(`${FIREBASE_URL}/special_orders.json`).then(r => r.json()).catch(() => null),
+      fetch(`${FIREBASE_URL}/special_quotes.json`).then(r => r.json()).catch(() => null),
+      fetch(`${FIREBASE_URL}/customers.json`).then(r => r.json()).catch(() => null),
+    ]);
+    const custs = custRaw ? Object.keys(custRaw).map(k => ({ id: k, ...custRaw[k] })) : [];
+    const sellerOf = (o) => {
+      const c = o.customerId ? custs.find(x => x.id === o.customerId) : custs.find(x => String(x.name) === String(o.customer));
+      return c?.seller || '';
+    };
+    let total = 0, updated = 0;
+    const run = async (node, raw) => {
+      for (const key of Object.keys(raw || {})) {
+        total++;
+        const seller = sellerOf(raw[key]);
+        if ((raw[key].seller || '') !== seller) {
+          try { await fetch(`${FIREBASE_URL}/${node}/${key}.json`, { method: 'PATCH', body: JSON.stringify({ seller }) }); updated++; } catch {}
+        }
+      }
+    };
+    await run('special_orders', ordRaw);
+    await run('special_quotes', qRaw);
+    const msg = `Ελέγχθηκαν ${total}, ενημερώθηκαν ${updated}.`;
+    if (Platform.OS === 'web') window.alert(`Σφραγίδα πωλητή\n${msg}`); else Alert.alert('Σφραγίδα πωλητή', msg);
+    await fetchData();
   };
+
+  const verifyAdminCode = async (code) => {
+    if (IS_DEV_TF) {
+      try { await firebaseSignIn('admin' + USER_DOMAIN, code); return true; } catch { return false; }
+    }
+    const res = await verifyPasswordOnly('ADMIN', code);
+    return res.ok;
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn || currentUser?.role !== 'admin') return;
+    const poll = async () => {
+      try {
+        const r = await fetch(`${FIREBASE_URL}/twofa_pending.json`);
+        const d = await r.json();
+        setTwofaPending(d && typeof d === 'object' ? d : {});
+      } catch {}
+    };
+    poll();
+    const iv = setInterval(poll, 5000);
+    return () => clearInterval(iv);
+  }, [isLoggedIn, currentUser]);
   const tryOpenStats = async () => {
     if (await verifyAdminCode(statsAuthPwd)) { setStatsAuthOpen(false); setStatsAuthPwd(''); setStatsAuthError(false); setShowStats(true); }
     else { setStatsAuthError(true); setStatsAuthPwd(''); setTimeout(() => setStatsAuthError(false), 2000); }
@@ -790,7 +968,35 @@ export default function App() {
     else { setBrAuthError(true); setBrAuthPwd(''); setTimeout(() => setBrAuthError(false), 2000); }
   };
 
-  if (!isLoggedIn) return <LoginScreen onSuccess={(u) => { rememberLogin(u); setCurrentUser(u); setIsLoggedIn(true); }} />;
+  if (!isLoggedIn && !pendingLogin)
+    return <LoginScreen onSuccess={(u) => {
+      clearTwofa();
+      if (u && u._password) {
+        setPendingLogin(u);
+      } else {
+        rememberLogin(u); setCurrentUser(u); setTwofaPassed(!needsTwoFactor(u)); setIsLoggedIn(true);
+      }
+    }} />;
+
+  if (pendingLogin)
+    return <TwoFactorScreen user={pendingLogin}
+      onSuccess={async (r) => {
+        if (r && r.customToken) {
+          const tok = await exchangeCustomToken(r.customToken);
+          saveTokens(tok.idToken, tok.refreshToken, tok.expiresIn);
+          const u = { username: pendingLogin.username, role: r.role || pendingLogin.role, email: r.email || pendingLogin.email };
+          rememberLogin(u); setCurrentUser(u); setTwofaPassed(true); setIsLoggedIn(true);
+        } else {
+          markTwofa(pendingLogin); setTwofaPassed(true);
+        }
+        setPendingLogin(null);
+      }}
+      onLogout={() => { setPendingLogin(null); }} />;
+
+  if (isLoggedIn && currentUser && needsTwoFactor(currentUser) && !twofaPassed)
+    return <TwoFactorScreen user={currentUser}
+      onSuccess={(r) => { markTwofa(currentUser); setTwofaPassed(true); }}
+      onLogout={() => { clearTwofa(); setTwofaPassed(false); forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); }} />;
   if (amLocked) return <LoginScreen locked onSuccess={() => { const u = { username: 'ADMIN', role: 'admin', email: null }; rememberLogin(u); setCurrentUser(u); setOwnerOverride(true); }} />;
   if (loading) return (
     <View style={styles.loading}>
@@ -908,6 +1114,9 @@ export default function App() {
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#eef4ff' }]} onPress={() => { setMenuOpen(false); setShowApprovalRights(true); }}>
               <Text style={[styles.menuItemText, { color: '#1565C0' }]}>✅ ΕΓΚΡΙΣΕΙΣ ΠΑΡΑΓΓΕΛΙΩΝ</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff4e6' }]} onPress={() => { setMenuOpen(false); stampSellersOnOldOrders(); }}>
+              <Text style={[styles.menuItemText, { color: '#E65100' }]}>🏷 ΣΦΡΑΓΙΔΑ ΠΩΛΗΤΗ (μία φορά)</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#eef4ff' }]} onPress={() => { setMenuOpen(false); setShowMessages(true); }}>
               <Text style={[styles.menuItemText, { color: '#1565C0' }]}>✉️ ΜΗΝΥΜΑΤΑ</Text>
             </TouchableOpacity>
@@ -920,7 +1129,7 @@ export default function App() {
               <Text style={styles.menuItemText}>🔄 ΑΝΑΝΕΩΣΗ</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.menuItem, { backgroundColor: '#fff0f0', marginTop: 12 }]} onPress={() => {
-              const doLogout = () => { forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); setMenuOpen(false); setAdminUnlocked(false); };
+              const doLogout = () => { clearTwofa(); setTwofaPassed(false); forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); setMenuOpen(false); setAdminUnlocked(false); };
               if (Platform.OS === 'web') { if (window.confirm("Θέλεις να αποσυνδεθείς;")) doLogout(); }
               else Alert.alert("🔐 Αποσύνδεση", "Θέλεις να αποσυνδεθείς;", [
                 { text: "ΑΚΥΡΟ", style: "cancel" },
@@ -942,7 +1151,7 @@ export default function App() {
       </Modal>
 
       <Modal visible={showApprovals} animationType="slide" onRequestClose={() => setShowApprovals(false)}>
-        <ApprovalScreen onClose={() => setShowApprovals(false)} currentUserName={currentUser?.username ? (userLabels[lockKey(currentUser.username)] || currentUser.username) : ''} resolveLabel={(k) => userLabels[k] || (SELLERS.find(s => lockKey(s) === k) || k)} coatings={coatings} locks={locks} />
+        <ApprovalScreen onClose={() => setShowApprovals(false)} currentUserName={currentUser?.username ? (userLabels[lockKey(currentUser.username)] || currentUser.username) : ''} resolveLabel={(k) => userLabels[k] || (SELLERS.find(s => lockKey(s) === k) || k)} coatings={coatings} locks={locks} customers={customers} onOpenSubmission={(sub) => { setShowApprovals(false); setEditSubmission({ ...sub, _approve: true }); }} />
       </Modal>
 
       <Modal visible={showApprovalHistory} animationType="slide" onRequestClose={() => setShowApprovalHistory(false)}>
@@ -1258,6 +1467,28 @@ export default function App() {
           </View>
         </View>
       </Modal>
+
+      {/* 2FA PENDING — popup για τον admin */}
+      {currentUser?.role === 'admin' && Object.keys(twofaPending).length > 0 && (
+        <View style={{ position: 'absolute', bottom: 80, right: 16, zIndex: 9999, maxWidth: 300 }}>
+          {Object.entries(twofaPending).map(([ukey, rec]) => {
+            if (!rec) return null;
+            const secs = Math.max(0, Math.floor(((rec.exp || 0) - Date.now()) / 1000));
+            if (secs <= 0) return null;
+            const tm = String(Math.floor(secs / 60)).padStart(2, '0');
+            const ts = String(secs % 60).padStart(2, '0');
+            return (
+              <View key={ukey} style={{ backgroundColor: '#1a1a2e', borderRadius: 12, padding: 14, marginTop: 8, borderWidth: 2, borderColor: '#ffb300', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 8, elevation: 10 }}>
+                <Text style={{ color: '#ffb300', fontWeight: 'bold', fontSize: 12, marginBottom: 4 }}>🔐 ΑΙΤΗΜΑ ΕΙΣΟΔΟΥ</Text>
+                <Text style={{ color: '#fff', fontSize: 13, marginBottom: 6 }}>{decodeURIComponent(ukey)} ζητά είσοδο</Text>
+                <Text style={{ color: '#ffb300', fontSize: 30, fontWeight: 'bold', letterSpacing: 8, textAlign: 'center' }}>{rec.code}</Text>
+                <Text style={{ color: secs < 60 ? '#ff7043' : '#81c784', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginTop: 6 }}>⏱ {tm}:{ts}</Text>
+                <Text style={{ color: '#aaa', fontSize: 10, textAlign: 'center', marginTop: 2 }}>Πείτε τον κωδικό στον χρήστη</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       <Modal visible={adminPanelOpen} transparent animationType="fade" onRequestClose={() => setAdminPanelOpen(false)}>
         <View style={statsAuthStyles.overlay}>

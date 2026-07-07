@@ -13,7 +13,8 @@ alwaysApply: true
 ## Dev / Prod
 - `__DEV__` (μεταβλητή `IS_DEV`) ελέγχει πού δείχνει η βάση.
 - **Dev**: και τα 3 apps χτυπούν την ΙΔΙΑ βάση `vaicon-test`.
-- **Prod**: κάθε app έχει ΔΙΚΗ του βάση (vaiconcloud / vaicon-eidikes / vaicon-installations).
+- **Prod**: και τα 3 apps χτυπούν την ΙΔΙΑ ζωντανή βάση `vaicon-eidikes` (κοινή/merged, όχι ξεχωριστές). Πηγή αλήθειας: `firebaseConfig.js` (app), `App.js` (eidikes), `fbUtils.js` (installations).
+- **Auth**: ενεργό (`useAuth=true`) σε dev ΚΑΙ prod — ο καθένας μπαίνει με δικό του email+κωδικό.
 - Μην αγγίζεις την παραγωγή — οι αλλαγές δοκιμάζονται μόνο στο dev/`vaicon-test`.
 
 ## ΚΡΙΤΙΚΗ ΠΑΓΙΔΑ: εξάντληση συνδέσεων browser (μην ξαναχαθεί χρόνος εδώ)

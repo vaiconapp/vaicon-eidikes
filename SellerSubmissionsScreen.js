@@ -15,7 +15,8 @@ export default function SellerSubmissionsScreen({ sellerKey, onEditSubmission, c
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${FIREBASE_URL}/seller_submissions.json`);
+      const q = sellerKey ? `?orderBy=${encodeURIComponent('"submittedBy"')}&equalTo=${encodeURIComponent(`"${sellerKey}"`)}` : '';
+      const res = await fetch(`${FIREBASE_URL}/seller_submissions.json${q}`);
       const data = await res.json();
       const list = data ? Object.keys(data).map(k => ({ _sid: k, ...data[k] })) : [];
       const mine = list.filter(s => s.submittedBy === sellerKey && s.orderType === 'ΕΙΔΙΚΗ');
@@ -63,13 +64,16 @@ export default function SellerSubmissionsScreen({ sellerKey, onEditSubmission, c
         {isApproved ? <Text style={styles.approvedTag}>✅ Εγκρίθηκε{sub.approvedAt ? `: ${fmtDateTime(sub.approvedAt)}` : ''}{sub.approvedOrderNo ? ` — Νο ${sub.approvedOrderNo}` : ''}{sub.approvedBy ? ` · ${sub.approvedBy}` : ''}</Text>
           : isRejected ? <Text style={styles.rejectedTag}>↩️ Απορρίφθηκε{sub.rejectedAt ? `: ${fmtDateTime(sub.rejectedAt)}` : ''}{sub.rejectedBy ? ` · ${sub.rejectedBy}` : ''}</Text>
           : <Text style={styles.pendingTag}>⏳ Αναμονή έγκρισης</Text>}
+        {isApproved && sub.approvedPrice != null ? <Text style={styles.priceTag}>💶 Τιμή: {Number(sub.approvedPrice).toFixed(2).replace('.', ',')}€</Text> : null}
       </View>
-      <View style={{ gap: 8, justifyContent: 'center' }}>
-        {!isApproved && onEditSubmission ? (
-          <TouchableOpacity style={styles.editBtn} onPress={() => onEditSubmission(sub)}><Text style={styles.btnTxt}>✏️ Διόρθωση</Text></TouchableOpacity>
-        ) : null}
-        <TouchableOpacity style={styles.delBtn} onPress={() => del(sub)}><Text style={styles.btnTxt}>🗑 Διαγραφή</Text></TouchableOpacity>
-      </View>
+      {!isApproved ? (
+        <View style={{ gap: 8, justifyContent: 'center' }}>
+          {onEditSubmission ? (
+            <TouchableOpacity style={styles.editBtn} onPress={() => onEditSubmission(sub)}><Text style={styles.btnTxt}>✏️ Διόρθωση</Text></TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={styles.delBtn} onPress={() => del(sub)}><Text style={styles.btnTxt}>🗑 Διαγραφή</Text></TouchableOpacity>
+        </View>
+      ) : null}
     </View>
     );
   };
@@ -104,6 +108,7 @@ const styles = StyleSheet.create({
   pendingTag: { fontSize: 12, color: '#e65100', fontWeight: 'bold', marginTop: 4 },
   timeTag: { fontSize: 12, color: '#555', marginTop: 4 },
   approvedTag: { fontSize: 13, color: '#2e7d32', fontWeight: 'bold', marginTop: 4 },
+  priceTag: { alignSelf: 'flex-start', fontSize: 14, color: '#1b5e20', fontWeight: 'bold', backgroundColor: '#e8f5e9', borderColor: '#2e7d32', borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginTop: 4 },
   rejectedTag: { fontSize: 12, color: '#c62828', fontWeight: 'bold', marginTop: 4 },
   editBtn: { backgroundColor: '#1565C0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, alignItems: 'center', minWidth: 110 },
   delBtn: { backgroundColor: '#b71c1c', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, alignItems: 'center', minWidth: 110 },
