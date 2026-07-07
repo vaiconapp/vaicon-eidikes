@@ -985,7 +985,7 @@ export default function App() {
           const tok = await exchangeCustomToken(r.customToken);
           saveTokens(tok.idToken, tok.refreshToken, tok.expiresIn);
           const u = { username: pendingLogin.username, role: r.role || pendingLogin.role, email: r.email || pendingLogin.email };
-          rememberLogin(u); setCurrentUser(u); setTwofaPassed(true); setIsLoggedIn(true);
+          rememberLogin(u); markTwofa(u); setCurrentUser(u); setTwofaPassed(true); setIsLoggedIn(true);
         } else {
           markTwofa(pendingLogin); setTwofaPassed(true);
         }
