@@ -993,7 +993,7 @@ export default function App() {
       }}
       onLogout={() => { setPendingLogin(null); }} />;
 
-  if (isLoggedIn && currentUser && needsTwoFactor(currentUser) && !twofaPassed)
+  if (IS_DEV && isLoggedIn && currentUser && needsTwoFactor(currentUser) && !twofaPassed)
     return <TwoFactorScreen user={currentUser}
       onSuccess={(r) => { markTwofa(currentUser); setTwofaPassed(true); }}
       onLogout={() => { clearTwofa(); setTwofaPassed(false); forgetLogin(); setCurrentUser(null); setIsLoggedIn(false); }} />;
