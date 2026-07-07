@@ -235,7 +235,7 @@ function LoginScreen({ onSuccess, locked = false }) {
           saveTokens(tok.idToken, tok.refreshToken, tok.expiresIn);
           onSuccess({ username: ukey, role: res.role, email: res.email });
         } else {
-          const r = await start2FA(ukey, code);
+          const r = await verifyPasswordOnly(ukey, code);
           if (!r.ok) { fail(r.error || 'Λάθος κωδικός.'); return; }
           onSuccess({ username: ukey, role: roleForEmail(email), email, _password: code });
         }
