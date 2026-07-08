@@ -67,7 +67,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
   const [form, setForm] = useState(prefillName ? { ...INIT, name: prefillName } : INIT);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState('');
-  const [sortMode, setSortMode] = useState('name'); // 'name' | 'orders'
+  const [sortMode, setSortMode] = useState('name'); // 'name' | 'date' | 'orders'
   const [selectedCustomerOrders, setSelectedCustomerOrders] = useState(null); // πελάτης για εμφάνιση παραγγελιών
   const [deleteCustomerModal, setDeleteCustomerModal] = useState({ visible:false, customerId:null, customerName:'' });
   const [dupModal, setDupModal] = useState({ visible:false, matches:[] });
@@ -305,6 +305,7 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
       }
     })
     .sort((a, b) => {
+      if (sortMode === 'date') return (b.createdAt || 0) - (a.createdAt || 0);
       if (sortMode === 'orders') {
         const aCount = allOrders.filter(o => o.customer === a.name).length;
         const bCount = allOrders.filter(o => o.customer === b.name).length;
@@ -423,11 +424,16 @@ export default function CustomersScreen({ customers, setCustomers, onClose, pref
           </View>
 
           <View style={{ flexDirection:'row', alignItems:'center', marginTop:24, marginBottom:10, gap:6, zIndex:20, position:'relative' }}>
-            <Text style={[styles.sectionTitle, { marginBottom:0 }]}>ΛΙΣΤΑ ΠΕΛΑΤΩΝ ({customers.length})</Text>
+            <Text style={[styles.sectionTitle, { marginBottom:0 }]}>ΛΙΣΤΑ ΠΕΛΑΤΩΝ ({filtered.length === customers.length ? customers.length : `${filtered.length} από ${customers.length}`})</Text>
             <TouchableOpacity
               onPress={()=>setSortMode('name')}
               style={{ marginLeft:10, paddingHorizontal:10, paddingVertical:6, borderRadius:6, backgroundColor: sortMode==='name' ? '#8B0000' : '#ddd' }}>
               <Text style={{ color: sortMode==='name' ? 'white' : '#555', fontWeight:'bold', fontSize:12 }}>🔤 A→Ω</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={()=>setSortMode('date')}
+              style={{ paddingHorizontal:10, paddingVertical:6, borderRadius:6, backgroundColor: sortMode==='date' ? '#8B0000' : '#ddd' }}>
+              <Text style={{ color: sortMode==='date' ? 'white' : '#555', fontWeight:'bold', fontSize:12 }}>📅 Ημ/νία</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={()=>setSortMode('orders')}

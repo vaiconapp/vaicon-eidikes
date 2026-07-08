@@ -1073,7 +1073,7 @@ export default function App() {
         <TouchableOpacity style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
           <View style={styles.menuPanel}>
             <Text style={styles.menuTitle}>ΜΕΝΟΥ</Text>
-            {currentUser?.role !== 'guest' && !isSeller && (<>
+            {currentUser?.role !== 'guest' && !isSeller && myLockKey !== 'USER14' && (<>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowCustomers(true); }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={styles.menuItemText}>👥 ΠΕΛΑΤΕΣ</Text>

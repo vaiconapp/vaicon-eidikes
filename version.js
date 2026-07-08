@@ -1,4 +1,4 @@
 // Αυτό το αρχείο ενημερώνεται αυτόματα από το scripts/bump-version.js
 // πριν κάθε push. ΜΗΝ το επεξεργάζεσαι χειροκίνητα.
-export const APP_VERSION = 'v.070726.10.163';
-export const APP_BUILD_DATE = '07/07/2026';
+export const APP_VERSION = 'v.080726.1.164';
+export const APP_BUILD_DATE = '08/07/2026';
