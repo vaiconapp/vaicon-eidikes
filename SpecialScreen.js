@@ -316,6 +316,9 @@ const stavCycle = (d, list=STAV_DESIGNS) => { const opts=['',...((list&&list.len
 const stavParts = (s) => String(s?.dim||'') + (s?.design ? ' ' + s.design : '');
 const staveraKind = (o, s) => `ΣΤΑΘΕΡΟ${(hasXiasti(s&&s.design)||hasXiasti(s&&s.note)||hasXiasti(o.notes))?' ΧΙΑΣΤΗ':''}`;
 const plaisioKind = (o) => `ΠΛΑΙΣΙΟ${(hasXiasti(o.glassDesign)||hasXiasti(o.glassNotes)||hasXiasti(o.notes))?' ΧΙΑΣΤΙ':''}`;
+// Χιαστί σε ξεχωριστή στήλη (κόκκινο). Το «είδος» μένει σκέτο (ΣΤΑΘΕΡΟ/ΠΛΑΙΣΙΟ).
+const staveraXiasti = (o, s) => (hasXiasti(s&&s.design)||hasXiasti(s&&s.note)||hasXiasti(o.notes)) ? 'ΧΙΑΣΤΗ' : '';
+const plaisioXiasti = (o) => (hasXiasti(o.glassDesign)||hasXiasti(o.glassNotes)||hasXiasti(o.notes)) ? 'ΧΙΑΣΤΙ' : '';
 
 // Helpers ειδοποίησης πελάτη (Viber / Email / SMS)
 const normalizePhone = (p) => {
@@ -2572,7 +2575,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             const extrasHtml = paint ? `<br><b>Βαφή:</b> ${escapeHtmlSafe(paint)}` : '';
             const staveraRows = staveraEntries.map(s=>`<tr>
               <td style="font-weight:bold;font-size:17px">${orderNoCell}</td>
-              <td style="font-size:16px;font-weight:bold;padding-right:24px">${staveraKind(o, s)}</td>
+              <td style="font-size:16px;font-weight:bold;padding-right:24px">ΣΤΑΘΕΡΟ</td><td style="font-size:16px;font-weight:900;color:#d32f2f;text-align:center">${staveraXiasti(o, s)}</td>
               <td style="font-size:13px;font-weight:bold;width:70px;white-space:nowrap;padding-left:24px">${ylikoCell}</td>
               <td style="font-size:20px;font-weight:900">📐 ${s.dim||'—'}</td>
               <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center">${s.qty||''}</td>
@@ -2581,7 +2584,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             </tr>`);
             const glassRows = hasGlass(o) ? [`<tr>
               <td style="font-weight:bold;font-size:17px">${orderNoCell}</td>
-              <td style="font-size:16px;font-weight:bold;padding-right:24px;color:#0d47a1">${plaisioKind(o)}</td>
+              <td style="font-size:16px;font-weight:bold;padding-right:24px;color:#0d47a1">ΠΛΑΙΣΙΟ</td><td style="font-size:16px;font-weight:900;color:#d32f2f;text-align:center">${plaisioXiasti(o)}</td>
               <td style="font-size:13px;font-weight:bold;width:70px;white-space:nowrap;padding-left:24px">${ylikoCell}</td>
               <td style="font-size:20px;font-weight:900;color:#0d47a1">🪟 ${o.glassDim||'—'}</td>
               <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
@@ -2591,7 +2594,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
             if (staveraRows.length===0 && glassRows.length===0) {
               return [`<tr>
                 <td style="font-weight:bold;font-size:17px">${orderNoCell}</td>
-                <td style="font-size:13px">—</td>
+                <td style="font-size:13px">—</td><td style="text-align:center"></td>
                 <td style="font-size:13px;font-weight:bold;width:70px;white-space:nowrap;padding-left:24px">${ylikoCell}</td>
                 <td style="font-size:20px;font-weight:900">—</td>
                 <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
@@ -2613,7 +2616,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </style></head><body>
             <h1>📏 ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ</h1>
             <h2>📅 ${dateStr} | ${orders.length} παραγγελίες</h2>
-            <table><thead><tr><th style="width:90px">Νο</th><th style="width:130px;padding-right:24px">Είδος<br>κατασκευής</th><th style="width:70px;padding-left:24px">Υλικό</th><th style="width:140px">Διάσταση</th><th style="text-align:center;width:50px">Τεμ.</th><th>Παρατήρηση</th><th style="width:80px">Ημερομηνία</th></tr></thead>
+            <table><thead><tr><th style="width:90px">Νο</th><th style="width:110px;padding-right:24px">Είδος<br>κατασκευής</th><th style="width:80px"></th><th style="width:70px;padding-left:24px">Υλικό</th><th style="width:140px">Διάσταση</th><th style="text-align:center;width:50px">Τεμ.</th><th>Παρατήρηση</th><th style="width:80px">Ημερομηνία</th></tr></thead>
             <tbody>${rows}</tbody></table>
           </body></html>`;
           await printHTML(html, 'ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ');
@@ -2686,7 +2689,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           const extrasHtml = paint ? `<br><b>Βαφή:</b> ${escapeHtmlSafe(paint)}` : '';
           const staveraRows = staveraEntries.map(s=>`<tr>
             <td style="font-weight:bold;font-size:17px">${orderNoCell}</td>
-            <td style="font-size:16px;font-weight:bold;padding-right:24px">${staveraKind(o, s)}</td>
+            <td style="font-size:16px;font-weight:bold;padding-right:24px">ΣΤΑΘΕΡΟ</td><td style="font-size:16px;font-weight:900;color:#d32f2f;text-align:center">${staveraXiasti(o, s)}</td>
             <td style="font-size:13px;font-weight:bold;width:70px;white-space:nowrap;padding-left:24px">${ylikoCell}</td>
             <td style="font-size:20px;font-weight:900">📐 ${s.dim||'—'}</td>
             <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center">${s.qty||''}</td>
@@ -2695,7 +2698,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </tr>`);
           const glassRows = hasGlass(o) ? [`<tr>
             <td style="font-weight:bold;font-size:17px">${orderNoCell}</td>
-            <td style="font-size:16px;font-weight:bold;padding-right:24px;color:#0d47a1">${plaisioKind(o)}</td>
+            <td style="font-size:16px;font-weight:bold;padding-right:24px;color:#0d47a1">ΠΛΑΙΣΙΟ</td><td style="font-size:16px;font-weight:900;color:#d32f2f;text-align:center">${plaisioXiasti(o)}</td>
             <td style="font-size:13px;font-weight:bold;width:70px;white-space:nowrap;padding-left:24px">${ylikoCell}</td>
             <td style="font-size:20px;font-weight:900;color:#0d47a1">🪟 ${o.glassDim||'—'}</td>
             <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
@@ -2705,7 +2708,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           if (staveraRows.length===0 && glassRows.length===0) {
             return [`<tr>
               <td style="font-weight:bold;font-size:17px">${orderNoCell}</td>
-              <td style="font-size:13px">—</td>
+              <td style="font-size:13px">—</td><td style="text-align:center"></td>
               <td style="font-size:13px;font-weight:bold;width:70px;white-space:nowrap;padding-left:24px">${ylikoCell}</td>
               <td style="font-size:20px;font-weight:900">—</td>
               <td style="font-size:18px;font-weight:900;color:#d32f2f;text-align:center"></td>
@@ -2727,7 +2730,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </style></head><body>
           <h1>📏 ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ</h1>
           <h2>📅 ${dateStr} | ${orders.length} παραγγελίες</h2>
-          <table><thead><tr><th style="width:90px">Νο</th><th style="width:130px;padding-right:24px">Είδος<br>κατασκευής</th><th style="width:70px;padding-left:24px">Υλικό</th><th style="width:140px">Διάσταση</th><th style="text-align:center;width:50px">Τεμ.</th><th>Παρατήρηση</th><th style="width:80px">Ημερομηνία</th></tr></thead>
+          <table><thead><tr><th style="width:90px">Νο</th><th style="width:110px;padding-right:24px">Είδος<br>κατασκευής</th><th style="width:80px"></th><th style="width:70px;padding-left:24px">Υλικό</th><th style="width:140px">Διάσταση</th><th style="text-align:center;width:50px">Τεμ.</th><th>Παρατήρηση</th><th style="width:80px">Ημερομηνία</th></tr></thead>
           <tbody>${rows}</tbody></table>
         </body></html>`;
         await printHTML(html, 'ΣΤΑΘΕΡΑ — ΕΙΔΙΚΗ');
@@ -2825,7 +2828,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const renderTable = (sortedOrders) => {
       if (phaseKey==='stavera') {
         const COLS_STAVERA = [
-          {label:'Νο',w:50},{label:'Είδος\nκατασκευής',w:130},{label:'Υλικό',w:80},{label:'Διάσταση',w:130},
+          {label:'Νο',w:50},{label:'Είδος\nκατασκευής',w:110},{label:'',w:70},{label:'Υλικό',w:80},{label:'Διάσταση',w:130},
           {label:'Παρατήρηση',w:220},{label:'Ημερομηνία',w:110},
         ];
         return (
@@ -2845,7 +2848,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   return [(
                     <View key={o.id+'-0'} style={[styles.previewTr,i%2===0?styles.previewTrEven:styles.previewTrOdd]}>
                       <Text style={[styles.previewTd,{width:50,fontWeight:'bold'}]}>{o.orderNo||'—'}</Text>
-                      <Text style={[styles.previewTd,{width:130,fontSize:12}]}>—</Text>
+                      <Text style={[styles.previewTd,{width:110,fontSize:12}]}>—</Text>
+                      <Text style={[styles.previewTd,{width:70}]}></Text>
                       <Text style={[styles.previewTd,{width:80,fontSize:12,fontWeight:'bold',paddingLeft:24}]}>{yliko}</Text>
                       <Text style={[styles.previewTd,{width:130,fontWeight:'900',fontSize:15}]}>—</Text>
                       <Text style={[styles.previewTd,{width:220,fontSize:12}]}></Text>
@@ -2856,7 +2860,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 const staveraRows = entries.map((s,si)=>(
                   <View key={o.id+'-s-'+si} style={[styles.previewTr,(i+si)%2===0?styles.previewTrEven:styles.previewTrOdd]}>
                     <Text style={[styles.previewTd,{width:50,fontWeight:'bold'}]}>{si===0?o.orderNo||'—':''}</Text>
-                    <Text style={[styles.previewTd,{width:130,fontSize:15,fontWeight:'bold',paddingRight:24}]}>{staveraKind(o, s)}</Text>
+                    <Text style={[styles.previewTd,{width:110,fontSize:15,fontWeight:'bold',paddingRight:24}]}>ΣΤΑΘΕΡΟ</Text>
+                    <Text style={[styles.previewTd,{width:70,fontSize:14,fontWeight:'900',color:'#d32f2f',textAlign:'center'}]}>{staveraXiasti(o, s)}</Text>
                     <Text style={[styles.previewTd,{width:80,fontSize:12,fontWeight:'bold',paddingLeft:24}]}>{si===0?yliko:''}</Text>
                     <Text style={[styles.previewTd,{width:130,fontWeight:'900',fontSize:15}]}>📐 {s.dim||'—'}</Text>
                     <Text style={[styles.previewTd,{width:220,fontSize:12}]}>{s.note||''}</Text>
@@ -2866,7 +2871,8 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 const glassRows = orderHasGlass ? [(
                   <View key={o.id+'-g'} style={[styles.previewTr,(i+entries.length)%2===0?styles.previewTrEven:styles.previewTrOdd]}>
                     <Text style={[styles.previewTd,{width:50,fontWeight:'bold'}]}>{entries.length===0?o.orderNo||'—':''}</Text>
-                    <Text style={[styles.previewTd,{width:130,fontSize:15,fontWeight:'bold',paddingRight:24,color:'#0d47a1'}]}>{plaisioKind(o)}</Text>
+                    <Text style={[styles.previewTd,{width:110,fontSize:15,fontWeight:'bold',paddingRight:24,color:'#0d47a1'}]}>ΠΛΑΙΣΙΟ</Text>
+                    <Text style={[styles.previewTd,{width:70,fontSize:14,fontWeight:'900',color:'#d32f2f',textAlign:'center'}]}>{plaisioXiasti(o)}</Text>
                     <Text style={[styles.previewTd,{width:80,fontSize:12,fontWeight:'bold',paddingLeft:24}]}>{entries.length===0?yliko:''}</Text>
                     <Text style={[styles.previewTd,{width:130,fontWeight:'900',fontSize:15,color:'#0d47a1'}]}>🪟 {o.glassDim||'—'}</Text>
                     <Text style={[styles.previewTd,{width:220,fontSize:12}]}>{o.glassNotes||''}</Text>
@@ -4081,15 +4087,26 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 </View>
                 <Text style={{fontSize:15,fontWeight:'bold',color:'#555'}}>ΟΛΩΝ</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
-                onPress={()=>{
-                  const newSelected = {...printSelected};
-                  staveraOrders.forEach(o=>{ newSelected[o.id] = !o.staveraDone; });
-                  setPrintSelected(newSelected);
-                }}>
-                <Text style={{fontSize:15,fontWeight:'bold',color:'#856404'}}>🖨️ ΕΚΚΡΕΜΟΥΝ</Text>
-              </TouchableOpacity>
+              {(() => {
+                const isPend = (o) => ((o.stavera||[]).some(s=>s&&s.dim) && !o.staveraDone) || (hasGlass(o) && !o.glassDone);
+                const pendList = staveraOrders.filter(isPend);
+                const pendActive = pendList.length>0 && pendList.every(o=>printSelected[o.id]);
+                return (
+                  <TouchableOpacity
+                    style={{flexDirection:'row', alignItems:'center', gap:5, paddingVertical:10, paddingHorizontal:10, backgroundColor:'#fff3cd', borderRadius:8, borderWidth:1, borderColor:'#ffc107'}}
+                    onPress={()=>{
+                      const newSelected = {...printSelected};
+                      if (pendActive) staveraOrders.forEach(o=>{ newSelected[o.id] = false; });
+                      else staveraOrders.forEach(o=>{ newSelected[o.id] = isPend(o); });
+                      setPrintSelected(newSelected);
+                    }}>
+                    <View style={{width:18,height:18,borderRadius:4,borderWidth:2,borderColor:'#856404',backgroundColor: pendActive?'#856404':'white', alignItems:'center',justifyContent:'center'}}>
+                      {pendActive&&<Text style={{color:'white',fontSize:15,fontWeight:'bold'}}>✓</Text>}
+                    </View>
+                    <Text style={{fontSize:15,fontWeight:'bold',color:'#856404'}}>🖨️ ΕΚΚΡΕΜΟΥΝ</Text>
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
           );
         }
