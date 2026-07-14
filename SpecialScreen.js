@@ -3917,6 +3917,78 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     }
   };
 
+  // Συμπαγής εκτύπωση παραγγελιών πελάτη (ίδιο στιλ με την αναζήτηση των τυποποιημένων).
+  const buildCustSpecialPrintHTML = (orders, custName) => {
+    const esc = (s) => String(s==null?'':s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const fmtD = (t) => t ? new Date(t).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—';
+    const lbl = 'color:#555;';
+    const slips = [...orders].sort((a,b)=>(parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0)).map(o => {
+      const no = o.orderNo!=null?String(o.orderNo):'—';
+      const fora = o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕ';
+      const armor = (o.armor||'').includes('ΔΙΠΛΗ') ? '<b style="color:#c62828">ΔΙΠΛΗ ΘΩΡΑΚΙΣΗ</b>' : 'ΜΟΝΗ';
+      const q = o.qty && String(o.qty).trim() ? `${esc(o.qty)}τεμ` : '—';
+      const line1 = `<span style="font-weight:bold;font-size:15px;">${esc(no)}</span>${o.customer?` <span style="color:#333;">· ${esc(o.customer)}</span>`:''}`;
+      const line2 = `${esc(o.h||'—')}×${esc(o.w||'—')} · ${fora} · ${q} · <span style="${lbl}">Θωράκιση</span> ${armor}`;
+      const det = [];
+      const add = (l,v) => { const t=v==null?'':String(v).trim(); if(t) det.push(`<span style="${lbl}">${l}:</span> <b>${esc(t)}</b>`); };
+      const yes = (v) => String(v||'').toUpperCase()==='ΝΑΙ';
+      if (o.hinges && String(o.hinges)!=='2') add('Μεντεσέδες', o.hinges);
+      if (o.lock) add('Κλειδαριά', o.lock);
+      if (o.cylinder) add('Αφαλός', o.cylinder);
+      if (yes(o.kypri)) add('Κυπρί','ΝΑΙ');
+      if (o.caseType) add('Κάσα', o.caseType);
+      if (o.caseMaterial) add('Υλικό', o.caseMaterial);
+      if (o.hardware) add('Χρώμα εξαρτ.', o.hardware);
+      if (o.casePaint) add('Βαφή κάσας', o.casePaint);
+      if (yes(o.installation)) add('Μοντάρισμα','ΝΑΙ');
+      if (yes(o.placement)) add('Τοποθέτηση','ΝΑΙ');
+      if (o.heightReduction) add('Μείωση ύψους', o.heightReduction);
+      if (o.programNo) add('Πρόγραμμα', o.programNo);
+      const glass = [o.glassDim,o.glassDesign,o.glassNotes].filter(Boolean).join(' ');
+      if (glass && o.orderType!=='ΤΥΠΟΠΟΙΗΜΕΝΗ') add('Τζάμι', glass);
+      const col = o.stavColumn?.name ? String(o.stavColumn.name).replace('ΚΟΛΩΝΕΣ ΣΤΑΘΕΡΩΝ ','').trim() : '';
+      if (col) add('Κολώνες', (o.stavColumn?.qty?`${o.stavColumn.qty}× `:'')+col);
+      const stav = (o.stavera||[]).filter(s=>s&&s.dim).map(s=>(s.qty?`${s.qty}τεμ `:'')+[s.dim,s.design,s.color].filter(Boolean).join(' ')+(s.note?` ${s.note}`:'')).join(' | ');
+      if (stav) add('Σταθερά', stav);
+      const misc = (o.misc||[]).map(m=>typeof m==='string'?m:(m?.name||m?.desc||m?.title||'')).filter(Boolean).join(', ');
+      if (misc) add('Διάφορα', misc);
+      const coat = (o.coatings||[]).filter(n=>n&&String(n).trim()).map(name=>{
+        const d=(o.coatingDetails||{})[name]||{};
+        const sub=[[d.dim,d.design,d.color].filter(Boolean).join('/')&&`Φύλλο ${[d.dim,d.design,d.color].filter(Boolean).join('/')}`,[d.frameW,d.frameColor].filter(Boolean).join('/')&&`Περβ. ${[d.frameW,d.frameColor].filter(Boolean).join('/')}`,[d.caseW,d.caseColor].filter(Boolean).join('/')&&`Κάσα ${[d.caseW,d.caseColor].filter(Boolean).join('/')}`].filter(Boolean).join(' · ');
+        return name+(sub?` (${sub})`:'');
+      }).join(' | ');
+      if (coat) add('Επενδύσεις', coat);
+      const detHtml = det.length?`<div class="det">${det.join(' · ')}</div>`:'';
+      const notes = o.notes!=null?String(o.notes).trim():'';
+      const notesHtml = notes?`<div class="notes"><strong>Παρατηρήσεις:</strong> ${esc(notes)}</div>`:'';
+      let d3l='Έτοιμο/Πώληση', d3='—';
+      if (o.soldAt){d3l='Πώληση';d3=fmtD(o.soldAt);} else if (o.readyAt){d3l='Έτοιμο';d3=fmtD(o.readyAt);} else if (o.prodAt){d3l='Έναρξη παραγ.';d3=fmtD(o.prodAt);}
+      const dates = `<div class="dates">Καταχ.: <b>${fmtD(o.createdAt)}</b> · Παράδοση: <b>${fmtD(o.deliveryDate)}</b> · ${d3l}: <b>${d3}</b></div>`;
+      return `<article class="gsearch-slip"><div class="l1">${line1}</div><div class="l2">${line2}</div>${detHtml}${notesHtml}${dates}</article>`;
+    }).join('');
+    const n = orders.length;
+    const title = `VAICON — ${custName} — ${n} ${n===1?'ειδική':'ειδικές'}`;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+      body{font-family:Arial,Helvetica,sans-serif;margin:6mm 8mm;color:#111;font-size:12px;}
+      h1{font-size:15px;margin:0 0 6px 0;font-weight:bold;}
+      .l1{margin:4px 0 2px 0;line-height:1.2;}
+      .l2{margin:0 0 4px 0;font-size:13px;font-weight:bold;color:#1a1a1a;line-height:1.2;}
+      .det{font-size:11px;line-height:1.35;margin:2px 0 0 0;color:#1a1a1a;}
+      .notes{font-size:11px;line-height:1.3;margin:2px 0 0 0;white-space:pre-wrap;color:#222;}
+      .dates{font-size:10px;line-height:1.25;margin:3px 0 0 0;padding-top:3px;border-top:1px solid #ccc;color:#333;}
+      .gsearch-slip{page-break-inside:avoid;margin:0 0 5px 0;padding:0 0 5px 0;border-bottom:1px dashed #bbb;}
+      .gsearch-slip:last-child{border-bottom:none;}
+      @media print{@page{size:A4;margin:8mm;}}
+    </style></head><body><h1>${esc(custName)} — Ειδικές (${n})</h1>${slips}</body></html>`;
+  };
+
+  const printCustList = async (orders) => {
+    if (!orders.length) return Alert.alert('Εκτύπωση','Δεν υπάρχουν παραγγελίες.');
+    const win = Platform.OS==='web' ? window.open('', '_blank', 'width=900,height=700,left=100,top=100,resizable=yes,scrollbars=yes') : null;
+    try { await printHTML(buildCustSpecialPrintHTML(orders, custPrint.name), `VAICON — ${custPrint.name}`, win); }
+    catch(e){ Alert.alert('Σφάλμα','Δεν δημιουργήθηκε το PDF.'); }
+  };
+
   // Εκτύπωση τυποποιημένων — με στήλες ΚΑΣΑ/ΣΑΣΙ/ΜΟΝΤΑΡΙΣΜΑ
   const handleStdPrint = async (orders, title, caseReady, sasiReady, isMounting=true) => {
     if (!orders.length) return Alert.alert("Προσοχή","Δεν υπάρχουν παραγγελίες για εκτύπωση.");
@@ -5241,7 +5313,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <View style={{backgroundColor:'#fff', borderRadius:14, padding:16, width:'100%', maxWidth:760, maxHeight:'88%'}}>
             <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom:8}}>
               <Text style={{fontSize:17, fontWeight:'bold', color:'#1a1a1a'}}>🖨️ {custPrint.name} — Ειδικές ({custPrint.hits.length})</Text>
-              {custPrint.hits.length>0 && <TouchableOpacity onPress={()=>handleSimplePrint(custPrint.hits.map(h=>h.order), `ΠΕΛΑΤΗΣ: ${custPrint.name}`)}>
+              {custPrint.hits.length>0 && <TouchableOpacity onPress={()=>printCustList(custPrint.hits.map(h=>h.order))}>
                 <Text style={{color:'#2e7d32', fontWeight:'bold', fontSize:15}}>Όλες 🖨️</Text>
               </TouchableOpacity>}
             </View>
@@ -5250,7 +5322,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                 <TouchableOpacity onPress={()=>setCustPrintSel(new Set(custPrint.hits.map((_,i)=>i)))} style={{backgroundColor:'#eee', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}><Text style={{fontWeight:'bold', color:'#555', fontSize:13}}>Όλα ✓</Text></TouchableOpacity>
                 <TouchableOpacity onPress={()=>setCustPrintSel(new Set(custPrint.hits.map((h,i)=>h.isSold?-1:i).filter(i=>i>=0)))} style={{backgroundColor:'#2e7d32', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}><Text style={{fontWeight:'bold', color:'#fff', fontSize:13}}>Τρέχουσες ✓</Text></TouchableOpacity>
                 <TouchableOpacity onPress={()=>setCustPrintSel(new Set())} style={{backgroundColor:'#eee', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}><Text style={{fontWeight:'bold', color:'#555', fontSize:13}}>Καθάρισμα</Text></TouchableOpacity>
-                <TouchableOpacity disabled={custPrintSel.size===0} onPress={()=>{ const orders=[...custPrintSel].sort((a,b)=>a-b).map(i=>custPrint.hits[i]?.order).filter(Boolean); if(orders.length) handleSimplePrint(orders, `ΠΕΛΑΤΗΣ: ${custPrint.name}`); }} style={{backgroundColor: custPrintSel.size?'#1565C0':'#ccc', borderRadius:8, paddingHorizontal:10, paddingVertical:6, marginLeft:'auto'}}><Text style={{fontWeight:'bold', color:'#fff', fontSize:13}}>Επιλογή ({custPrintSel.size}) 🖨️</Text></TouchableOpacity>
+                <TouchableOpacity disabled={custPrintSel.size===0} onPress={()=>{ const orders=[...custPrintSel].sort((a,b)=>a-b).map(i=>custPrint.hits[i]?.order).filter(Boolean); if(orders.length) printCustList(orders); }} style={{backgroundColor: custPrintSel.size?'#1565C0':'#ccc', borderRadius:8, paddingHorizontal:10, paddingVertical:6, marginLeft:'auto'}}><Text style={{fontWeight:'bold', color:'#fff', fontSize:13}}>Επιλογή ({custPrintSel.size}) 🖨️</Text></TouchableOpacity>
               </View>
             )}
             <ScrollView style={{maxHeight:420}}>
@@ -5273,7 +5345,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                         </View>
                         <View style={{backgroundColor:tab.color, borderRadius:4, paddingHorizontal:6, paddingVertical:1, alignSelf:'flex-start', marginTop:2}}><Text style={{color:'#fff', fontWeight:'bold', fontSize:10}}>{tab.label}</Text></View>
                       </View>
-                      <TouchableOpacity onPress={()=>printSingleOrderFull(o)} style={{padding:6}}><Text style={{fontSize:16}}>🖨️</Text></TouchableOpacity>
+                      <TouchableOpacity onPress={()=>printCustList([o])} style={{padding:6}}><Text style={{fontSize:16}}>🖨️</Text></TouchableOpacity>
                     </View>
                   </React.Fragment>
                 );
