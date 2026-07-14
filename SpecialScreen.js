@@ -891,6 +891,20 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [lookupCustomerId, setLookupCustomerId] = useState(null);
   const [lookupCustInfo, setLookupCustInfo] = useState(false);
   const [lookupOrderModal, setLookupOrderModal] = useState({ visible: false, order: null });
+  // Παράθυρο εκτύπωσης παραγγελιών πελάτη (μόνο ειδικές) — ίδιο στιλ με την αναζήτηση τυποποιημένων.
+  const [custPrint, setCustPrint] = useState({ visible: false, name: '', hits: [] });
+  const [custPrintSel, setCustPrintSel] = useState(new Set());
+  const openCustPrint = (cust) => {
+    if (!cust) return;
+    const nm = (o) => o.customer && cust.name && String(o.customer).trim().toLowerCase() === String(cust.name).trim().toLowerCase();
+    const noNum = (v) => { const n = parseInt(v,10); return Number.isNaN(n) ? Infinity : n; };
+    const active = (specialOrders||[]).filter(o => o.status!=='SOLD' && o.status!=='STD_SOLD' && nm(o)).map(o=>({order:o,isSold:false}));
+    const sold = (soldSpecialOrders||[]).filter(o => nm(o)).map(o=>({order:o,isSold:true}));
+    const sorter = (a,b)=>noNum(a.order.orderNo)-noNum(b.order.orderNo);
+    active.sort(sorter); sold.sort(sorter);
+    setCustPrintSel(new Set());
+    setCustPrint({ visible:true, name:cust.name, hits:[...active, ...sold] });
+  };
   const [custPanPos, setCustPanPos] = useState({ x: 0, y: 0 });
   const custIsDragging = useRef(false);
   const custDragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
@@ -5066,6 +5080,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       {selectedCust.phone ? <Text style={{fontSize:12, color:'#555'}}>📞 {selectedCust.phone}</Text> : null}
                       <Text style={{fontSize:11, color:'#777', marginTop:2}}>{totalCustomerOrders} παραγγελ{totalCustomerOrders===1?'ία':'ίες'} · ⭐ {customerOrders.length} / 🛡️ {stdCustomerOrders.length}{totalCustomerQuotes>0?` · 💼 ${totalCustomerQuotes} προσφ.`:''}</Text>
                     </View>
+                    <TouchableOpacity onPress={()=>openCustPrint(selectedCust)} style={{backgroundColor:'#2e7d32', borderRadius:8, paddingHorizontal:10, paddingVertical:6, marginRight:6}}>
+                      <Text style={{color:'white', fontWeight:'bold', fontSize:14}}>🖨️</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={()=>setLookupCustInfo(true)} style={{backgroundColor:'#0d47a1', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}>
                       <Text style={{color:'white', fontWeight:'bold', fontSize:12}}>ℹ ΣΤΟΙΧΕΙΑ</Text>
                     </TouchableOpacity>
@@ -5154,6 +5171,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                             <Text style={{fontSize:12, color:'#1a1a1a', fontWeight:'bold'}}>{dims}</Text>
                             <Text style={{fontSize:11, color:'#555'}}>{o.side||'—'}</Text>
                             <Text style={{fontSize:11, color:'#555'}}>{o.armor||'—'}</Text>
+                            {parseInt(o.qty,10)>1 ? <Text style={{fontSize:12, color:'#cc0000', fontWeight:'900'}}>{o.qty}τεμ</Text> : null}
                             <View style={{backgroundColor:tab.color, borderRadius:4, paddingHorizontal:6, paddingVertical:1, marginLeft:'auto'}}>
                               <Text style={{color:'white', fontWeight:'bold', fontSize:10}}>{tab.label}</Text>
                             </View>
@@ -5185,6 +5203,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                             <Text style={{fontSize:12, color:'#1a1a1a', fontWeight:'bold'}}>{dims}</Text>
                             <Text style={{fontSize:11, color:'#555'}}>{o.side||'—'}</Text>
                             <Text style={{fontSize:11, color:'#555'}}>{o.sasiType==='ΔΙΠΛΗ ΘΩΡΑΚΙΣΗ'?'ΔΙΠΛΗ':'ΜΟΝΗ'}</Text>
+                            {parseInt(o.qty,10)>1 ? <Text style={{fontSize:12, color:'#cc0000', fontWeight:'900'}}>{o.qty}τεμ</Text> : null}
                             <View style={{backgroundColor:tab.color, borderRadius:4, paddingHorizontal:6, paddingVertical:1, marginLeft:'auto'}}>
                               <Text style={{color:'white', fontWeight:'bold', fontSize:10}}>{tab.label}</Text>
                             </View>
@@ -5215,6 +5234,57 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           </View>
         );
       })()}
+
+      {/* Παράθυρο εκτύπωσης παραγγελιών πελάτη — μόνο ειδικές (ίδιο στιλ με αναζήτηση τυποποιημένων) */}
+      {custPrint.visible && (
+        <View style={[{position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'center', alignItems:'center', zIndex:2000}, Platform.OS==='web'?{position:'fixed'}:{}]}>
+          <View style={{backgroundColor:'#fff', borderRadius:14, padding:16, width:'100%', maxWidth:760, maxHeight:'88%'}}>
+            <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom:8}}>
+              <Text style={{fontSize:17, fontWeight:'bold', color:'#1a1a1a'}}>🖨️ {custPrint.name} — Ειδικές ({custPrint.hits.length})</Text>
+              {custPrint.hits.length>0 && <TouchableOpacity onPress={()=>handleSimplePrint(custPrint.hits.map(h=>h.order), `ΠΕΛΑΤΗΣ: ${custPrint.name}`)}>
+                <Text style={{color:'#2e7d32', fontWeight:'bold', fontSize:15}}>Όλες 🖨️</Text>
+              </TouchableOpacity>}
+            </View>
+            {custPrint.hits.length>0 && (
+              <View style={{flexDirection:'row', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap'}}>
+                <TouchableOpacity onPress={()=>setCustPrintSel(new Set(custPrint.hits.map((_,i)=>i)))} style={{backgroundColor:'#eee', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}><Text style={{fontWeight:'bold', color:'#555', fontSize:13}}>Όλα ✓</Text></TouchableOpacity>
+                <TouchableOpacity onPress={()=>setCustPrintSel(new Set(custPrint.hits.map((h,i)=>h.isSold?-1:i).filter(i=>i>=0)))} style={{backgroundColor:'#2e7d32', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}><Text style={{fontWeight:'bold', color:'#fff', fontSize:13}}>Τρέχουσες ✓</Text></TouchableOpacity>
+                <TouchableOpacity onPress={()=>setCustPrintSel(new Set())} style={{backgroundColor:'#eee', borderRadius:8, paddingHorizontal:10, paddingVertical:6}}><Text style={{fontWeight:'bold', color:'#555', fontSize:13}}>Καθάρισμα</Text></TouchableOpacity>
+                <TouchableOpacity disabled={custPrintSel.size===0} onPress={()=>{ const orders=[...custPrintSel].sort((a,b)=>a-b).map(i=>custPrint.hits[i]?.order).filter(Boolean); if(orders.length) handleSimplePrint(orders, `ΠΕΛΑΤΗΣ: ${custPrint.name}`); }} style={{backgroundColor: custPrintSel.size?'#1565C0':'#ccc', borderRadius:8, paddingHorizontal:10, paddingVertical:6, marginLeft:'auto'}}><Text style={{fontWeight:'bold', color:'#fff', fontSize:13}}>Επιλογή ({custPrintSel.size}) 🖨️</Text></TouchableOpacity>
+              </View>
+            )}
+            <ScrollView style={{maxHeight:420}}>
+              {custPrint.hits.length===0 ? <Text style={{textAlign:'center', color:'#888', padding:20}}>Ο πελάτης δεν έχει ειδικές παραγγελίες.</Text> :
+              custPrint.hits.map((h,i)=>{
+                const o=h.order; const tab=getOrderTabInfo(o); const isSel=custPrintSel.has(i);
+                const prev=custPrint.hits[i-1]; const sep=h.isSold && (!prev||!prev.isSold);
+                const tint=h.isSold?'#eceff1':(o.status==='READY'||o.status==='STD_READY')?'#e8f5e9':(o.status==='PROD')?'#fff3e0':'#e3f2fd';
+                return (
+                  <React.Fragment key={o.id+'-'+i}>
+                    {sep && <View style={{backgroundColor:'#455a64', paddingVertical:5, paddingHorizontal:10, marginTop:6, borderRadius:4}}><Text style={{color:'#fff', fontWeight:'bold', fontSize:12}}>🗂 ΑΡΧΕΙΟ (πουλημένες)</Text></View>}
+                    <View style={{flexDirection:'row', alignItems:'center', gap:8, padding:8, borderBottomWidth:1, borderBottomColor:'#eee', backgroundColor:tint}}>
+                      <TouchableOpacity onPress={()=>setCustPrintSel(p=>{const n=new Set(p); n.has(i)?n.delete(i):n.add(i); return n;})} style={{width:26, alignItems:'center'}}><Text style={{fontSize:20, color:'#1565C0'}}>{isSel?'☑':'☐'}</Text></TouchableOpacity>
+                      <View style={{flex:1}}>
+                        <View style={{flexDirection:'row', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                          <Text style={{fontSize:14, fontWeight:'900', color:'#1a1a1a'}}>#{o.orderNo||'—'}</Text>
+                          <Text style={{fontSize:12, fontWeight:'bold', color:'#1a1a1a'}}>{o.h||'—'}×{o.w||'—'} {o.side==='ΑΡΙΣΤΕΡΗ'?'ΑΡ':'ΔΕΞ'}</Text>
+                          {parseInt(o.qty,10)>1 ? <Text style={{fontSize:12, color:'#cc0000', fontWeight:'900'}}>{o.qty}τεμ</Text> : null}
+                          {o.armor ? <Text style={{fontSize:11, color:'#555'}}>{o.armor}</Text> : null}
+                        </View>
+                        <View style={{backgroundColor:tab.color, borderRadius:4, paddingHorizontal:6, paddingVertical:1, alignSelf:'flex-start', marginTop:2}}><Text style={{color:'#fff', fontWeight:'bold', fontSize:10}}>{tab.label}</Text></View>
+                      </View>
+                      <TouchableOpacity onPress={()=>printSingleOrderFull(o)} style={{padding:6}}><Text style={{fontSize:16}}>🖨️</Text></TouchableOpacity>
+                    </View>
+                  </React.Fragment>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity onPress={()=>setCustPrint({visible:false,name:'',hits:[]})} style={{backgroundColor:'#1a1a1a', borderRadius:10, padding:12, alignItems:'center', marginTop:10}}>
+              <Text style={{color:'white', fontWeight:'bold'}}>ΚΛΕΙΣΙΜΟ</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Modal 2 — λεπτομέρειες παραγγελίας (view-only) + εκτύπωση */}
       <Modal visible={lookupOrderModal.visible} transparent animationType="fade" onRequestClose={()=>setLookupOrderModal({visible:false, order:null})}>
