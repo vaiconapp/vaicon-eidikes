@@ -419,6 +419,15 @@ function PwdInput({ value, onChangeText, error, onSubmit, autoFocus = true }) {
 }
 
 export default function App() {
+  // Αυτόματο ζουμ: σε μικρό παράθυρο σμικρύνει αναλογικά τα πάντα ώστε να μην πέφτουν τα κουμπιά· σε πλήρη οθόνη μένει στο κανονικό.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const DESIGN_WIDTH = 2000;
+    const apply = () => { try { document.body.style.zoom = String(Math.min(1, window.innerWidth / DESIGN_WIDTH)); } catch {} };
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, []);
   const [pendingLogin, setPendingLogin] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(isRemembered());
   const [currentUser, setCurrentUser] = useState(loadUser());
