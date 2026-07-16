@@ -138,7 +138,16 @@ if (globalThis.fetch && !globalThis.__fbAuthPatched) {
         input = typeof input === 'string' ? url : new Request(url, input);
       }
     }
-    return rawFetch(input, init);
+    let res = await rawFetch(input, init);
+    // Αν η βάση απορρίψει με 401/403 (έληξε η ταυτότητα), ανανέωσε το token και ξαναδοκίμασε ΜΙΑ φορά.
+    const fbUrl = typeof input === 'string' ? input : (input && input.url);
+    if (fbUrl && fbUrl.indexOf(FIREBASE_URL) === 0 && (res.status === 401 || res.status === 403) && await refreshIdToken() && fbToken) {
+      const u2 = fbUrl.indexOf('auth=') === -1
+        ? fbUrl + (fbUrl.indexOf('?') === -1 ? '?' : '&') + 'auth=' + fbToken
+        : fbUrl.replace(/([?&])auth=[^&]*/, '$1auth=' + fbToken);
+      try { res = await rawFetch(typeof input === 'string' ? u2 : new Request(u2, init || input), init); } catch {}
+    }
+    return res;
   };
 }
 
