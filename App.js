@@ -419,15 +419,17 @@ function PwdInput({ value, onChangeText, error, onSubmit, autoFocus = true }) {
 }
 
 export default function App() {
-  // Αυτόματο ζουμ: σε μικρό παράθυρο σμικρύνει αναλογικά τα πάντα ώστε να μην πέφτουν τα κουμπιά· σε πλήρη οθόνη μένει στο κανονικό.
+  // Αυτόματο ζουμ (σμίκρυνση για να χωράνε όλα) × χειροκίνητο ζουμ που ρυθμίζει/θυμάται το κάθε PC.
+  const [uiZoom, setUiZoom] = useState(() => { try { const v = parseFloat(localStorage.getItem('vaicon_ui_zoom')); return v > 0 ? v : 1; } catch { return 1; } });
+  const changeZoom = (delta) => setUiZoom(z => { const n = Math.min(1.3, Math.max(0.6, Math.round((z + delta) * 10) / 10)); try { localStorage.setItem('vaicon_ui_zoom', String(n)); } catch {} return n; });
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const DESIGN_WIDTH = 2000;
-    const apply = () => { try { document.body.style.zoom = String(Math.min(1, window.innerWidth / DESIGN_WIDTH)); } catch {} };
+    const apply = () => { try { document.body.style.zoom = String(Math.min(1, window.innerWidth / DESIGN_WIDTH) * uiZoom); } catch {} };
     apply();
     window.addEventListener('resize', apply);
     return () => window.removeEventListener('resize', apply);
-  }, []);
+  }, [uiZoom]);
   const [pendingLogin, setPendingLogin] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(isRemembered());
   const [currentUser, setCurrentUser] = useState(loadUser());
@@ -1091,6 +1093,12 @@ export default function App() {
         <TouchableOpacity style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
           <View style={styles.menuPanel}>
             <Text style={styles.menuTitle}>ΜΕΝΟΥ</Text>
+            <View style={{flexDirection:'row', alignItems:'center', justifyContent:'center', gap:10, paddingVertical:10, marginBottom:6, borderBottomWidth:1, borderBottomColor:'#eee'}}>
+              <Text style={{fontSize:13, fontWeight:'bold', color:'#555'}}>Μέγεθος</Text>
+              <TouchableOpacity onPress={()=>changeZoom(-0.1)} style={{backgroundColor:'#eee', borderRadius:8, width:40, height:36, alignItems:'center', justifyContent:'center'}}><Text style={{fontSize:22, fontWeight:'900', color:'#333'}}>−</Text></TouchableOpacity>
+              <Text style={{fontSize:14, fontWeight:'bold', color:'#1a1a1a', minWidth:52, textAlign:'center'}}>{Math.round(uiZoom*100)}%</Text>
+              <TouchableOpacity onPress={()=>changeZoom(0.1)} style={{backgroundColor:'#eee', borderRadius:8, width:40, height:36, alignItems:'center', justifyContent:'center'}}><Text style={{fontSize:22, fontWeight:'900', color:'#333'}}>+</Text></TouchableOpacity>
+            </View>
             {currentUser?.role !== 'guest' && !isSeller && myLockKey !== 'USER14' && (<>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOpen(false); setShowCustomers(true); }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
