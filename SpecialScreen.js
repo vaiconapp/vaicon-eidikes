@@ -649,7 +649,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const applyHoldBasket = () => {
     if (!holdBasket.length) return;
     setConfirmModal({ visible:true, title:'Επιβεβαίωση', message:`Να μπουν κανονικά στη διαδικασία ${holdBasket.length} ${holdBasket.length===1?'παραγγελία':'παραγγελίες'}; Θα πάνε στις ΚΑΤΑΧΩΡΗΜΕΝΕΣ.`, confirmText:'ΝΑΙ, ΝΑ ΠΡΟΧΩΡΗΣΕΙ',
-      onConfirm: async()=>{ const ids=[...holdBasket]; setHoldBasket([]); const acts=[]; for (const id of ids) { const o=(specialOrders||[]).find(x=>x.id===id); if(o){ await activateHold(o); const active={...o}; delete active.onHold; acts.push(active); } } if(acts.length){ const [first,...rest]=acts; setNotifyQueue(rest); setNotifyModal({visible:true, order:first, single:true}); } } });
+      onConfirm: async()=>{ const ids=[...holdBasket]; setHoldBasket([]); for (const id of ids) { const o=(specialOrders||[]).find(x=>x.id===id); if(o) await activateHold(o); } } });
   };
   const applyHoldOutBasket = () => {
     if (!holdOutBasket.length) return;
@@ -819,8 +819,6 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
   const [editModal, setEditModal] = useState({ visible:false, order:null });
   const [priceModal, setPriceModal] = useState({ visible:false, order:null });
   const [notifyModal, setNotifyModal] = useState({ visible:false, order:null });
-  const [notifyQueue, setNotifyQueue] = useState([]); // ουρά ειδοποιήσεων (ενεργοποίηση πολλών από αναμονή)
-  const advanceNotify = () => setNotifyQueue(prev => { if (prev.length) { const [n, ...rest] = prev; setNotifyModal(m => ({ visible:true, order:n, single:m.single })); return rest; } setNotifyModal({ visible:false, order:null }); return prev; });
   const [editForm, setEditForm] = useState({});
   const [coatDetailsModal, setCoatDetailsModal] = useState({ visible:false, order:null });
   const [dimChangeModal, setDimChangeModal] = useState({ visible:false, oldH:'', oldW:'', newH:'', newW:'', rows:[], onConfirm:null });
@@ -1168,15 +1166,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const target = stripAccents(String(o.customer).trim().toLowerCase());
     return (customers||[]).find(c => c.name && stripAccents(c.name.trim().toLowerCase()) === target);
   };
-  const markNotified = async (orderId, channel, single=false) => {
+  const markNotified = async (orderId, channel) => {
     if (isSeller) return;
     const order = specialOrders.find(o => o.id === orderId);
     if (!order) return;
-    const ts = Date.now();
-    const targets = (!single && order.groupId) ? specialOrders.filter(o => o.groupId === order.groupId) : [order];
-    const idset = new Set(targets.map(o => o.id));
-    setSpecialOrders(prev => prev.map(o => idset.has(o.id) ? { ...o, notified: { ...(o.notified||{}), [channel]: ts } } : o));
-    for (const o of targets) await syncToCloud({ ...o, notified: { ...(o.notified||{}), [channel]: ts } });
+    const patch = { ...order, notified: { ...(order.notified||{}), [channel]: Date.now() } };
+    setSpecialOrders(prev => prev.map(o => o.id===orderId ? patch : o));
+    await syncToCloud(patch);
   };
   const clearNotified = async (orderId, channel) => {
     if (isSeller) return;
@@ -1209,6 +1205,37 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     if (!all.some(x => x.id === o.id)) all.push(o);
     return all.sort((a,b) => (a.groupSeq||0)-(b.groupSeq||0) || (parseInt(a.orderNo)||0)-(parseInt(b.orderNo)||0));
   };
+  const notifyViber = async (o) => {
+    if (isSeller) return;
+    const c = findCustomerOf(o);
+    const p = pickViberPhone(c);
+    if (!p) return;
+    if (c?.viberOptOut) return showSmsToast('Ο πελάτης έχει απεγγραφεί από Viber.', 'err');
+    showSmsToast('Αποστολή Viber...', 'info');
+    const res = await sendViberViaYuboto(p, messageFor(o), o.id, c?.id);
+    if (!res?.success) {
+      showSmsToast('✕ Αποτυχία Viber: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
+      return;
+    }
+    markNotified(o.id, 'viber');
+    showSmsToast(res.test ? '✓ Test mode: Viber OK.' : '✓ Viber στάλθηκε.', 'ok');
+  };
+  const notifyEmail = (o) => { if (isSeller) return; const c = findCustomerOf(o); if (!c?.email) return; openEmail(c.email, emailMessageFor(o), o.orderNo); markNotified(o.id, 'email'); };
+  const notifySms = async (o) => {
+    if (isSeller) return;
+    const c = findCustomerOf(o);
+    const p = pickSmsPhone(c);
+    if (!p) return showSmsToast('Δεν υπάρχει ελληνικό κινητό στον πελάτη.', 'err');
+    showSmsToast('Αποστολή SMS...', 'info');
+    const res = await sendSmsViaYuboto(p, smsMessageFor(o), o.id);
+    if (!res?.success) {
+      showSmsToast('✕ Αποτυχία SMS: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
+      return;
+    }
+    markNotified(o.id, 'sms');
+    showSmsToast(res.test ? '✓ Test mode: SMS OK.' : '✓ SMS στάλθηκε.', 'ok');
+  };
+  // Αποστολή από το παραθυράκι σώσιμου: ξεχωριστό μήνυμα για κάθε πόρτα της ομάδας.
   const doorBlock = (d) => {
     const coats = (d.coatings||[]).filter(c=>c&&String(c).trim()).join(', ');
     const tzami = (d.glassDim||'')+(d.glassDesign?' '+d.glassDesign:'')+(d.glassNotes?' '+d.glassNotes:'');
@@ -1221,53 +1248,44 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
       d.notes ? `  Σημ: ${d.notes}` : null,
     ].filter(Boolean).join('\n');
   };
-  const grpViberMsg = (o) => {
-    const doors = groupOf(o);
-    if (doors.length <= 1) return messageFor(o);
-    if (o.status === 'READY') return `VAICON: ΟΙ ΠΑΡΑΓΓΕΛΙΕΣ ΝΟ ${doors.map(d=>d.orderNo||'-').join(', ')} ΕΙΝΑΙ ΕΤΟΙΜΕΣ. ΩΡΕΣ ΠΑΡΑΛΑΒΗΣ: ΕΡΓΑΣΙΜΕΣ 08:00-15:30.`;
-    return [`Γεια σας ${o.customer||''},`, '', `Καταχωρήσαμε τις παραγγελίες σας (${doors.length}):`, '', doors.map(doorBlock).join('\n\n'), '', 'Παρακαλούμε ελέγξτε τα παραπάνω στοιχεία. Μετά την έναρξη παραγωγής δεν είναι δυνατές αλλαγές και η εταιρεία δεν φέρει ευθύνη για τυχόν διαφορές.', '', 'Ευχαριστούμε — VAICON'].join('\n');
-  };
-  const grpEmailMsg = (o) => {
-    const doors = groupOf(o);
-    if (doors.length <= 1) return emailMessageFor(o);
-    if (o.status === 'READY') return ['Αγαπητοί συνεργάτες,', '', `Σας ενημερώνουμε ότι οι παραγγελίες σας Νο ${doors.map(d=>d.orderNo||'-').join(', ')} είναι έτοιμες προς παραλαβή.`, 'Ώρες παραλαβής: εργάσιμες 08:00-16:00.', '', COMPANY_SIGNATURE].join('\n');
-    return ['Αγαπητοί συνεργάτες,', '', 'Σας ευχαριστούμε για την παραγγελία σας. Ακολουθούν αναλυτικά τα στοιχεία των παραγγελιών, όπως καταχωρήθηκαν:', '', doors.map(doorBlock).join('\n\n'), '', 'Παρακαλούμε ελέγξτε προσεκτικά τα παραπάνω στοιχεία. Μετά την έναρξη της παραγωγής δεν είναι δυνατές αλλαγές και η εταιρεία δεν φέρει ευθύνη για τυχόν διαφορές.', '', COMPANY_SIGNATURE].join('\n');
-  };
-  const grpSmsMsg = (o) => {
-    const doors = groupOf(o);
-    if (doors.length <= 1) return smsMessageFor(o);
-    if (o.status === 'READY') return `VAICON: ΟΙ ΠΑΡΑΓΓΕΛΙΕΣ ΝΟ ${doors.map(d=>d.orderNo||'-').join(', ')} ΕΙΝΑΙ ΕΤΟΙΜΕΣ. ΩΡΕΣ ΠΑΡΑΛΑΒΗΣ: ΕΡΓΑΣΙΜΕΣ 08:00-15:30.`;
-    return `VAICON: ΚΑΤΑΧΩΡΗΘΗΚΑΝ ΟΙ ΠΑΡΑΓΓΕΛΙΕΣ ΝΟ ${doors.map(d=>d.orderNo||'-').join(', ')}. ΤΑ ΣΤΟΙΧΕΙΑ ΣΤΑΛΘΗΚΑΝ ΑΝΑΛΥΤΙΚΑ ΣΕ VIBER/EMAIL. ΜΕΤΑ ΤΗΝ ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ ΔΕΝ ΓΙΝΟΝΤΑΙ ΑΛΛΑΓΕΣ.`;
-  };
-  const notifyViber = async (o, single=false) => {
+  const grpEmailMsg = (o) => ['Αγαπητοί συνεργάτες,', '', 'Σας ευχαριστούμε για την παραγγελία σας. Ακολουθούν αναλυτικά τα στοιχεία των παραγγελιών, όπως καταχωρήθηκαν:', '', groupOf(o).map(doorBlock).join('\n\n'), '', 'Παρακαλούμε ελέγξτε προσεκτικά τα παραπάνω στοιχεία. Μετά την έναρξη της παραγωγής δεν είναι δυνατές αλλαγές και η εταιρεία δεν φέρει ευθύνη για τυχόν διαφορές.', '', COMPANY_SIGNATURE].join('\n');
+  const grpSmsMsg = (o) => `VAICON: ΚΑΤΑΧΩΡΗΘΗΚΑΝ ΟΙ ΠΑΡΑΓΓΕΛΙΕΣ ΝΟ ${groupOf(o).map(d=>d.orderNo||'-').join(', ')}. ΤΑ ΣΤΟΙΧΕΙΑ ΣΤΑΛΘΗΚΑΝ ΑΝΑΛΥΤΙΚΑ ΣΕ VIBER/EMAIL. ΜΕΤΑ ΤΗΝ ΕΝΑΡΞΗ ΠΑΡΑΓΩΓΗΣ ΔΕΝ ΓΙΝΟΝΤΑΙ ΑΛΛΑΓΕΣ.`;
+  // Αποστολή από το παραθυράκι σώσιμου: Viber ξεχωριστά ανά πόρτα, Email/SMS ένα κοινό.
+  const sendGroup = (channel, o) => {
     if (isSeller) return;
-    const c = findCustomerOf(o);
-    const p = pickViberPhone(c);
-    if (!p) return;
-    if (c?.viberOptOut) return showSmsToast('Ο πελάτης έχει απεγγραφεί από Viber.', 'err');
-    showSmsToast('Αποστολή Viber...', 'info');
-    const res = await sendViberViaYuboto(p, single?messageFor(o):grpViberMsg(o), o.id, c?.id);
-    if (!res?.success) {
-      showSmsToast('✕ Αποτυχία Viber: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
-      return;
-    }
-    markNotified(o.id, 'viber', single);
-    showSmsToast(res.test ? '✓ Test mode: Viber OK.' : '✓ Viber στάλθηκε.', 'ok');
-  };
-  const notifyEmail = (o, single=false) => { if (isSeller) return; const c = findCustomerOf(o); if (!c?.email) return; openEmail(c.email, single?emailMessageFor(o):grpEmailMsg(o), o.orderNo); markNotified(o.id, 'email', single); };
-  const notifySms = async (o, single=false) => {
-    if (isSeller) return;
-    const c = findCustomerOf(o);
-    const p = pickSmsPhone(c);
-    if (!p) return showSmsToast('Δεν υπάρχει ελληνικό κινητό στον πελάτη.', 'err');
-    showSmsToast('Αποστολή SMS...', 'info');
-    const res = await sendSmsViaYuboto(p, single?smsMessageFor(o):grpSmsMsg(o), o.id);
-    if (!res?.success) {
-      showSmsToast('✕ Αποτυχία SMS: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
-      return;
-    }
-    markNotified(o.id, 'sms', single);
-    showSmsToast(res.test ? '✓ Test mode: SMS OK.' : '✓ SMS στάλθηκε.', 'ok');
+    const doors = groupOf(o);
+    const labels = { viber:'Viber', email:'Email', sms:'SMS' };
+    setConfirmModal({
+      visible: true,
+      title: `Αποστολή ${labels[channel]}`,
+      message: doors.length>1
+        ? (channel==='viber'
+            ? `Αποστολή Viber ξεχωριστά σε ${doors.length} πόρτες (Νο ${doors.map(d=>d.orderNo||'-').join(', ')});`
+            : `Αποστολή ${labels[channel]} με ένα κοινό μήνυμα για ${doors.length} πόρτες (Νο ${doors.map(d=>d.orderNo||'-').join(', ')});`)
+        : `Αποστολή ${labels[channel]} στον πελάτη #${o.orderNo||'?'} (${o.customer||'—'});`,
+      confirmText: 'ΑΠΟΣΤΟΛΗ',
+      onConfirm: async () => {
+        if (channel==='viber' || doors.length<=1) {
+          const fn = channel==='viber' ? notifyViber : channel==='email' ? notifyEmail : notifySms;
+          for (const d of doors) await fn(d);
+          return;
+        }
+        const c = findCustomerOf(o);
+        if (channel==='email') {
+          if (!c?.email) return;
+          openEmail(c.email, grpEmailMsg(o), doors.map(d=>d.orderNo||'-').join(','));
+          for (const d of doors) await markNotified(d.id, 'email');
+        } else {
+          const p = pickSmsPhone(c);
+          if (!p) return showSmsToast('Δεν υπάρχει ελληνικό κινητό στον πελάτη.', 'err');
+          showSmsToast('Αποστολή SMS...', 'info');
+          const res = await sendSmsViaYuboto(p, grpSmsMsg(o), o.id);
+          if (!res?.success) return showSmsToast('✕ Αποτυχία SMS: ' + (res?.error || 'Άγνωστο σφάλμα'), 'err');
+          for (const d of doors) await markNotified(d.id, 'sms');
+          showSmsToast(res.test ? '✓ Test mode: SMS OK.' : '✓ SMS στάλθηκε.', 'ok');
+        }
+      },
+    });
   };
 
   const resetForm = () => { setCustomForm(INIT_FORM); setCustomerSearch(''); setSelectedCustomer(null); setShowCustomerList(false); setEditingOrder(null); setApproveCtx(null); setOrderNoAuto(true); setGroupState(null); setQuoteGroup(null); setEditingQuote(null); setHoldMode(false); formSubIdRef.current = null; };
@@ -6687,14 +6705,13 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={notifyModal.visible} transparent animationType="fade" onRequestClose={advanceNotify}>
+      <Modal visible={notifyModal.visible} transparent animationType="fade" onRequestClose={()=>setNotifyModal({visible:false,order:null})}>
         <View style={{flex:1, backgroundColor:'rgba(0,0,0,0.6)', justifyContent:'center', alignItems:'center'}}>
           <View style={{backgroundColor:'#fff', borderRadius:16, padding:24, width:'85%', maxWidth:420}}>
             <Text style={{fontSize:17, fontWeight:'bold', color:'#1a1a1a', marginBottom:6, textAlign:'center'}}>✅ Η παραγγελία αποθηκεύτηκε</Text>
             <Text style={{fontSize:14, color:'#444', marginBottom:16, textAlign:'center'}}>Θέλεις να ειδοποιήσεις τον πελάτη;</Text>
             {(()=>{
               const o = notifyModal.order; if (!o) return null;
-              const single = notifyModal.single;
               const cust = findCustomerOf(o);
               const vP = pickViberPhone(cust);
               const sP = pickSmsPhone(cust);
@@ -6708,17 +6725,18 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                   <View style={{backgroundColor:'#f5f5f5', padding:10, borderRadius:8, marginBottom:14}}>
                     <Text style={{fontSize:13, color:'#333'}}>👤 {o.customer||'—'}</Text>
                     <Text style={{fontSize:12, color:'#666', marginTop:2}}>📞 {contactLine||'—'}{cust?.email?`   ✉️ ${cust.email}`:''}</Text>
+                    {groupOf(o).length>1 ? <Text style={{fontSize:12, color:'#1b5e20', fontWeight:'bold', marginTop:4}}>Παραγγελίες: {groupOf(o).map(d=>d.orderNo||'-').join(', ')} (Viber ξεχωριστά ανά πόρτα · Email/SMS κοινό)</Text> : null}
                   </View>
                   <View style={{flexDirection:'row', gap:8, marginBottom:8}}>
-                    <TouchableOpacity disabled={!hasViber} onPress={()=>{ advanceNotify(); confirmSend('viber',o,()=>notifyViber(o, single)); }}
+                    <TouchableOpacity disabled={!hasViber} onPress={()=>{ setNotifyModal({visible:false,order:null}); sendGroup('viber',o); }}
                       style={{flex:1, backgroundColor: hasViber?'#7360f2':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
                       <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>📞 Viber</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity disabled={!hasEmail} onPress={()=>{ advanceNotify(); confirmSend('email',o,()=>notifyEmail(o, single)); }}
+                    <TouchableOpacity disabled={!hasEmail} onPress={()=>{ setNotifyModal({visible:false,order:null}); sendGroup('email',o); }}
                       style={{flex:1, backgroundColor: hasEmail?'#0288d1':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
                       <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>✉️ Email</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity disabled={!hasSms} onPress={()=>{ advanceNotify(); confirmSend('sms',o,()=>notifySms(o, single)); }}
+                    <TouchableOpacity disabled={!hasSms} onPress={()=>{ setNotifyModal({visible:false,order:null}); sendGroup('sms',o); }}
                       style={{flex:1, backgroundColor: hasSms?'#1565C0':'#ccc', padding:12, borderRadius:10, alignItems:'center'}}>
                       <Text style={{color:'white', fontWeight:'bold', fontSize:13}}>📱 SMS</Text>
                     </TouchableOpacity>
@@ -6728,7 +6746,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
                       {viberOptedOut?'🚫 Ο πελάτης απεγγράφηκε από Viber. ':(!hasViber?'⚠️ Λείπει τηλέφωνο Viber. ':'')}{!hasEmail?'⚠️ Λείπει email. ':''}{!hasSms?'⚠️ Λείπει κινητό (SMS).':''}
                     </Text>
                   )}
-                  <TouchableOpacity onPress={advanceNotify}
+                  <TouchableOpacity onPress={()=>setNotifyModal({visible:false,order:null})}
                     style={{backgroundColor:'#f5f5f5', padding:12, borderRadius:10, alignItems:'center', borderWidth:1, borderColor:'#ddd'}}>
                     <Text style={{color:'#555', fontWeight:'bold', fontSize:13}}>Όχι τώρα</Text>
                   </TouchableOpacity>
