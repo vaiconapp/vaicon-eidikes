@@ -1200,6 +1200,15 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const labels = { viber:'Viber', email:'Email', sms:'SMS' };
     showSmsToast(`Αφαιρέθηκε σημείωση ${labels[channel]||channel} από #${order.orderNo||'?'}`, 'info');
   };
+  const toggleNotified = async (orderId, channel) => {
+    if (isSeller) return;
+    const order = specialOrders.find(o => o.id === orderId);
+    if (!order) return;
+    if (order?.notified?.[channel]) return clearNotified(orderId, channel);
+    await markNotified(orderId, channel);
+    const labels = { viber:'Viber', email:'Email', sms:'SMS' };
+    showSmsToast(`Ενεργοποιήθηκε ${labels[channel]||channel} στο #${order.orderNo||'?'} (χωρίς αποστολή)`, 'info');
+  };
   const pickViberPhone = (c) => c?.phoneViber || '';
   const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phone3, c?.phoneViber].find(isGreekMobile) || '';
   const confirmSend = (channel, order, action) => {
@@ -3839,7 +3848,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
         </View>
         {!isForeman && !isArchive && anyChannel && (() => {
           const Tag = (isSeller||isHold) ? View : TouchableOpacity;
-          const tapProps = (ch, act) => (isSeller||isHold) ? {} : { disabled:false, onPress:act, onLongPress:()=>clearNotified(order.id,ch), delayLongPress:2000 };
+          const tapProps = (ch, act) => (isSeller||isHold) ? {} : { disabled:false, onPress:act, onLongPress:()=>toggleNotified(order.id,ch), delayLongPress:2000 };
           return (
           <View style={{justifyContent:'center', paddingHorizontal:6, paddingVertical:6, borderRightWidth:1, borderRightColor:'#e0e0e0', gap:4, minWidth:95}}>
             <Tag disabled={!viberOk} {...tapProps('viber',()=>confirmSend('viber',order,()=>notifyViber(order)))} style={{backgroundColor: viberBlocked?'#b71c1c':(viberOk?'#7360f2':'#ddd'), borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
