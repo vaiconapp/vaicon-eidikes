@@ -1315,34 +1315,59 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const target = stripAccents(String(o.customer).trim().toLowerCase());
     return (customers||[]).find(c => c.name && stripAccents(c.name.trim().toLowerCase()) === target);
   };
+  const phaseOf = (o) => {
+    const s = o?.status;
+    if (s==='SOLD'||s==='STD_SOLD') return 'sold';
+    if (s==='READY'||s==='STD_READY') return 'ready';
+    return 'reg';
+  };
+  const chLog = (v) => (v && typeof v==='object')
+    ? { legacy:v.legacy||[], reg:v.reg||[], ready:v.ready||[], sold:v.sold||[] }
+    : (typeof v==='number' ? { legacy:[v], reg:[], ready:[], sold:[] } : { legacy:[], reg:[], ready:[], sold:[] });
+  const chLogHas = (v) => { const l=chLog(v); return !!(l.legacy.length||l.reg.length||l.ready.length||l.sold.length); };
+  const nSD = (ts) => ts?`${String(new Date(ts).getDate()).padStart(2,'0')}/${String(new Date(ts).getMonth()+1).padStart(2,'0')}`:'';
+  const recordNotify = (notified, phase, ch) => { const cur=chLog(notified?.[ch]); return { ...(notified||{}), [ch]: { ...cur, [phase]:[...cur[phase], Date.now()] } }; };
   const markNotified = async (orderId, channel) => {
     if (isSeller) return;
     const order = specialOrders.find(o => o.id === orderId);
     if (!order) return;
-    const patch = { ...order, notified: { ...(order.notified||{}), [channel]: Date.now() } };
+    const patch = { ...order, notified: recordNotify(order.notified, phaseOf(order), channel) };
     setSpecialOrders(prev => prev.map(o => o.id===orderId ? patch : o));
     await syncToCloud(patch);
-  };
-  const clearNotified = async (orderId, channel) => {
-    if (isSeller) return;
-    const order = specialOrders.find(o => o.id === orderId);
-    if (!order?.notified?.[channel]) return;
-    const newNotified = { ...order.notified };
-    delete newNotified[channel];
-    const upd = { ...order, notified: newNotified };
-    setSpecialOrders(prev => prev.map(o => o.id === orderId ? upd : o));
-    await syncToCloud(upd);
-    const labels = { viber:'Viber', email:'Email', sms:'SMS' };
-    showSmsToast(`Αφαιρέθηκε σημείωση ${labels[channel]||channel} από #${order.orderNo||'?'}`, 'info');
   };
   const toggleNotified = async (orderId, channel) => {
     if (isSeller) return;
     const order = specialOrders.find(o => o.id === orderId);
     if (!order) return;
-    if (order?.notified?.[channel]) return clearNotified(orderId, channel);
-    await markNotified(orderId, channel);
+    const phase = phaseOf(order);
+    const cur = chLog(order.notified?.[channel]);
+    const has = cur[phase].length;
+    const patch = { ...order, notified: { ...(order.notified||{}), [channel]: { ...cur, [phase]: has ? cur[phase].slice(0,-1) : [...cur[phase], Date.now()] } } };
+    setSpecialOrders(prev => prev.map(o => o.id===orderId ? patch : o));
+    await syncToCloud(patch);
     const labels = { viber:'Viber', email:'Email', sms:'SMS' };
-    showSmsToast(`Ενεργοποιήθηκε ${labels[channel]||channel} στο #${order.orderNo||'?'} (χωρίς αποστολή)`, 'info');
+    showSmsToast(has ? `Αφαιρέθηκε σημείωση ${labels[channel]||channel} από #${order.orderNo||'?'}` : `Ενεργοποιήθηκε ${labels[channel]||channel} στο #${order.orderNo||'?'} (χωρίς αποστολή)`, 'info');
+  };
+  const renderNotifyLines = (v, mark=null) => {
+    if (!chLogHas(v)) return mark;
+    const l = chLog(v);
+    const line = (num, arr) => arr.length ? <Text key={num||'x'} style={{color:'#fff', fontSize:9, textAlign:'center'}}>{num?`(${num}) `:''}{arr.map(nSD).join(' ')}</Text> : null;
+    return <View style={{alignItems:'center'}}>{line(null,l.legacy)}{line(1,l.reg)}{line(2,l.ready)}{line(3,l.sold)}{mark}</View>;
+  };
+  const renderNotifyBadge = (order) => {
+    const rows = [['viber','Viber'],['email','Email'],['sms','SMS']].map(([ch,label]) => {
+      const l = chLog(order.notified?.[ch]); const parts = [];
+      if (l.legacy.length) parts.push(l.legacy.map(nSD).join(' '));
+      if (l.reg.length)   parts.push('(1) '+l.reg.map(nSD).join(' '));
+      if (l.ready.length) parts.push('(2) '+l.ready.map(nSD).join(' '));
+      if (l.sold.length)  parts.push('(3) '+l.sold.map(nSD).join(' '));
+      return parts.length ? { label, text: parts.join('  ') } : null;
+    }).filter(Boolean);
+    return (
+      <View style={{marginTop:4, minHeight:40, backgroundColor:'#eceff1', borderRadius:6, padding:6, width:170}}>
+        {rows.length ? rows.map((r,i)=>(<Text key={i} style={{fontSize:10, color:'#455a64'}}><Text style={{fontWeight:'bold'}}>{r.label}:</Text> {r.text}</Text>)) : <Text style={{fontSize:10, color:'#b0bec5'}}>—</Text>}
+      </View>
+    );
   };
   const pickViberPhone = (c) => c?.phoneViber || '';
   const pickSmsPhone = (c) => [c?.phone, c?.phone2, c?.phone3, c?.phoneViber].find(isGreekMobile) || '';
@@ -2195,16 +2220,20 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const no = splitBaseNo(String(order.orderNo));
     const phrase = saleQtyPhrase(qtySold, famTotal);
     const ref = refTag(order);
-    if (notif.viber && pickViberPhone(c) && !c.viberOptOut) await sendViberViaYuboto(pickViberPhone(c), buildSaleMessage(no, order.customer, phrase, ref), order.id, c.id);
-    if (notif.email && c.email) openEmail(c.email, buildSaleEmail(no, order.customer, phrase, ref), no);
-    if (notif.sms && pickSmsPhone(c)) await sendSmsViaYuboto(pickSmsPhone(c), buildSaleSms(no, phrase), order.id);
+    let upd = order.notified || {};
+    if (chLogHas(notif.viber) && pickViberPhone(c) && !c.viberOptOut) { await sendViberViaYuboto(pickViberPhone(c), buildSaleMessage(no, order.customer, phrase, ref), order.id, c.id); upd = recordNotify(upd,'sold','viber'); }
+    if (chLogHas(notif.email) && c.email) { openEmail(c.email, buildSaleEmail(no, order.customer, phrase, ref), no); upd = recordNotify(upd,'sold','email'); }
+    if (chLogHas(notif.sms) && pickSmsPhone(c)) { await sendSmsViaYuboto(pickSmsPhone(c), buildSaleSms(no, phrase), order.id); upd = recordNotify(upd,'sold','sms'); }
+    const patch = { ...order, notified: upd };
+    setSoldSpecialOrders(prev => prev.map(o => o.id===order.id ? patch : o));
+    await syncToCloud(patch);
   };
   const maybeSaleThanks = async (order, qtySold, famTotal) => {
     const c = findCustomerOf(order); const notif = order.notified || {};
     const chans = [];
-    if (notif.viber && c && pickViberPhone(c) && !c.viberOptOut) chans.push('Viber');
-    if (notif.email && c && c.email) chans.push('Email');
-    if (notif.sms && c && pickSmsPhone(c)) chans.push('SMS');
+    if (chLogHas(notif.viber) && c && pickViberPhone(c) && !c.viberOptOut) chans.push('Viber');
+    if (chLogHas(notif.email) && c && c.email) chans.push('Email');
+    if (chLogHas(notif.sms) && c && pickSmsPhone(c)) chans.push('SMS');
     if (!chans.length) return;
     const ask = Platform.OS === 'web'
       ? window.confirm(`Να σταλεί ευχαριστήριο μήνυμα στον πελάτη; (${chans.join(', ')})`)
@@ -2244,7 +2273,7 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           setSpecialOrders(prev=>prev.filter(o=>o.id!==id));
           await syncToCloud(upd);
           await logActivity('ΕΙΔΙΚΗ', 'Πώληση', { orderNo: order.orderNo, customer: order.customer, size: `${order.h}x${order.w}` });
-          await maybeSaleThanks(order, parseInt(order.qty)||1, famTotal);
+          await maybeSaleThanks(upd, parseInt(order.qty)||1, famTotal);
         }
       });
       return;
@@ -3880,7 +3909,6 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
     const anyChannel = viberOk || viberBlocked || emailOk || smsOk;
     const notif = order.notified || {};
     const msgStatus = order.msgStatus || {};
-    const shortDate = (ts) => ts ? `${String(new Date(ts).getDate()).padStart(2,'0')}/${String(new Date(ts).getMonth()+1).padStart(2,'0')}` : '';
     const statusMark = (ch) => { const s = msgStatus[ch]?.status; if (s==='read') return <Text style={{color:'#4fc3f7', fontSize:10, fontWeight:'bold'}}>✓✓</Text>; if (s==='delivered') return <Text style={{color:'#cfd8dc', fontSize:10, fontWeight:'bold'}}>✓✓</Text>; if (s==='failed') return <Text style={{color:'#ffcdd2', fontSize:10, fontWeight:'bold'}}>✕</Text>; return null; };
     return (
         <TouchableOpacity key={order.id} onLongPress={()=>!isArchive&&order.status==='PENDING'&&editOrder(order)} delayLongPress={1000} activeOpacity={0.7} style={[styles.orderCard,{borderLeftColor:bc, backgroundColor: isProd?'#e8f5e9':'white', ...(searchQuery && {borderTopWidth:2, borderTopColor:'#007AFF', borderBottomWidth:2, borderBottomColor:'#007AFF', borderRightWidth:2, borderRightColor:'#007AFF'})}]}>
@@ -3987,17 +4015,17 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           return (
           <View style={{justifyContent:'center', paddingHorizontal:6, paddingVertical:6, borderRightWidth:1, borderRightColor:'#e0e0e0', gap:4, minWidth:95}}>
             <Tag disabled={!viberOk} {...tapProps('viber',()=>confirmSend('viber',order,()=>notifyViber(order)))} style={{backgroundColor: viberBlocked?'#b71c1c':(viberOk?'#7360f2':'#ddd'), borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
-              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{viberBlocked?'🚫 ':notif.viber?'✓ ':'📞 '}Viber</Text>
-              {!viberBlocked && notif.viber && <View style={{flexDirection:'row', alignItems:'center', gap:3}}><Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.viber)}</Text>{statusMark('viber')}</View>}
+              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{viberBlocked?'🚫 ':chLogHas(notif.viber)?'✓ ':'📞 '}Viber</Text>
+              {!viberBlocked && renderNotifyLines(notif.viber, statusMark('viber'))}
               {viberBlocked && <Text style={{color:'#fff', fontSize:9}}>απεγγράφηκε</Text>}
             </Tag>
             <Tag disabled={!emailOk} {...tapProps('email',()=>confirmSend('email',order,()=>notifyEmail(order)))} style={{backgroundColor: emailOk?'#0288d1':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
-              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.email?'✓ ':'✉️ '}Email</Text>
-              {notif.email && <Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.email)}</Text>}
+              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{chLogHas(notif.email)?'✓ ':'✉️ '}Email</Text>
+              {renderNotifyLines(notif.email)}
             </Tag>
             <Tag disabled={!smsOk} {...tapProps('sms',()=>confirmSend('sms',order,()=>notifySms(order)))} style={{backgroundColor: smsOk?'#1565C0':'#ddd', borderRadius:6, paddingVertical:5, paddingHorizontal:6, alignItems:'center'}}>
-              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{notif.sms?'✓ ':'📱 '}SMS</Text>
-              {notif.sms && <View style={{flexDirection:'row', alignItems:'center', gap:3}}><Text style={{color:'#fff', fontSize:9}}>{shortDate(notif.sms)}</Text>{statusMark('sms')}</View>}
+              <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>{chLogHas(notif.sms)?'✓ ':'📱 '}SMS</Text>
+              {renderNotifyLines(notif.sms, statusMark('sms'))}
             </Tag>
           </View>
           );
@@ -4029,17 +4057,9 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
           <View style={{padding:6, alignItems:'center', justifyContent:'center'}}>{renderHoldEye(order, true)}</View>
           <TouchableOpacity style={[styles.lowerBtn,{backgroundColor:'#ff4444'}]} onPress={async()=>{ if(!window.confirm(`Διαγραφή παραγγελίας #${order.orderNo};`)) return; setSpecialOrders(prev=>prev.filter(x=>x.id!==order.id)); await deleteFromCloud(order.id); }}><Text style={styles.sideBtnText}>✕ ΔΙΑ/ΦΗ</Text></TouchableOpacity>
         </View>}
-        {!isSeller && !isHold && <View style={styles.sideBtnContainer}>
+        {!isSeller && !isHold && !isArchive && <View style={styles.sideBtnContainer}>
           {!isForeman&&!isArchive&&(order.status==='PENDING'||order.status==='PROD')&&<TouchableOpacity style={[styles.upperBtn,{backgroundColor:'#007AFF'}]} delayLongPress={2000} onLongPress={()=>{ setEditForm({ h:order.h||'', w:order.w||'', deliveryDate:order.deliveryDate||'', lock:order.lock||'', glassDim:order.glassDim||'', glassNotes:order.glassNotes||'', glassDesign:order.glassDesign||'', hardware:order.hardware||'', casePaint:order.casePaint||'', coatings:order.coatings||[], coatingDetails:order.coatingDetails||{}, stavera:order.stavera||[], placement:order.placement||'ΟΧΙ', notes:order.notes||'' }); setEditModal({visible:true,order}); }} onPress={()=>{ if(Platform.OS==='web') window.alert('Κράτα πατημένο 2 δευτερόλεπτα για επεξεργασία'); }}><Text style={[styles.upperBtnText,{color:'white'}]}>✏️</Text></TouchableOpacity>}
           {!isArchive&&!(isInPending&&order.status==='READY'&&order.staveraPendingAtReady&&!order.staveraDone)&&<TouchableOpacity style={[styles.upperBtn,{backgroundColor:order.status==='PENDING'?'#000':'#666'}]} onPress={()=>order.status==='PENDING'?cancelOrder(order.id):moveBack(order.id,order.status)}><Text style={[styles.upperBtnText,{color:order.status==='PENDING'?'#ff4444':'white'}]}>{order.status==='PENDING'?'ΑΚΥΡΩΣΗ':'⟲'}</Text></TouchableOpacity>}
-          {isArchive&&(
-            <TouchableOpacity
-              style={[styles.upperBtn,{backgroundColor:'#555'}]}
-              onLongPress={()=>setArchiveReturnModal({visible:true, orderId:order.id})}
-              delayLongPress={2000}>
-              <Text style={[styles.upperBtnText,{color:'white'}]}>⟲</Text>
-            </TouchableOpacity>
-          )}
           {order.status!=='PROD'&&!(isInPending&&order.status==='READY'&&order.staveraPendingAtReady&&!order.staveraDone)&&!isArchive&&<TouchableOpacity style={[styles.lowerBtn,{backgroundColor:btnC}, order.status==='PENDING'&&prodBatch.some(o=>o.id===order.id)&&{borderWidth:3, borderColor:'#ff4444'}]} onPress={()=>{
             if (order.status==='PENDING') {
               // Αντί για άμεση μετάβαση → προσθήκη στο prodBatch
@@ -4053,15 +4073,20 @@ export default function SpecialScreen({ specialOrders=[], setSpecialOrders, sold
               updateStatus(order.id, next);
             }
           }}><Text style={styles.sideBtnText}>{prodBatch.some(o=>o.id===order.id)?'✓ ΕΠΙΛΕΓΗ':btn}</Text></TouchableOpacity>}
-          {isArchive&&(
-            <TouchableOpacity
-              style={[styles.lowerBtn,{backgroundColor:'#b71c1c'}]}
-              onLongPress={()=>deleteFromArchive(order.id)}
-              delayLongPress={2000}>
-              <Text style={styles.sideBtnText}>ΔΙΑ/ΦΗ</Text>
-            </TouchableOpacity>
-          )}
         </View>}
+        {!isSeller && !isHold && isArchive && (
+          <View style={{width:180, padding:6, alignItems:'stretch'}}>
+            <View style={{flexDirection:'row', gap:4}}>
+              <TouchableOpacity style={{flex:1, backgroundColor:'#555', borderRadius:5, paddingVertical:5, alignItems:'center'}} onLongPress={()=>setArchiveReturnModal({visible:true, orderId:order.id})} delayLongPress={2000}>
+                <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>⟲ ΠΙΣΩ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{flex:1, backgroundColor:'#b71c1c', borderRadius:5, paddingVertical:5, alignItems:'center'}} onLongPress={()=>deleteFromArchive(order.id)} delayLongPress={2000}>
+                <Text style={{color:'white', fontSize:11, fontWeight:'bold'}}>ΔΙΑ/ΦΗ</Text>
+              </TouchableOpacity>
+            </View>
+            {renderNotifyBadge(order)}
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
